@@ -4,6 +4,6 @@ RUN apk add --no-cache git bash docker-cli docker-cli-compose curl
 
 RUN BUN_INSTALL=/usr/local bun add -g opencode-ai@1.1.53
 
-WORKDIR /workspace/pocketbrain
+WORKDIR /workspace
 
 CMD ["sleep", "infinity"]

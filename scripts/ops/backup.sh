@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
-APP_DIR="$REPO_ROOT/pocketbrain"
+APP_DIR="$REPO_ROOT"
 RUNTIME_PROJECT="${RUNTIME_PROJECT:-pocketbrain-runtime}"
 RUNTIME_COMPOSE_FILE="${RUNTIME_COMPOSE_FILE:-docker-compose.yml}"
 DATA_PATH="${DATA_PATH:-$APP_DIR/data}"

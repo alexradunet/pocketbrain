@@ -54,7 +54,7 @@ sudo systemctl enable --now docker
 
 ```bash
 git clone https://github.com/CefBoud/PocketBrain.git
-cd PocketBrain/pocketbrain
+cd PocketBrain
 ```
 
 ### 4) Configure environment

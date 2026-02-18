@@ -27,23 +27,20 @@ FAILURES=()
 
 for path in "${ADDED_PATHS[@]}"; do
   case "$path" in
+    pocketbrain/*|pocketbrain)
+      FAILURES+=("Legacy app subfolder is disallowed: $path")
+      ;;
     *.md)
-      if [[ "$path" != docs/* ]] && [[ "$path" != "README.md" ]] && [[ "$path" != */README.md ]]; then
+      if [[ "$path" != docs/* ]] && [[ "$path" != "README.md" ]] && [[ "$path" != "AGENTS.md" ]] && [[ "$path" != */README.md ]]; then
         FAILURES+=("Markdown file outside docs contract: $path")
       fi
       ;;
     *.sh)
-      if [[ "$path" != development/* ]] && [[ "$path" != scripts/* ]] && [[ "$path" != pocketbrain/scripts/* ]]; then
+      if [[ "$path" != development/* ]] && [[ "$path" != scripts/* ]]; then
         FAILURES+=("Shell script outside development/scripts contract: $path")
       fi
       if [[ "$path" == scripts/*.sh ]] && [[ "$path" != scripts/*/*.sh ]]; then
-        case "$path" in
-          scripts/install-debian.sh|scripts/docker-build.sh|scripts/docker-logs.sh|scripts/docker-shell.sh|scripts/docker-entrypoint.sh)
-            ;;
-          *)
-            FAILURES+=("New root scripts/*.sh are disallowed. Use scripts/ops or scripts/runtime: $path")
-            ;;
-        esac
+        FAILURES+=("Root scripts/*.sh are disallowed. Use scripts/setup, scripts/ops, or scripts/runtime: $path")
       fi
       ;;
   esac

@@ -74,9 +74,9 @@ Dockerfile
 docker-compose*.yml
 .docker/
 
-# Scripts (only keep entrypoint)
+# Scripts (only keep runtime entrypoint)
 scripts/*.sh
-!scripts/docker-entrypoint.sh
+!scripts/runtime/docker-entrypoint.sh
 
 # Misc
 .editorconfig

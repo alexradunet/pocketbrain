@@ -1,13 +1,9 @@
 # Development Tooling
 
-This folder contains development-only tooling and setup helpers.
+Repository contract and CI helper tooling.
 
 ## Layout
 
-- `setup/` - machine/bootstrap scripts for contributors.
+- `ci/` structure and policy validation scripts
 
-## Available scripts
-
-- `setup/install-debian.sh` - bootstrap a Debian-based development machine.
-
-These scripts are intended for developers, not for managing a running PocketBrain instance.
+These files support contributor workflow and CI governance; they are not runtime/operator scripts.

@@ -1,25 +1,21 @@
-# Instance Scripts
+# Scripts
 
-This folder contains scripts used to manage and inspect PocketBrain instances.
+Operational and setup scripts for PocketBrain.
 
 ## Layout
 
-- `runtime/` - scripts used by runtime/container boot flow.
-- `ops/` - operator helper scripts for build, logs, and shell access.
+- `setup/` machine/bootstrap scripts
+  - `install-debian-dev.sh` developer machine setup
+  - `install-debian-runtime.sh` runtime host prerequisites (Docker + Compose)
+- `runtime/` runtime/container boot scripts
+  - `docker-entrypoint.sh` container entrypoint
+- `ops/` operator scripts
+  - `docker-build.sh`
+  - `docker-logs.sh`
+  - `docker-shell.sh`
+  - `release.sh`
+  - `dev-release.sh`
+  - `backup.sh`
+  - `restore.sh`
 
-## Current scripts
-
-- `runtime/docker-entrypoint.sh` - container entrypoint used at runtime.
-- `ops/docker-build.sh` - image build helper.
-- `ops/docker-logs.sh` - follow and filter container logs.
-- `ops/docker-shell.sh` - open an interactive shell in the running container.
-- `ops/release.sh` - typecheck, test, deploy, health-check, and rollback runtime releases.
-- `ops/dev-release.sh` - run the same release flow from inside the dev-control container.
-- `ops/backup.sh` - stop runtime services, create a compressed backup of runtime data, and restart services.
-- `ops/restore.sh` - restore runtime data from backup archive and restart services.
-
-Root-level `scripts/docker-*.sh` files are compatibility wrappers that delegate to the structured locations above.
-Root-level `scripts/release.sh` delegates to `ops/release.sh`.
-Root-level `scripts/dev-release.sh` delegates to `ops/dev-release.sh`.
-
-`install-debian.sh` is retained as a compatibility wrapper and now delegates to `development/setup/install-debian.sh`.
+Use `make` targets at repository root as the primary command interface.

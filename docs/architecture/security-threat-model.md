@@ -2,9 +2,9 @@
 
 ## Scope
 
-- Runtime application in `pocketbrain/src/`
-- Runtime data in `pocketbrain/data/` (`DATA_DIR`)
-- Container runtime in `pocketbrain/docker-compose.yml`
+- Runtime application in `src/`
+- Runtime data in `data/` (`DATA_DIR`)
+- Container runtime in `docker-compose.yml`
 - Operational scripts in `scripts/ops/`
 
 ## Assets

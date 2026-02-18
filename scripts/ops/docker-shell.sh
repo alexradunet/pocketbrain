@@ -3,7 +3,7 @@ set -eu
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
-APP_DIR="$REPO_ROOT/pocketbrain"
+APP_DIR="$REPO_ROOT"
 RUNTIME_PROJECT="${RUNTIME_PROJECT:-pocketbrain-runtime}"
 DEV_PROJECT="${DEV_PROJECT:-pocketbrain-dev}"
 

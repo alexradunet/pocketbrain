@@ -1,10 +1,51 @@
-# PocketBrain Workspace
+# PocketBrain
 
-This repository is organized as a workspace with clear ownership boundaries:
+PocketBrain is a Bun-based assistant runtime with:
+- OpenCode SDK integration
+- WhatsApp adapter
+- SQLite state
+- Syncthing-backed vault sync
+- Docker-first runtime deployment
 
-- `development/` - development-only tooling, bootstrap scripts, and local utilities.
-- `docs/` - architecture, decisions, and operational documentation.
-- `pocketbrain/` - application source code and app-level runtime assets.
-- `scripts/` - operational scripts to build, run, and manage PocketBrain instances (`ops/` and `runtime/`).
+## Repository layout
 
-Use this layout contract when adding new files. If a file does not clearly fit one of these folders, document the exception in `docs/architecture/repository-structure.md`.
+- `src/` application code
+- `tests/` automated tests
+- `scripts/` setup, runtime, and operator scripts
+- `docs/` architecture, deploy guides, and runbooks
+- `development/` CI tooling and repository contract checks
+
+## Canonical command interface
+
+Use `make` from repository root:
+
+```bash
+make setup-dev
+make test
+make build
+make up
+make ps
+make logs
+make release TAG=$(git rev-parse --short HEAD)
+```
+
+## Runtime quick start
+
+```bash
+cp .env.example .env
+# set TS_AUTHKEY in .env
+make up
+make ps
+```
+
+## Developer quick start
+
+```bash
+bun install
+bun run setup
+make dev
+```
+
+For detailed instructions:
+- `docs/setup/developer-onboarding.md`
+- `docs/deploy/debian-runtime-zero-to-deploy.md`

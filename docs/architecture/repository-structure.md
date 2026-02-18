@@ -1,73 +1,47 @@
 # Repository Structure Contract
 
-This document defines the canonical workspace layout and where new files belong.
+Canonical repository layout for PocketBrain.
 
 ## Top-level folders
 
-### `development/`
+### `src/`
 
-Purpose: local development support.
+Application source code.
 
-Put here:
+### `tests/`
 
-- Environment bootstrap scripts.
-- Developer-only helper scripts.
-- Local utilities that are not required to operate a running instance.
-
-Do not put here:
-
-- Production/runtime operational scripts.
-- App source code.
-
-### `docs/`
-
-Purpose: documentation only.
-
-Put here:
-
-- Architecture notes.
-- Runbooks and troubleshooting guides.
-- ADR-style decisions.
-
-### `pocketbrain/`
-
-Purpose: application code and app-scoped assets.
-
-Put here:
-
-- `src/`, `tests/`, package manifests, and app runtime config.
-- App-specific Docker config already scoped to the app.
+Automated tests for the application.
 
 ### `scripts/`
 
-Purpose: operational scripts for managing PocketBrain instances.
+Executable scripts grouped by purpose:
+- `setup/` machine/bootstrap setup
+- `runtime/` runtime/container boot scripts
+- `ops/` release/backup/operational helpers
 
-Put here:
+### `docs/`
 
-- `runtime/` for runtime/container boot scripts.
-- `ops/` for operator tooling (build, logs, shell, diagnostics).
-- Compatibility wrappers at `scripts/*.sh` only for stable entry points.
+Documentation and runbooks only.
 
-Do not put here:
+### `development/`
 
-- Developer machine bootstrap scripts (place those in `development/`).
+Development and CI contract tooling.
 
-## Placement decision checklist
+## Placement checklist
 
-When adding a file, ask:
+1. Is it executable app code? -> `src/`
+2. Is it a test? -> `tests/`
+3. Is it an operator/setup/runtime script? -> `scripts/`
+4. Is it documentation? -> `docs/`
+5. Is it CI/repo-contract tooling? -> `development/`
 
-1. Is this used to run/manage a deployed instance? -> `scripts/`
-2. Is this used to setup or improve local development? -> `development/`
-3. Is this executable app code or tests? -> `pocketbrain/`
-4. Is this documentation? -> `docs/`
+## Command contract
 
-## Current migration decision
-
-- Debian bootstrap script moved to `development/setup/install-debian.sh`.
-- `scripts/install-debian.sh` is kept as a compatibility wrapper and delegates to the new location.
-- Docker operational scripts moved under `scripts/ops/` and `scripts/runtime/`.
+- Repository root is the only canonical working directory.
+- `make` is the primary command interface.
+- No compatibility wrapper scripts at `scripts/*.sh`.
 
 ## Enforcement
 
+- Structure rules are enforced by `development/ci/validate-structure.sh`.
 - PRs run `.github/workflows/structure-contract.yml`.
-- Rule set is implemented in `development/ci/validate-structure.sh`.

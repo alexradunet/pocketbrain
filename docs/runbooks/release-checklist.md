@@ -9,12 +9,12 @@ Use this checklist for every release candidate.
 - [ ] `bun run test:processes` passes.
 - [ ] `bun run test` passes.
 - [ ] `bun run build` passes.
-- [ ] Backup completed (`./scripts/ops/backup.sh`) and artifact path recorded.
+- [ ] Backup completed (`make backup`) and artifact path recorded.
 - [ ] Config/secrets reviewed for target environment.
 
 ## Deployment
 
-- [ ] Run release flow (`./scripts/release.sh <tag>` or dev-control equivalent).
+- [ ] Run release flow (`make release TAG=<tag>` or dev-control equivalent).
 - [ ] Confirm `pocketbrain` health is `healthy`.
 - [ ] Confirm `syncthing` health is `healthy`.
 - [ ] Confirm startup logs show expected version and git SHA.

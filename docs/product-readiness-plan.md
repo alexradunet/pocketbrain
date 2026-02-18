@@ -8,7 +8,7 @@ Prepare PocketBrain for reliable, secure, repeatable deployment and day-2 operat
 
 ### Scope
 
-- Application runtime in `pocketbrain/`
+- Application runtime in repository root (`src/`, `tests/`)
 - Workspace-level operational scripts in `scripts/`
 - Documentation in `docs/`
 - CI/CD workflows in `.github/workflows/`
@@ -26,11 +26,11 @@ Prepare PocketBrain for reliable, secure, repeatable deployment and day-2 operat
 ### Architecture and Runtime
 
 - Data path mismatch risk:
-  - DB is created under `process.cwd()/.data` in `pocketbrain/src/store/db.ts`.
-  - Compose mounts persistent volume at `/data` in `pocketbrain/docker-compose.yml`.
+  - DB is created under `process.cwd()/.data` in `src/store/db.ts`.
+  - Compose mounts persistent volume at `/data` in `docker-compose.yml`.
   - This creates risk of ephemeral runtime state if app writes `.data` instead of `/data`.
 - Health checks are weak for readiness confidence:
-  - Health logic allows Tailscale check to pass with `|| true` in both `pocketbrain/docker-compose.yml` and `pocketbrain/Dockerfile`.
+  - Health logic allows Tailscale check to pass with `|| true` in both `docker-compose.yml` and `Dockerfile`.
   - This can produce false positives.
 
 ### Development Quality
@@ -46,7 +46,7 @@ Prepare PocketBrain for reliable, secure, repeatable deployment and day-2 operat
 
 ### Documentation and Operations
 
-- Good deployment docs exist (`pocketbrain/DOCKER.md`, `docs/runbooks/debian-zero-to-deploy.md`).
+- Good deployment docs exist (`docs/deploy/docker-deployment.md`, `docs/deploy/debian-runtime-zero-to-deploy.md`).
 - Missing consolidated product docs set:
   - No architecture decision log set (ADRs) for key runtime decisions.
   - No SLO/SLI targets.

@@ -5,9 +5,9 @@ services:
       dockerfile: Dockerfile.dev-control
     hostname: pocketbrain-dev
     restart: unless-stopped
-    working_dir: /workspace/pocketbrain
+    working_dir: /workspace
     volumes:
-      - ../:/workspace
+      - ./:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
       - dev-bun-cache:/home/bun/.bun/install/cache
     environment:

@@ -7,23 +7,23 @@ Verify that PocketBrain runtime state can be backed up and restored within the e
 ## Preconditions
 
 - Runtime stack is running under project `pocketbrain-runtime`.
-- `pocketbrain/.env` is configured.
+- `.env` is configured.
 - At least one known test message/session exists.
 
 ## Drill Steps
 
 1. Create a backup:
-   - `./scripts/ops/backup.sh`
+   - `make backup`
    - Note the backup file path.
 2. Validate backup artifact exists and is non-empty.
 3. Simulate recovery event:
    - Stop stack and restore from backup:
-   - `./scripts/ops/restore.sh <backup-file>`
+   - `make restore FILE=<backup-file>`
 4. Verify service health:
-   - `docker compose -p pocketbrain-runtime -f pocketbrain/docker-compose.yml ps`
+   - `docker compose -p pocketbrain-runtime -f docker-compose.yml ps`
 5. Verify functional recovery:
    - Confirm PocketBrain replies to one test message.
-   - Confirm expected vault/data files exist in `pocketbrain/data`.
+   - Confirm expected vault/data files exist in `data`.
 
 ## Success Criteria
 
@@ -51,7 +51,7 @@ Verify that PocketBrain runtime state can be backed up and restored within the e
 
 - Date/Time: 2026-02-18T20:02Z
 - Operator: OpenCode agent (local workspace)
-- Backup file: `pocketbrain/backups/pocketbrain-backup-20260218T200205Z.tar.gz`
-- Restore result: completed successfully via `./scripts/ops/restore.sh`
+- Backup file: `backups/pocketbrain-backup-20260218T200205Z.tar.gz`
+- Restore result: completed successfully via `make restore FILE=...`
 - Health verification: `pocketbrain` healthy, `syncthing` healthy (`docker compose ... ps`)
 - Notes: runtime logs show successful startup; WhatsApp QR generation observed after restore.

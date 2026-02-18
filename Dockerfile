@@ -60,7 +60,7 @@ WORKDIR /app
 # Copy binary
 COPY --from=builder /build/pocketbrain /app/pocketbrain
 COPY --from=builder /build/.env.example /app/.env.example
-COPY --chown=1000:1000 scripts/docker-entrypoint.sh /entrypoint.sh
+COPY --chown=1000:1000 scripts/runtime/docker-entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh /app/pocketbrain
 

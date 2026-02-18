@@ -10,10 +10,10 @@
 
 1. Confirm impacted services: `pocketbrain`, `syncthing`.
 2. Capture current status:
-   - `docker compose -p pocketbrain-runtime -f pocketbrain/docker-compose.yml ps`
-   - `docker compose -p pocketbrain-runtime -f pocketbrain/docker-compose.yml logs --tail=200 pocketbrain`
+   - `docker compose -p pocketbrain-runtime -f docker-compose.yml ps`
+   - `docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=200 pocketbrain`
 3. Check health and Tailscale state:
-   - `docker compose -p pocketbrain-runtime -f pocketbrain/docker-compose.yml exec pocketbrain tailscale status`
+   - `docker compose -p pocketbrain-runtime -f docker-compose.yml exec pocketbrain tailscale status`
 4. Freeze risky manual changes until root cause is identified.
 
 ## Incident Scenarios
@@ -23,7 +23,7 @@
 - Validate process and health logs.
 - Check env/config errors in startup logs.
 - If caused by a bad release, run rollback release path:
-  - `./scripts/release.sh <last-known-good-tag>`
+  - `make release TAG=<last-known-good-tag>`
 
 ### 2) Tailscale disconnected
 
@@ -35,7 +35,7 @@
 
 - Stop runtime stack.
 - Create immediate backup of current `data/`.
-- Restore latest known-good backup using `./scripts/ops/restore.sh <backup-file>`.
+- Restore latest known-good backup using `make restore FILE=<backup-file>`.
 - Start stack and verify health.
 
 ### 4) WhatsApp reconnect loop

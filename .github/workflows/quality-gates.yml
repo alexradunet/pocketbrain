@@ -11,9 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENCODE_MODEL: ${{ secrets.OPENCODE_MODEL }}
-    defaults:
-      run:
-        working-directory: pocketbrain
     steps:
       - uses: actions/checkout@v4
 
