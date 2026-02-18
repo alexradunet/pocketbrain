@@ -1,5 +1,7 @@
 # Debian Runtime Zero-to-Deploy
 
+OpenCode skill equivalent: `pocketbrain-runtime-deploy`.
+
 Deploy PocketBrain on a Debian host as an always-on Docker runtime.
 
 ## 1) Install prerequisites

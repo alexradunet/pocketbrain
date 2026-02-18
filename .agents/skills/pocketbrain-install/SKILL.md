@@ -1,118 +1,62 @@
 ---
 name: pocketbrain-install
-description: Install and deploy PocketBrain on a Debian server from zero to healthy always-on runtime using OpenCode-driven guidance.
+description: Install and deploy PocketBrain on Debian from zero to healthy always-on runtime.
 compatibility: opencode
+metadata:
+  audience: operators
+  scope: bootstrap
 ---
 
 ## Purpose
 
-Use this skill when the user wants a guided, end-to-end PocketBrain deployment on Debian, especially from a fresh server.
-
-## Trigger phrases
-
-- install pocketbrain on debian
-- deploy pocketbrain on vps
-- set up pocketbrain from scratch
-- make pocketbrain always on
-- opencode guided install for pocketbrain
+Use this for end-to-end first install on a Debian host.
 
 ## Required outcomes
 
 1. Docker Engine + Compose plugin installed
-2. PocketBrain repository cloned and configured
-3. `.env` created with `TS_AUTHKEY` and core settings
-4. `docker compose up -d --build` succeeds
-5. `docker compose ps` shows healthy services
-6. User receives clear operational commands (logs, restart, update)
+2. `.env` created with required runtime values
+3. Runtime stack starts successfully
+4. `pocketbrain` and `syncthing` become healthy
+5. Operator receives handoff commands for logs and updates
 
 ## Canonical workflow
 
-### 1) Prepare Debian host
-
-Run:
+1. Install runtime prerequisites:
 
 ```bash
-sudo apt update
-sudo apt install -y ca-certificates curl gnupg lsb-release git
+make setup-runtime
 ```
 
-### 2) Install Docker + Compose
-
-Run:
+2. Configure environment:
 
 ```bash
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo systemctl enable --now docker
+cp .env.example .env
 ```
 
-### 3) Clone and enter app directory
+Set required value:
+
+```dotenv
+TS_AUTHKEY=tskey-auth-...
+```
+
+3. Deploy runtime:
 
 ```bash
-git clone https://github.com/CefBoud/PocketBrain.git
-cd PocketBrain
+make up
 ```
 
-### 4) Configure environment
-
-- Ensure `.env` exists (copy from `.env.example` if needed)
-- Require `TS_AUTHKEY` from user (Tailscale reusable + ephemeral key)
-- Set `ENABLE_WHATSAPP=true` only if user wants WhatsApp channel
-
-### 5) Deploy
+4. Verify:
 
 ```bash
-mkdir -p data/syncthing-config
-docker compose up -d --build
+make ps
+docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=120 pocketbrain
+docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=120 syncthing
 ```
 
-### 6) Verify
+## Operational handoff
 
 ```bash
-docker compose ps
-docker compose logs --tail=120 pocketbrain
-docker compose logs --tail=120 syncthing
+make ps
+make logs
+git pull && make up
 ```
-
-### 7) Always-on confirmation
-
-Confirm both conditions:
-- Docker enabled on boot
-- Compose services use restart policy (`unless-stopped`)
-
-## Troubleshooting playbook
-
-If deployment fails, check in this order:
-
-1. Missing `TS_AUTHKEY` in `.env`
-2. Docker daemon inactive (`systemctl status docker`)
-3. Permission issues on data path (`chown -R 1000:1000 ./data`)
-4. Container logs for runtime errors (`docker compose logs pocketbrain`)
-
-## Operational handoff commands
-
-Provide these after successful setup:
-
-```bash
-docker compose ps
-docker compose logs -f pocketbrain
-docker compose logs -f syncthing
-git pull && docker compose up -d --build
-```
-
-## Invocation from OpenCode session
-
-After user installs OpenCode with:
-
-```bash
-curl -fsSL https://opencode.ai/install | bash
-opencode
-```
-
-Use this instruction:
-
-"Use the `pocketbrain-install` skill to perform zero-to-deploy setup on this Debian host, then verify both services are healthy and always-on."

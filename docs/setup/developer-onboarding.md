@@ -1,5 +1,7 @@
 # Developer Onboarding
 
+OpenCode skill equivalent: `pocketbrain-dev-setup`.
+
 This guide sets up a contributor environment from repository root.
 
 ## Prerequisites

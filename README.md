@@ -49,3 +49,6 @@ make dev
 For detailed instructions:
 - `docs/setup/developer-onboarding.md`
 - `docs/deploy/debian-runtime-zero-to-deploy.md`
+
+For OpenCode skill-driven workflows:
+- `docs/setup/agent-skills.md`

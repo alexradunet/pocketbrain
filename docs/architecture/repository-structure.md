@@ -27,13 +27,18 @@ Documentation and runbooks only.
 
 Development and CI contract tooling.
 
+### `.agents/skills/`
+
+OpenCode/agent-compatible reusable skills (`SKILL.md` files).
+
 ## Placement checklist
 
 1. Is it executable app code? -> `src/`
 2. Is it a test? -> `tests/`
 3. Is it an operator/setup/runtime script? -> `scripts/`
 4. Is it documentation? -> `docs/`
-5. Is it CI/repo-contract tooling? -> `development/`
+5. Is it reusable agent workflow knowledge? -> `.agents/skills/`
+6. Is it CI/repo-contract tooling? -> `development/`
 
 ## Command contract
 

@@ -1,5 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": {
+      "pocketbrain-*": "allow",
+      "*": "ask"
+    }
+  },
   "plugin": [
     "./src/adapters/plugins/install-skill.plugin.ts",
     "./src/adapters/plugins/memory.plugin.ts",

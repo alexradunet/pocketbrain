@@ -31,7 +31,9 @@ for path in "${ADDED_PATHS[@]}"; do
       FAILURES+=("Legacy app subfolder is disallowed: $path")
       ;;
     *.md)
-      if [[ "$path" != docs/* ]] && [[ "$path" != "README.md" ]] && [[ "$path" != "AGENTS.md" ]] && [[ "$path" != */README.md ]]; then
+      if [[ "$path" == .agents/skills/*/SKILL.md ]] || [[ "$path" == .opencode/skills/*/SKILL.md ]] || [[ "$path" == .claude/skills/*/SKILL.md ]]; then
+        :
+      elif [[ "$path" != docs/* ]] && [[ "$path" != "README.md" ]] && [[ "$path" != "AGENTS.md" ]] && [[ "$path" != */README.md ]]; then
         FAILURES+=("Markdown file outside docs contract: $path")
       fi
       ;;
