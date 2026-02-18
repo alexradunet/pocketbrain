@@ -12,6 +12,7 @@ All commands in docs assume execution from repository root.
 ## Start Here
 
 - Architecture overview (with diagrams): `docs/architecture/system-overview.md`
+- Coding architecture (modules/classes/flows): `docs/architecture/coding-architecture.md`
 - Repository contract: `docs/architecture/repository-structure.md`
 - Security threat model: `docs/architecture/security-threat-model.md`
 

@@ -53,6 +53,7 @@ flowchart LR
 ```
 
 - Full walkthrough: `docs/architecture/system-overview.md`
+- Coding architecture: `docs/architecture/coding-architecture.md`
 - Repository structure contract: `docs/architecture/repository-structure.md`
 - Security model: `docs/architecture/security-threat-model.md`
 
