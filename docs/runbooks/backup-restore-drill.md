@@ -46,3 +46,12 @@ Verify that PocketBrain runtime state can be backed up and restored within the e
 - Health verification result:
 - Functional verification result:
 - Issues found and follow-up actions:
+
+## Latest Drill Evidence
+
+- Date/Time: 2026-02-18T20:02Z
+- Operator: OpenCode agent (local workspace)
+- Backup file: `pocketbrain/backups/pocketbrain-backup-20260218T200205Z.tar.gz`
+- Restore result: completed successfully via `./scripts/ops/restore.sh`
+- Health verification: `pocketbrain` healthy, `syncthing` healthy (`docker compose ... ps`)
+- Notes: runtime logs show successful startup; WhatsApp QR generation observed after restore.
