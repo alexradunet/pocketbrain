@@ -41,18 +41,8 @@ export interface AssistantCoreOptions {
   logger: Logger
 }
 
-export interface AssistantDeps {
-  runtimeProvider: RuntimeProvider
-  sessionManager: SessionManager
-  promptBuilder: PromptBuilder
-  memoryRepository: MemoryRepository
-  channelRepository: ChannelRepository
-  heartbeatRepository: HeartbeatRepository
-  logger: Logger
-}
-
 export class AssistantCore {
-  private readonly deps: AssistantDeps
+  private readonly deps: AssistantCoreOptions
 
   constructor(deps: AssistantCoreOptions) {
     this.deps = deps
@@ -145,35 +135,6 @@ export class AssistantCore {
   }
 
   /**
-   * Save a memory fact
-   */
-  async remember(note: string, source: string): Promise<boolean> {
-    return this.deps.memoryRepository.append(note.trim(), source)
-  }
-
-  /**
-   * Delete a memory fact
-   */
-  async deleteMemory(id: number): Promise<boolean> {
-    return this.deps.memoryRepository.delete(id)
-  }
-
-  /**
-   * Update a memory fact
-   */
-  async updateMemory(id: number, fact: string): Promise<boolean> {
-    return this.deps.memoryRepository.update(id, fact.trim())
-  }
-
-  /**
-   * Get heartbeat task status
-   */
-  async heartbeatTaskStatus(): Promise<{ taskCount: number; empty: boolean }> {
-    const taskCount = this.deps.heartbeatRepository.getTaskCount()
-    return { taskCount, empty: taskCount === 0 }
-  }
-
-  /**
    * Run heartbeat tasks
    */
   async runHeartbeatTasks(): Promise<string> {
@@ -258,16 +219,6 @@ export class AssistantCore {
 
   private createOperationID(prefix: string): string {
     return `${prefix}-${randomUUID()}`
-  }
-
-  /**
-   * Cleanup old sessions (placeholder)
-   */
-  async cleanupSessions(_maxAgeDays = 30): Promise<{ deleted: string[]; errors: string[] }> {
-    const deleted: string[] = []
-    const errors: string[] = []
-    this.deps.logger.warn("session cleanup requires SDK support for session deletion")
-    return { deleted, errors }
   }
 
   private ensureClient(): NonNullable<ReturnType<RuntimeProvider["getClient"]>> {

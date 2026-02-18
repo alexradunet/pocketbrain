@@ -74,18 +74,12 @@ describe("SQLite repositories", () => {
     repo.close()
   })
 
-  test("heartbeat repository add/list/count/remove", () => {
+  test("heartbeat repository lists and counts enabled tasks", () => {
     const repo = new SQLiteHeartbeatRepository()
-    repo.addTask("check inbox")
+    db.run("INSERT INTO heartbeat_tasks (task, enabled) VALUES (?, 1)", ["check inbox"])
+    db.run("INSERT INTO heartbeat_tasks (task, enabled) VALUES (?, 0)", ["disabled task"])
     expect(repo.getTaskCount()).toBe(1)
     expect(repo.getTasks()).toEqual(["check inbox"])
-
-    const row = db.query<{ id: number }, []>("SELECT id FROM heartbeat_tasks LIMIT 1").get()
-    expect(row?.id).toBeDefined()
-    if (row?.id) {
-      repo.removeTask(row.id)
-    }
-    expect(repo.getTaskCount()).toBe(0)
     repo.close()
   })
 })

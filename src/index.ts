@@ -135,6 +135,9 @@ async function main(): Promise<void> {
     heartbeatScheduler.start()
   }
 
+  // Create channel manager
+  const channelManager = new ChannelManager(logger)
+
   // Setup graceful shutdown
   let shuttingDown = false
   const shutdown = async (code: number) => {
@@ -178,9 +181,6 @@ async function main(): Promise<void> {
     logger.error({ reason }, "unhandled rejection")
     shutdown(1)
   })
-
-  // Create channel manager
-  const channelManager = new ChannelManager(logger)
 
   // Setup WhatsApp if enabled
   if (cfg.enableWhatsApp) {

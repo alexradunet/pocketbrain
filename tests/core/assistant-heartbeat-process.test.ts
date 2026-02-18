@@ -74,8 +74,6 @@ describe("AssistantCore heartbeat process", () => {
 
     const heartbeatRepository: HeartbeatRepository = {
       getTasks: () => ["Check inbox"],
-      addTask: () => {},
-      removeTask: () => {},
       getTaskCount: () => 1,
     }
 

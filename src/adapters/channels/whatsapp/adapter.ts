@@ -15,12 +15,12 @@ import type {
   MessageHandler 
 } from "../../../core/ports/channel-adapter"
 import type { WhitelistRepository } from "../../../core/ports/whitelist-repository"
-import type { OutboxRepository } from "../../../core/ports/outbox-repository"
+import type { OutboxMessage, OutboxRepository } from "../../../core/ports/outbox-repository"
 import type { MessageSender } from "../../../core/services/message-sender"
 import { ConnectionManager } from "./connection-manager"
 import { CommandHandler, type CommandResult } from "./command-handler"
+import { OutboxProcessor } from "./outbox-processor"
 import { createTaskQueue } from "../../../lib/task-queue"
-import { retryWithBackoff } from "../../../lib/retry"
 
 export interface WhatsAppAdapterOptions {
   authDir: string
@@ -102,6 +102,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
   private outboxInterval: ReturnType<typeof setInterval> | undefined
   private readonly outboxQueue = createTaskQueue({ concurrency: 1 })
   private readonly queuedOutboxIDs = new Set<number>()
+  private readonly outboxProcessor: OutboxProcessor
   private stopping = false
 
   constructor(options: WhatsAppAdapterOptions) {
@@ -122,6 +123,15 @@ export class WhatsAppAdapter implements ChannelAdapter {
     this.commandHandler = new CommandHandler({
       pairToken: this.options.pairToken,
       logger: this.options.logger,
+    })
+
+    this.outboxProcessor = new OutboxProcessor({
+      outboxRepository: this.options.outboxRepository,
+      logger: this.options.logger,
+      retryBaseDelayMs: this.options.outboxRetryBaseDelayMs,
+      sendMessage: async (userID, text) => {
+        await this.send(userID, text)
+      },
     })
   }
 
@@ -217,15 +227,13 @@ export class WhatsAppAdapter implements ChannelAdapter {
   }
 
   private async handleCommandResult(jid: string, result: CommandResult): Promise<void> {
-    const socket = this.connectionManager.getSocket()
-    if (!socket) return
-
     switch (result.action) {
       case "pair": {
         const created = this.options.whitelistRepository.addToWhitelist("whatsapp", jid)
-        await socket.sendMessage(jid, {
-          text: created ? "Pairing successful. You are now whitelisted." : "You are already whitelisted.",
-        })
+        await this.send(
+          jid,
+          created ? "Pairing successful. You are now whitelisted." : "You are already whitelisted.",
+        )
         return
       }
 
@@ -234,7 +242,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
           await this.messageHandler(jid, `/remember ${result.payload}`)
         }
         if (result.response) {
-          await socket.sendMessage(jid, { text: result.response })
+          await this.send(jid, result.response)
         }
         return
       }
@@ -242,19 +250,19 @@ export class WhatsAppAdapter implements ChannelAdapter {
       case "new_session": {
         if (!this.messageHandler) {
           if (result.response) {
-            await socket.sendMessage(jid, { text: result.response })
+            await this.send(jid, result.response)
           }
           return
         }
 
         const response = await this.messageHandler(jid, "/new")
-        await socket.sendMessage(jid, { text: response })
+        await this.send(jid, response)
         return
       }
 
       default: {
         if (result.response) {
-          await socket.sendMessage(jid, { text: result.response })
+          await this.send(jid, result.response)
         }
       }
     }
@@ -263,18 +271,17 @@ export class WhatsAppAdapter implements ChannelAdapter {
   private async processUserMessage(jid: string, text: string): Promise<void> {
     if (!this.messageHandler) return
 
-    const socket = this.connectionManager.getSocket()
-    if (!socket) return
-
     try {
       const answer = await this.messageHandler(jid, text)
       await this.send(jid, answer)
       this.options.logger.info({ jid, answerLength: answer.length }, "whatsapp reply sent")
     } catch (error) {
       this.options.logger.error({ error, jid }, "whatsapp message processing failed")
-      await socket.sendMessage(jid, { 
-        text: "I hit an internal error while processing that. Please try again." 
-      })
+      try {
+        await this.send(jid, "I hit an internal error while processing that. Please try again.")
+      } catch (sendError) {
+        this.options.logger.error({ error: sendError, jid }, "failed to send whatsapp fallback error message")
+      }
     }
   }
 
@@ -310,7 +317,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
     }
   }
 
-  private enqueueOutboxItem(item: { id: number; userID: string; text: string; retryCount: number; maxRetries: number }): void {
+  private enqueueOutboxItem(item: OutboxMessage): void {
     if (this.queuedOutboxIDs.has(item.id)) {
       return
     }
@@ -318,72 +325,10 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
     void this.outboxQueue.add(async () => {
       try {
-        await this.processOutboxItem(item)
+        await this.outboxProcessor.process(item)
       } finally {
         this.queuedOutboxIDs.delete(item.id)
       }
     })
-  }
-
-  private async processOutboxItem(
-    item: { id: number; userID: string; text: string; retryCount: number; maxRetries: number }
-  ): Promise<void> {
-    const target = normalizeJid(item.userID)
-    
-    if (!target) {
-      this.options.logger.warn({ jid: item.userID }, "dropping proactive message with invalid JID")
-      this.options.outboxRepository.acknowledge(item.id)
-      return
-    }
-    
-    if (!isDirectJid(target)) {
-      this.options.logger.warn({ jid: target }, "dropping non-1:1 proactive message target")
-      this.options.outboxRepository.acknowledge(item.id)
-      return
-    }
-
-    try {
-      await retryWithBackoff(
-        async () => {
-          const socket = this.connectionManager.getSocket()
-          if (!socket || !this.connectionManager.isConnected()) {
-            throw new Error("whatsapp socket unavailable")
-          }
-
-          await this.options.messageSender.send(target, item.text, async (chunk) => {
-            await socket.sendMessage(target, { text: chunk })
-          })
-        },
-        {
-          retries: 2,
-          minTimeoutMs: this.options.outboxRetryBaseDelayMs ?? 60_000,
-          maxTimeoutMs: 10 * 60_000,
-          factor: 2,
-        },
-      )
-      
-      this.options.outboxRepository.acknowledge(item.id)
-      this.options.logger.info({ jid: target }, "whatsapp proactive message sent")
-    } catch (error) {
-      const newRetryCount = item.retryCount + 1
-      
-      if (newRetryCount >= item.maxRetries) {
-        this.options.logger.error({ 
-          jid: item.userID, 
-          retries: newRetryCount 
-        }, "whatsapp outbox max retries exceeded")
-        this.options.outboxRepository.acknowledge(item.id)
-      } else {
-        const delayMs = (this.options.outboxRetryBaseDelayMs ?? 60_000) * Math.pow(2, item.retryCount)
-        const nextRetry = new Date(Date.now() + delayMs).toISOString()
-        
-        this.options.outboxRepository.markRetry(item.id, newRetryCount, nextRetry)
-        this.options.logger.warn({ 
-          jid: item.userID, 
-          retry: newRetryCount, 
-          nextRetry 
-        }, "whatsapp outbox send failed, scheduling retry")
-      }
-    }
   }
 }

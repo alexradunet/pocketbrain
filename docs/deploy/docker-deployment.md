@@ -19,15 +19,6 @@ Services:
 Required runtime secret:
 - `TS_AUTHKEY` in `.env` for the `tailscale` service.
 
-## Dev-control stack (optional)
-
-```bash
-docker compose -p pocketbrain-dev -f docker-compose.dev.yml up -d --build
-docker compose -p pocketbrain-dev -f docker-compose.dev.yml exec -it dev-control sh
-```
-
-Inside `dev-control`, repository root is `/workspace`.
-
 ## Operations
 
 ```bash

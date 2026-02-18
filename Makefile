@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: setup-dev setup-runtime dev test build up down ps logs release dev-release backup restore shell shell-dev
+.PHONY: setup-dev setup-runtime dev test build up down ps logs release backup restore shell
 
 setup-dev:
 	./scripts/setup/install-debian-dev.sh
@@ -32,9 +32,6 @@ logs:
 release:
 	./scripts/ops/release.sh $(TAG)
 
-dev-release:
-	./scripts/ops/dev-release.sh $(TAG)
-
 backup:
 	./scripts/ops/backup.sh
 
@@ -44,6 +41,3 @@ restore:
 
 shell:
 	./scripts/ops/docker-shell.sh $(ARGS)
-
-shell-dev:
-	./scripts/ops/docker-shell.sh --dev $(ARGS)

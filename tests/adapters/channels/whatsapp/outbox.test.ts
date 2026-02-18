@@ -1,9 +1,7 @@
 import { describe, test, expect, vi } from "bun:test"
 import type { Logger } from "pino"
-import type { WhitelistRepository } from "../../../../src/core/ports/whitelist-repository"
 import type { OutboxRepository } from "../../../../src/core/ports/outbox-repository"
-import type { MessageSender } from "../../../../src/core/services/message-sender"
-import { WhatsAppAdapter } from "../../../../src/adapters/channels/whatsapp/adapter"
+import { OutboxProcessor } from "../../../../src/adapters/channels/whatsapp/outbox-processor"
 
 function createLoggerMock(): Logger {
   return {
@@ -14,156 +12,137 @@ function createLoggerMock(): Logger {
   } as unknown as Logger
 }
 
-function createAdapterDeps(sendImpl?: (userID: string, text: string) => Promise<void>) {
-  const whitelistRepository: WhitelistRepository = {
-    isWhitelisted: () => true,
-    addToWhitelist: () => true,
-    removeFromWhitelist: () => true,
-  }
-
-  const outboxRepository = {
+function createOutboxRepositoryMock(): OutboxRepository {
+  return {
     enqueue: vi.fn(),
     listPending: vi.fn(() => []),
     acknowledge: vi.fn(),
     markRetry: vi.fn(),
-  } as unknown as OutboxRepository
-
-  const messageSender = {
-    send: vi.fn(async (userID: string, text: string) => {
-      if (sendImpl) {
-        await sendImpl(userID, text)
-      }
-    }),
-  } as unknown as MessageSender
-
-  const adapter = new WhatsAppAdapter({
-    authDir: ".data/test-whatsapp",
-    logger: createLoggerMock(),
-    whitelistRepository,
-    outboxRepository,
-    messageSender,
-    pairToken: "secret",
-    outboxRetryBaseDelayMs: 1,
-  })
-
-  return { adapter, outboxRepository, messageSender }
+  }
 }
 
-describe("WhatsAppAdapter outbox handling", () => {
-  test("acknowledges outbox item with invalid jid", async () => {
-    const { adapter, outboxRepository } = createAdapterDeps()
-    ;(adapter as any).connectionManager = { isConnected: () => true, getSocket: () => ({}) }
+describe("OutboxProcessor", () => {
+  test("acknowledges invalid JID errors", async () => {
+    const repository = createOutboxRepositoryMock()
+    const processor = new OutboxProcessor({
+      outboxRepository: repository,
+      logger: createLoggerMock(),
+      retryBaseDelayMs: 1,
+      sendMessage: async () => {
+        throw new Error("Invalid WhatsApp ID format")
+      },
+    })
 
-    await (adapter as any).processOutboxItem({
+    await processor.process({
       id: 1,
+      channel: "whatsapp",
       userID: "bad jid",
       text: "hello",
       retryCount: 0,
       maxRetries: 3,
+      nextRetryAt: null,
     })
 
-    expect((outboxRepository.acknowledge as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(1)
+    expect(repository.acknowledge).toHaveBeenCalledWith(1)
+    expect(repository.markRetry).not.toHaveBeenCalled()
   })
 
-  test("acknowledges outbox item when target is non-direct chat", async () => {
-    const { adapter, outboxRepository } = createAdapterDeps()
-    ;(adapter as any).connectionManager = { isConnected: () => true, getSocket: () => ({}) }
+  test("acknowledges non-direct recipient errors", async () => {
+    const repository = createOutboxRepositoryMock()
+    const processor = new OutboxProcessor({
+      outboxRepository: repository,
+      logger: createLoggerMock(),
+      retryBaseDelayMs: 1,
+      sendMessage: async () => {
+        throw new Error("Cannot send to group chats")
+      },
+    })
 
-    await (adapter as any).processOutboxItem({
+    await processor.process({
       id: 2,
+      channel: "whatsapp",
       userID: "12345@g.us",
       text: "hello",
       retryCount: 0,
       maxRetries: 3,
+      nextRetryAt: null,
     })
 
-    expect((outboxRepository.acknowledge as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(2)
+    expect(repository.acknowledge).toHaveBeenCalledWith(2)
+    expect(repository.markRetry).not.toHaveBeenCalled()
   })
 
-  test("sends and acknowledges outbox item on success", async () => {
-    const { adapter, outboxRepository, messageSender } = createAdapterDeps()
-    const socket = {
-      sendMessage: vi.fn(async () => {}),
-    }
-    ;(adapter as any).connectionManager = {
-      isConnected: () => true,
-      getSocket: () => socket,
-    }
+  test("acknowledges successful send", async () => {
+    const repository = createOutboxRepositoryMock()
+    const sendMessage = vi.fn(async () => {})
+    const processor = new OutboxProcessor({
+      outboxRepository: repository,
+      logger: createLoggerMock(),
+      retryBaseDelayMs: 1,
+      sendMessage,
+    })
 
-    await (adapter as any).processOutboxItem({
+    await processor.process({
       id: 3,
+      channel: "whatsapp",
       userID: "123456789@s.whatsapp.net",
       text: "hello",
       retryCount: 0,
       maxRetries: 3,
+      nextRetryAt: null,
     })
 
-    expect((messageSender.send as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalled()
-    expect((outboxRepository.acknowledge as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(3)
+    expect(sendMessage).toHaveBeenCalledWith("123456789@s.whatsapp.net", "hello")
+    expect(repository.acknowledge).toHaveBeenCalledWith(3)
   })
 
   test("marks retry when send fails and retries remain", async () => {
-    const { adapter, outboxRepository } = createAdapterDeps(async () => {
-      throw new Error("send failed")
+    const repository = createOutboxRepositoryMock()
+    const processor = new OutboxProcessor({
+      outboxRepository: repository,
+      logger: createLoggerMock(),
+      retryBaseDelayMs: 1,
+      sendMessage: async () => {
+        throw new Error("whatsapp socket unavailable")
+      },
     })
-    const socket = {
-      sendMessage: vi.fn(async () => {}),
-    }
-    ;(adapter as any).connectionManager = {
-      isConnected: () => true,
-      getSocket: () => socket,
-    }
 
-    await (adapter as any).processOutboxItem({
+    await processor.process({
       id: 4,
+      channel: "whatsapp",
       userID: "123456789@s.whatsapp.net",
       text: "hello",
       retryCount: 0,
       maxRetries: 3,
+      nextRetryAt: null,
     })
 
-    expect((outboxRepository.markRetry as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1)
-    expect((outboxRepository.acknowledge as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled()
+    expect(repository.markRetry).toHaveBeenCalledTimes(1)
+    expect(repository.acknowledge).not.toHaveBeenCalled()
   })
 
   test("acknowledges when max retries are exceeded", async () => {
-    const { adapter, outboxRepository } = createAdapterDeps(async () => {
-      throw new Error("send failed")
+    const repository = createOutboxRepositoryMock()
+    const processor = new OutboxProcessor({
+      outboxRepository: repository,
+      logger: createLoggerMock(),
+      retryBaseDelayMs: 1,
+      sendMessage: async () => {
+        throw new Error("send failed")
+      },
     })
-    const socket = {
-      sendMessage: vi.fn(async () => {}),
-    }
-    ;(adapter as any).connectionManager = {
-      isConnected: () => true,
-      getSocket: () => socket,
-    }
 
-    await (adapter as any).processOutboxItem({
+    await processor.process({
       id: 5,
+      channel: "whatsapp",
       userID: "123456789@s.whatsapp.net",
       text: "hello",
       retryCount: 2,
       maxRetries: 3,
+      nextRetryAt: null,
     })
 
-    expect((outboxRepository.acknowledge as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(5)
-  })
-
-  test("marks retry when socket is unavailable", async () => {
-    const { adapter, outboxRepository } = createAdapterDeps()
-    ;(adapter as any).connectionManager = {
-      isConnected: () => true,
-      getSocket: () => undefined,
-    }
-
-    await (adapter as any).processOutboxItem({
-      id: 6,
-      userID: "123456789@s.whatsapp.net",
-      text: "hello",
-      retryCount: 0,
-      maxRetries: 3,
-    })
-
-    expect((outboxRepository.markRetry as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1)
+    expect(repository.acknowledge).toHaveBeenCalledWith(5)
+    expect(repository.markRetry).not.toHaveBeenCalled()
   })
 })

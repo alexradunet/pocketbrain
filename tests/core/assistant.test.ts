@@ -60,8 +60,6 @@ describe("AssistantCore", () => {
 
     const heartbeatRepository: HeartbeatRepository = {
       getTasks: () => [],
-      addTask: () => {},
-      removeTask: () => {},
       getTaskCount: () => 0,
     }
 
@@ -107,8 +105,6 @@ describe("AssistantCore", () => {
 
     const heartbeatRepository: HeartbeatRepository = {
       getTasks: () => [],
-      addTask: () => {},
-      removeTask: () => {},
       getTaskCount: () => 0,
     }
 

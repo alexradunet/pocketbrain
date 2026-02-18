@@ -70,23 +70,3 @@ export function isCreateResult(value: unknown): value is CreateResult {
   if (result.data === undefined || result.data === null) return true
   return typeof result.data === "object"
 }
-
-// Safe text extraction
-export function extractTextFromParts(parts: unknown[]): string {
-  if (!Array.isArray(parts)) return ""
-  
-  return parts
-    .filter((p): p is { type: string; text: string } => {
-      return (
-        typeof p === "object" &&
-        p !== null &&
-        "type" in p &&
-        (p as Record<string, unknown>).type === "text" &&
-        "text" in p &&
-        typeof (p as Record<string, unknown>).text === "string"
-      )
-    })
-    .map((p) => p.text)
-    .join("\n")
-    .trim()
-}

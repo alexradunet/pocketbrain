@@ -31,12 +31,3 @@ make dev
 make test
 make build
 ```
-
-## Optional dev-control container
-
-```bash
-docker compose -p pocketbrain-dev -f docker-compose.dev.yml up -d --build
-docker compose -p pocketbrain-dev -f docker-compose.dev.yml exec -it dev-control sh
-```
-
-Inside `dev-control`, repo root is `/workspace`.

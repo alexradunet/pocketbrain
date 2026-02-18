@@ -59,7 +59,6 @@ $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" down --remo
 
 bun run typecheck
 bun run test
-bun run build
 
 export APP_VERSION="$TAG"
 export GIT_SHA="$TAG"
