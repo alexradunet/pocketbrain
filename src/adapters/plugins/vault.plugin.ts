@@ -6,6 +6,7 @@
 
 import { tool } from "@opencode-ai/plugin"
 import { vaultProvider } from "../../vault/vault-provider"
+import type { VaultSearchMode } from "../../vault/vault-service"
 
 interface VaultReadArgs {
   path: string
@@ -28,11 +29,22 @@ interface VaultListArgs {
 interface VaultSearchArgs {
   query: string
   folder?: string
+  mode?: string
 }
 
 interface VaultMoveArgs {
   from: string
   to: string
+}
+
+interface VaultBacklinksArgs {
+  target: string
+  folder?: string
+}
+
+interface VaultTagSearchArgs {
+  tag: string
+  folder?: string
 }
 
 interface VaultDailyArgs {
@@ -116,20 +128,29 @@ export default async function createVaultPlugin() {
       }),
 
       vault_search: tool({
-        description: "Search for files by name in the vault. Returns matching file paths.",
+        description: "Search for files in the vault by name, content, or both. Returns matching file paths.",
         args: {
-          query: tool.schema.string().describe("Search query (matched against file names)"),
+          query: tool.schema.string().describe("Search query"),
           folder: tool.schema.string().optional().describe("Folder to search in (default: entire vault)"),
+          mode: tool.schema
+            .string()
+            .optional()
+            .describe("Search mode: name | content | both (default: name)"),
         },
         async execute(args: VaultSearchArgs) {
-          const files = await vaultService.searchFiles(args.query, args.folder || '')
+          const mode = normalizeVaultSearchMode(args.mode)
+          if (!mode) {
+            return "Error: Invalid search mode. Use one of: name, content, both"
+          }
+
+          const files = await vaultService.searchFiles(args.query, args.folder || '', mode)
           
           if (files.length === 0) {
-            return `No files found matching "${args.query}"`
+            return `No files found matching "${args.query}" in ${mode} mode`
           }
           
           const lines = files.map(f => `- ${f.path}`)
-          return `Found ${files.length} file(s) matching "${args.query}":\n${lines.join('\n')}`
+          return `Found ${files.length} file(s) matching "${args.query}" in ${mode} mode:\n${lines.join('\n')}`
         },
       }),
 
@@ -145,6 +166,42 @@ export default async function createVaultPlugin() {
             return `Successfully moved ${args.from} to ${args.to}`
           }
           return `Error: Failed to move ${args.from}`
+        },
+      }),
+
+      vault_backlinks: tool({
+        description: "Find notes that link to a wiki link target (e.g., 'Project Plan' for [[Project Plan]]).",
+        args: {
+          target: tool.schema.string().describe("Wiki link target to find backlinks for"),
+          folder: tool.schema.string().optional().describe("Folder to search in (default: entire vault)"),
+        },
+        async execute(args: VaultBacklinksArgs) {
+          const files = await vaultService.findBacklinks(args.target, args.folder || "")
+
+          if (files.length === 0) {
+            return `No backlinks found for "${args.target}"`
+          }
+
+          const lines = files.map((f) => `- ${f.path}`)
+          return `Found ${files.length} backlink file(s) for "${args.target}":\n${lines.join("\n")}`
+        },
+      }),
+
+      vault_tag_search: tool({
+        description: "Find notes containing a tag (supports nested tags like #life/os).",
+        args: {
+          tag: tool.schema.string().describe("Tag to search for, with or without # prefix"),
+          folder: tool.schema.string().optional().describe("Folder to search in (default: entire vault)"),
+        },
+        async execute(args: VaultTagSearchArgs) {
+          const files = await vaultService.searchByTag(args.tag, args.folder || "")
+
+          if (files.length === 0) {
+            return `No files found with tag "${args.tag}"`
+          }
+
+          const lines = files.map((f) => `- ${f.path}`)
+          return `Found ${files.length} file(s) with tag "${args.tag}":\n${lines.join("\n")}`
         },
       }),
 
@@ -198,4 +255,9 @@ function formatBytes(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+function normalizeVaultSearchMode(mode: string | undefined): VaultSearchMode | null {
+  if (!mode) return "name"
+  return mode === "name" || mode === "content" || mode === "both" ? mode : null
 }

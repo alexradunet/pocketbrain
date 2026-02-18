@@ -10,6 +10,8 @@
 
 import { join, dirname, resolve, relative, sep } from "node:path"
 import { mkdir, readdir, stat, rename } from "node:fs/promises"
+import { normalizeWikiLinkTarget, parseWikiLinks } from "../lib/markdown-links"
+import { extractMarkdownTags } from "../lib/markdown-tags"
 
 export interface VaultFile {
   path: string
@@ -32,6 +34,8 @@ export interface VaultOptions {
     archive: string
   }
 }
+
+export type VaultSearchMode = "name" | "content" | "both"
 
 export class VaultService {
   constructor(private options: VaultOptions) {}
@@ -151,14 +155,87 @@ export class VaultService {
     }
   }
 
-  /**
-   * Search files by name
-   */
-  async searchFiles(query: string, folder: string = ""): Promise<VaultFile[]> {
+  async searchFiles(
+    query: string,
+    folder: string = "",
+    mode: VaultSearchMode = "name",
+  ): Promise<VaultFile[]> {
     const allFiles = await this.listFilesRecursive(folder)
     const lowerQuery = query.toLowerCase()
+    const searchMode = this.normalizeSearchMode(mode)
 
-    return allFiles.filter((file) => file.name.toLowerCase().includes(lowerQuery))
+    if (searchMode === "name") {
+      return allFiles.filter((file) => file.name.toLowerCase().includes(lowerQuery))
+    }
+
+    const matched: VaultFile[] = []
+
+    for (const file of allFiles) {
+      if (file.isDirectory) {
+        continue
+      }
+
+      const nameMatch = file.name.toLowerCase().includes(lowerQuery)
+      if (searchMode === "both" && nameMatch) {
+        matched.push(file)
+        continue
+      }
+
+      const content = await this.readFile(file.path)
+      if (content && content.toLowerCase().includes(lowerQuery)) {
+        matched.push(file)
+      }
+    }
+
+    return matched
+  }
+
+  async findBacklinks(target: string, folder: string = ""): Promise<VaultFile[]> {
+    const normalizedTarget = normalizeWikiLinkTarget(target)
+    const allFiles = await this.listFilesRecursive(folder)
+    const matches: VaultFile[] = []
+
+    for (const file of allFiles) {
+      if (file.isDirectory) {
+        continue
+      }
+
+      const content = await this.readFile(file.path)
+      if (!content) {
+        continue
+      }
+
+      const links = parseWikiLinks(content)
+      if (links.some((link) => link.normalizedTarget === normalizedTarget)) {
+        matches.push(file)
+      }
+    }
+
+    return matches
+  }
+
+  async searchByTag(tag: string, folder: string = ""): Promise<VaultFile[]> {
+    const normalizedTag = normalizeTag(tag)
+    const allFiles = await this.listFilesRecursive(folder)
+    const matches: VaultFile[] = []
+
+    for (const file of allFiles) {
+      if (file.isDirectory) {
+        continue
+      }
+
+      const content = await this.readFile(file.path)
+      if (!content) {
+        continue
+      }
+
+      const tags = extractMarkdownTags(content)
+      if (tags.includes(normalizedTag)) {
+        matches.push(file)
+      }
+    }
+
+    return matches
   }
 
   /**
@@ -275,6 +352,16 @@ export class VaultService {
 
     return resolvedPath
   }
+
+  private normalizeSearchMode(mode: VaultSearchMode | string): VaultSearchMode {
+    return mode === "content" || mode === "both" || mode === "name" ? mode : "name"
+  }
+}
+
+function normalizeTag(tag: string): string {
+  const trimmed = tag.trim().toLowerCase()
+  if (trimmed.length === 0) return "#"
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
 }
 
 /**

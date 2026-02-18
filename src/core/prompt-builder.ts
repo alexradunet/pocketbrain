@@ -114,6 +114,8 @@ export class PromptBuilder {
       "- vault_list: List files in a folder",
       "- vault_search: Search files by name",
       "- vault_move: Move/rename files between folders",
+      "- vault_backlinks: Find notes linking to a wiki-link target",
+      "- vault_tag_search: Find notes containing a tag",
       "- vault_daily: Access today's daily note",
       "- vault_stats: Get vault statistics",
       "",

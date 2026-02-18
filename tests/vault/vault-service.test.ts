@@ -191,10 +191,11 @@ describe("VaultService", () => {
 
   describe("searchFiles", () => {
     beforeEach(async () => {
-      writeFileSync(join(TEST_DIR, "meeting-notes.md"), "")
-      writeFileSync(join(TEST_DIR, "project-meeting.md"), "")
-      writeFileSync(join(TEST_DIR, "todo.txt"), "")
-      writeFileSync(join(TEST_DIR, "projects", "team-meeting.md"), "")
+      writeFileSync(join(TEST_DIR, "meeting-notes.md"), "Weekly sync and planning")
+      writeFileSync(join(TEST_DIR, "project-meeting.md"), "Release checklist")
+      writeFileSync(join(TEST_DIR, "todo.txt"), "Remember milk")
+      writeFileSync(join(TEST_DIR, "projects", "team-meeting.md"), "Roadmap review")
+      writeFileSync(join(TEST_DIR, "projects", "log.md"), "Retrospective meeting outcomes")
     })
 
     test("finds files matching query", async () => {
@@ -220,6 +221,85 @@ describe("VaultService", () => {
 
     test("returns empty array for no matches", async () => {
       const files = await vaultService.searchFiles("nonexistent")
+
+      expect(files).toHaveLength(0)
+    })
+
+    test("searches file content when mode is content", async () => {
+      const files = await vaultService.searchFiles("retrospective", "", "content")
+
+      expect(files).toHaveLength(1)
+      expect(files[0]?.path).toBe("projects/log.md")
+    })
+
+    test("searches name and content when mode is both", async () => {
+      const files = await vaultService.searchFiles("meeting", "", "both")
+
+      expect(files.length).toBeGreaterThanOrEqual(4)
+      expect(files.some((f) => f.path === "projects/log.md")).toBe(true)
+    })
+
+    test("falls back to name mode for invalid mode input", async () => {
+      const files = await vaultService.searchFiles("meeting", "", "invalid" as never)
+
+      expect(files.length).toBeGreaterThanOrEqual(3)
+      expect(files.some((f) => f.path === "projects/log.md")).toBe(false)
+    })
+  })
+
+  describe("findBacklinks", () => {
+    beforeEach(() => {
+      writeFileSync(join(TEST_DIR, "projects", "plan.md"), "# Plan")
+      writeFileSync(join(TEST_DIR, "daily", "2026-02-18.md"), "Review [[Plan]] and [[Inbox]]")
+      writeFileSync(join(TEST_DIR, "journal", "entry.md"), "Work log for [[Plan|Project Plan]]")
+      writeFileSync(join(TEST_DIR, "resources", "ref.md"), "No links here")
+    })
+
+    test("finds backlinks by wiki link target", async () => {
+      const files = await vaultService.findBacklinks("Plan")
+
+      expect(files.length).toBe(2)
+      expect(files.some((f) => f.path === "daily/2026-02-18.md")).toBe(true)
+      expect(files.some((f) => f.path === "journal/entry.md")).toBe(true)
+    })
+
+    test("backlink search is case-insensitive", async () => {
+      const files = await vaultService.findBacklinks("plan")
+
+      expect(files.length).toBe(2)
+    })
+
+    test("returns empty array when no backlinks found", async () => {
+      const files = await vaultService.findBacklinks("Missing")
+
+      expect(files).toHaveLength(0)
+    })
+  })
+
+  describe("searchByTag", () => {
+    beforeEach(() => {
+      writeFileSync(join(TEST_DIR, "projects", "life-os.md"), "Roadmap #pkm #life/os")
+      writeFileSync(join(TEST_DIR, "daily", "2026-02-18.md"), "Focus on #PKM today")
+      writeFileSync(join(TEST_DIR, "journal", "entry.md"), "# Daily heading\nNo tags")
+    })
+
+    test("finds files by tag", async () => {
+      const files = await vaultService.searchByTag("#pkm")
+
+      expect(files.length).toBe(2)
+      expect(files.some((f) => f.path === "projects/life-os.md")).toBe(true)
+      expect(files.some((f) => f.path === "daily/2026-02-18.md")).toBe(true)
+    })
+
+    test("normalizes missing hash prefix", async () => {
+      const files = await vaultService.searchByTag("life/os")
+
+      expect(files.length).toBe(1)
+      expect(files[0]?.path).toBe("projects/life-os.md")
+    })
+
+    test("returns empty array for unknown tag", async () => {
+      const files = await vaultService.searchByTag("#missing")
 
       expect(files).toHaveLength(0)
     })
