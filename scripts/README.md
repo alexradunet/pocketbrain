@@ -15,6 +15,8 @@ This folder contains scripts used to manage and inspect PocketBrain instances.
 - `ops/docker-shell.sh` - open an interactive shell in the running container.
 - `ops/release.sh` - typecheck, test, deploy, health-check, and rollback runtime releases.
 - `ops/dev-release.sh` - run the same release flow from inside the dev-control container.
+- `ops/backup.sh` - stop runtime services, create a compressed backup of runtime data, and restart services.
+- `ops/restore.sh` - restore runtime data from backup archive and restart services.
 
 Root-level `scripts/docker-*.sh` files are compatibility wrappers that delegate to the structured locations above.
 Root-level `scripts/release.sh` delegates to `ops/release.sh`.

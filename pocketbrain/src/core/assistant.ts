@@ -11,6 +11,7 @@
 
 import type { Part, TextPart, Message } from "@opencode-ai/sdk"
 import type { Logger } from "pino"
+import { randomUUID } from "node:crypto"
 import type { RuntimeProvider } from "./runtime-provider"
 import type { SessionManager } from "./session-manager"
 import type { PromptBuilder } from "./prompt-builder"
@@ -75,6 +76,7 @@ export class AssistantCore {
    * Process a user message and return a response
    */
   async ask(input: AssistantInput): Promise<string> {
+    const operationID = this.createOperationID("ask")
     const startedAt = Date.now()
     const client = this.ensureClient()
     const sessionID = await this.deps.sessionManager.getOrCreateMainSession(client)
@@ -88,6 +90,7 @@ export class AssistantCore {
 
     this.deps.logger.info(
       { 
+        operationID,
         channel: input.channel, 
         userID: input.userID, 
         sessionID, 
@@ -108,18 +111,19 @@ export class AssistantCore {
     }
     const result = await client.session.prompt(promptRequest)
     if (!isPromptResult(result)) {
-      this.deps.logger.error({ sessionID }, "assistant returned invalid response format")
+      this.deps.logger.error({ operationID, sessionID }, "assistant returned invalid response format")
       return "I did not receive a valid model reply. Please check OpenCode provider auth/model setup."
     }
 
     const text = this.extractText(result.data?.parts ?? [])
     if (!text) {
-      this.deps.logger.error({ sessionID }, "assistant returned empty response")
+      this.deps.logger.error({ operationID, sessionID }, "assistant returned empty response")
       return "I did not receive a model reply. Please check OpenCode provider auth/model setup."
     }
 
     this.deps.logger.info(
       { 
+        operationID,
         channel: input.channel, 
         userID: input.userID, 
         sessionID, 
@@ -173,6 +177,7 @@ export class AssistantCore {
    * Run heartbeat tasks
    */
   async runHeartbeatTasks(): Promise<string> {
+    const operationID = this.createOperationID("heartbeat")
     const startedAt = Date.now()
     const tasks = this.deps.heartbeatRepository.getTasks()
     
@@ -185,7 +190,7 @@ export class AssistantCore {
     const mainSessionID = await this.deps.sessionManager.getOrCreateMainSession(client)
     
     this.deps.logger.info(
-      { heartbeatSessionID, mainSessionID, taskCount: tasks.length }, 
+      { operationID, heartbeatSessionID, mainSessionID, taskCount: tasks.length }, 
       "heartbeat sessions ready"
     )
 
@@ -205,11 +210,13 @@ export class AssistantCore {
     }
     const response = await client.session.prompt(heartbeatRequest)
     if (!isPromptResult(response)) {
+      this.deps.logger.error({ operationID, heartbeatSessionID }, "heartbeat invalid response format")
       return "Heartbeat failed: invalid response format from model."
     }
 
     const summary = this.extractText(response.data?.parts ?? [])
     if (!summary) {
+      this.deps.logger.error({ operationID, heartbeatSessionID }, "heartbeat empty summary")
       return "Heartbeat failed: no summary reply from model."
     }
 
@@ -237,6 +244,7 @@ export class AssistantCore {
 
     this.deps.logger.info(
       { 
+        operationID,
         heartbeatSessionID, 
         mainSessionID, 
         taskCount: tasks.length, 
@@ -246,6 +254,10 @@ export class AssistantCore {
     )
     
     return `Heartbeat completed with ${tasks.length} tasks.`
+  }
+
+  private createOperationID(prefix: string): string {
+    return `${prefix}-${randomUUID()}`
   }
 
   /**

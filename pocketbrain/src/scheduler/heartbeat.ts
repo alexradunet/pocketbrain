@@ -5,6 +5,7 @@
  */
 
 import type { Logger } from "pino"
+import { randomUUID } from "node:crypto"
 import type { AssistantCore } from "../core/assistant"
 import type { OutboxRepository } from "../core/ports/outbox-repository"
 import type { ChannelRepository } from "../core/ports/channel-repository"
@@ -61,8 +62,9 @@ export class HeartbeatScheduler {
   }
 
   private async run(): Promise<void> {
+    const runID = `scheduler-${randomUUID()}`
     if (this.running) {
-      this.deps.logger.warn("heartbeat run skipped: previous run still active")
+      this.deps.logger.warn({ runID }, "heartbeat run skipped: previous run still active")
       this.scheduleNextRun(Math.max(1, this.options.intervalMinutes) * 60_000)
       return
     }
@@ -71,7 +73,7 @@ export class HeartbeatScheduler {
     const startedAt = Date.now()
 
     try {
-      this.deps.logger.debug("heartbeat run started")
+      this.deps.logger.debug({ runID }, "heartbeat run started")
       const result = await this.deps.assistant.runHeartbeatTasks()
       
       // Reset on success
@@ -79,16 +81,16 @@ export class HeartbeatScheduler {
       this.currentBackoffMs = this.options.intervalMinutes * 60_000
       this.scheduleNextRun(this.currentBackoffMs)
       
-      this.deps.logger.info({ result, durationMs: Date.now() - startedAt }, "heartbeat run completed")
+      this.deps.logger.info({ runID, result, durationMs: Date.now() - startedAt }, "heartbeat run completed")
     } catch (error) {
-      await this.handleFailure(error, startedAt)
+      await this.handleFailure(error, startedAt, runID)
       this.scheduleNextRun(this.currentBackoffMs)
     } finally {
       this.running = false
     }
   }
 
-  private async handleFailure(error: unknown, startedAt: number): Promise<void> {
+  private async handleFailure(error: unknown, startedAt: number, runID: string): Promise<void> {
     this.consecutiveFailures += 1
     
     const delay = Math.min(
@@ -98,6 +100,7 @@ export class HeartbeatScheduler {
     this.currentBackoffMs = Math.max(this.options.intervalMinutes * 60_000, delay)
 
     this.deps.logger.error({
+      runID,
       error,
       durationMs: Date.now() - startedAt,
       consecutiveFailures: this.consecutiveFailures,

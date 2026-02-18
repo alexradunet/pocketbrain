@@ -191,10 +191,11 @@ async function main(): Promise<void> {
   const enableWhatsApp = ask("Enable WhatsApp? (y/N): ")
   if (enableWhatsApp.toLowerCase().startsWith("y")) {
     updates.ENABLE_WHATSAPP = "true"
-    const authDir = current.WHATSAPP_AUTH_DIR || ".data/whatsapp-auth"
+    const dataDir = current.DATA_DIR || Bun.env.DATA_DIR || ".data"
+    const authDir = current.WHATSAPP_AUTH_DIR || `${dataDir}/whatsapp-auth`
     updates.WHATSAPP_AUTH_DIR = authDir
     console.log("Scan the QR to connect WhatsApp...")
-    const waUserID = await setupWhatsApp(join(process.cwd(), authDir))
+    const waUserID = await setupWhatsApp(resolve(process.cwd(), authDir))
     if (waUserID) {
       channelRepository.saveLastChannel("whatsapp", waUserID)
     }

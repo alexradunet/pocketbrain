@@ -9,19 +9,27 @@
     "setup": "bun src/cli/setup.ts",
     "opencode": "opencode",
     "typecheck": "tsc --noEmit",
+    "test": "bun test tests/**/*.test.ts",
+    "test:core": "bun test tests/core",
+    "test:adapters": "bun test tests/adapters",
+    "test:scheduler": "bun test tests/scheduler",
+    "test:store": "bun test tests/store",
+    "test:vault": "bun test tests/vault",
+    "test:processes": "bun run test:core && bun run test:adapters && bun run test:scheduler && bun run test:store && bun run test:vault",
+    "build": "bun build --compile --minify --outfile /tmp/pocketbrain-build ./src/index.ts",
     "test:opencode:e2e": "bun test tests/opencode.e2e.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.1.53",
     "@opencode-ai/sdk": "1.1.53",
-    "@whiskeysockets/baileys": "latest",
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
     "opencode-ai": "1.1.53",
-    "pino": "latest",
-    "qrcode-terminal": "latest"
+    "pino": "10.3.0",
+    "qrcode-terminal": "0.12.0"
   },
   "devDependencies": {
-    "@types/qrcode-terminal": "latest",
+    "@types/qrcode-terminal": "0.12.2",
     "bun-types": "^1.3.9",
-    "typescript": "latest"
+    "typescript": "5.9.3"
   }
 }

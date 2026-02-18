@@ -4,9 +4,13 @@
  */
 
 import { tool } from "@opencode-ai/plugin"
-import { join, basename } from "node:path"
+import { join, basename, isAbsolute } from "node:path"
 
 const SKILLS_DIR = join(process.cwd(), ".agents", "skills")
+const configuredDataDir = Bun.env.DATA_DIR?.trim() || ".data"
+const DATA_DIR = isAbsolute(configuredDataDir)
+  ? configuredDataDir
+  : join(process.cwd(), configuredDataDir)
 
 // Valid GitHub repository name pattern
 const GITHUB_REPO_PATTERN = /^[a-zA-Z0-9_.-]+$/
@@ -95,8 +99,7 @@ export default async function createInstallSkillPlugin({ $ }: PluginContext) {
           }
 
           const tmpDir = join(
-            process.cwd(),
-            ".data",
+            DATA_DIR,
             `tmp-skill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           )
           

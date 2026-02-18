@@ -10,6 +10,7 @@ RUNTIME_IMAGE="${RUNTIME_IMAGE:-${RUNTIME_PROJECT}-pocketbrain}"
 
 TAG="${1:-$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || printf 'local')}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-180}"
+ROLLBACK_TIMEOUT_SECONDS="${ROLLBACK_TIMEOUT_SECONDS:-120}"
 
 cd "$APP_DIR"
 
@@ -25,37 +26,71 @@ fi
 
 PREVIOUS_IMAGE_ID="$($DOCKER_BIN image inspect "${RUNTIME_IMAGE}:latest" --format '{{.Id}}' 2>/dev/null || true)"
 
-$DOCKER_BIN compose -p pocketbrain -f "$RUNTIME_COMPOSE_FILE" down --remove-orphans >/dev/null 2>&1 || true
+wait_for_health() {
+  SERVICE_NAME="$1"
+  MAX_WAIT_SECONDS="$2"
+  START_TS="$(date +%s)"
+
+  while true; do
+    CONTAINER_ID="$($DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" ps -q "$SERVICE_NAME" 2>/dev/null || true)"
+    STATUS=""
+    if [ -n "$CONTAINER_ID" ]; then
+      STATUS="$($DOCKER_BIN inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID" 2>/dev/null || true)"
+    fi
+
+    if [ "$STATUS" = "healthy" ]; then
+      return 0
+    fi
+
+    if [ "$STATUS" = "unhealthy" ]; then
+      return 1
+    fi
+
+    NOW_TS="$(date +%s)"
+    if [ $((NOW_TS - START_TS)) -ge "$MAX_WAIT_SECONDS" ]; then
+      return 1
+    fi
+
+    sleep 5
+  done
+}
+
+$DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" down --remove-orphans >/dev/null 2>&1 || true
 
 bun run typecheck
-bun test
+bun run test
+bun run build
 
 export APP_VERSION="$TAG"
 export GIT_SHA="$TAG"
 $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" up -d --build pocketbrain syncthing
 
-START_TS="$(date +%s)"
-while true; do
-  CONTAINER_ID="$($DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" ps -q pocketbrain 2>/dev/null || true)"
-  STATUS=""
-  if [ -n "$CONTAINER_ID" ]; then
-    STATUS="$($DOCKER_BIN inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID" 2>/dev/null || true)"
+NEW_IMAGE_ID="$($DOCKER_BIN image inspect "${RUNTIME_IMAGE}:latest" --format '{{.Id}}' 2>/dev/null || true)"
+if [ -n "$NEW_IMAGE_ID" ]; then
+  $DOCKER_BIN tag "$NEW_IMAGE_ID" "${RUNTIME_IMAGE}:${TAG}"
+fi
+
+if wait_for_health "pocketbrain" "$TIMEOUT_SECONDS" && wait_for_health "syncthing" "$TIMEOUT_SECONDS"; then
+  printf 'Release %s deployed and healthy\n' "$TAG"
+  exit 0
+fi
+
+printf 'Release %s failed health check, rolling back\n' "$TAG" >&2
+
+if [ -n "$PREVIOUS_IMAGE_ID" ]; then
+  $DOCKER_BIN tag "$PREVIOUS_IMAGE_ID" "${RUNTIME_IMAGE}:latest"
+  $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" up -d pocketbrain syncthing
+
+  if wait_for_health "pocketbrain" "$ROLLBACK_TIMEOUT_SECONDS" && wait_for_health "syncthing" "$ROLLBACK_TIMEOUT_SECONDS"; then
+    printf 'Rollback applied and healthy\n' >&2
+  else
+    printf 'Rollback applied but services are not healthy\n' >&2
   fi
-  if [ "$STATUS" = "healthy" ]; then
-    printf 'Release %s deployed and healthy\n' "$TAG"
-    exit 0
-  fi
-  NOW_TS="$(date +%s)"
-  if [ $((NOW_TS - START_TS)) -ge "$TIMEOUT_SECONDS" ]; then
-    printf 'Release %s failed health check, rolling back\n' "$TAG" >&2
-    if [ -n "$PREVIOUS_IMAGE_ID" ]; then
-      $DOCKER_BIN tag "$PREVIOUS_IMAGE_ID" "${RUNTIME_IMAGE}:latest"
-      $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" up -d pocketbrain syncthing
-      printf 'Rollback applied\n' >&2
-    else
-      printf 'No previous image available for rollback\n' >&2
-    fi
-    exit 1
-  fi
-  sleep 5
-done
+else
+  printf 'No previous image available for rollback\n' >&2
+fi
+
+printf 'Last 80 logs from pocketbrain:\n' >&2
+$DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" logs --tail=80 pocketbrain >&2 || true
+
+exit 1

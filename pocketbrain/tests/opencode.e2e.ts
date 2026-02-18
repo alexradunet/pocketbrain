@@ -47,6 +47,9 @@ async function getFreePort(): Promise<number> {
   })
   const port = server.port
   server.stop()
+  if (port === undefined) {
+    throw new Error("Failed to allocate an ephemeral test port")
+  }
   return port
 }
 

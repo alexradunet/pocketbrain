@@ -51,7 +51,7 @@ export class CommandHandler {
           "Access restricted.",
           `Your WhatsApp ID: ${jid}`,
           "Send /pair <token> to whitelist yourself.",
-          "If you don't have a token, ask admin to add you to .data/state.db (whitelist table).",
+          "If you don't have a token, ask admin to add you to DATA_DIR/state.db (whitelist table).",
         ].join("\n"),
       }
     }

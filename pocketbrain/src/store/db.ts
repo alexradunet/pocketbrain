@@ -7,9 +7,12 @@
 
 import { Database } from "bun:sqlite"
 import { mkdirSync } from "node:fs"
-import { join } from "node:path"
+import { isAbsolute, join } from "node:path"
 
-const DATA_DIR = join(process.cwd(), ".data")
+const configuredDataDir = Bun.env.DATA_DIR?.trim() || ".data"
+const DATA_DIR = isAbsolute(configuredDataDir)
+  ? configuredDataDir
+  : join(process.cwd(), configuredDataDir)
 mkdirSync(DATA_DIR, { recursive: true })
 
 export const db = new Database(join(DATA_DIR, "state.db"))

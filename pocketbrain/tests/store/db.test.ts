@@ -1,15 +1,8 @@
-import { describe, test, expect, beforeEach } from "bun:test"
+import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import { Database } from "bun:sqlite"
-import { join } from "node:path"
-import { mkdirSync, rmSync } from "node:fs"
-
-const TEST_DIR = join(__dirname, ".test-data")
-const TEST_DB = join(TEST_DIR, "test.db")
 
 function createTestDb(): Database {
-  mkdirSync(TEST_DIR, { recursive: true })
-  rmSync(TEST_DB, { force: true })
-  const db = new Database(TEST_DB)
+  const db = new Database(":memory:")
   db.run("PRAGMA journal_mode = WAL")
   db.run("PRAGMA foreign_keys = ON")
   return db
@@ -20,6 +13,10 @@ describe("Database", () => {
 
   beforeEach(() => {
     db = createTestDb()
+  })
+
+  afterEach(() => {
+    db.close(false)
   })
 
   describe("KV Store", () => {

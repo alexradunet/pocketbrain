@@ -86,6 +86,6 @@ VOLUME ["/data"]
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD pgrep -f "/app/pocketbrain" > /dev/null && \
-        (tailscale status 2>/dev/null | grep -q "Connected" || true) || exit 1
+        tailscale status > /dev/null 2>&1 || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
