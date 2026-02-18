@@ -19,6 +19,8 @@ import type { OutboxRepository } from "../../../core/ports/outbox-repository"
 import type { MessageSender } from "../../../core/services/message-sender"
 import { ConnectionManager } from "./connection-manager"
 import { CommandHandler, type CommandResult } from "./command-handler"
+import { createTaskQueue } from "../../../lib/task-queue"
+import { retryWithBackoff } from "../../../lib/retry"
 
 export interface WhatsAppAdapterOptions {
   authDir: string
@@ -98,7 +100,8 @@ export class WhatsAppAdapter implements ChannelAdapter {
   private commandHandler: CommandHandler
   private messageHandler?: MessageHandler
   private outboxInterval: ReturnType<typeof setInterval> | undefined
-  private flushingOutbox = false
+  private readonly outboxQueue = createTaskQueue({ concurrency: 1 })
+  private readonly queuedOutboxIDs = new Set<number>()
   private stopping = false
 
   constructor(options: WhatsAppAdapterOptions) {
@@ -125,6 +128,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
   async start(handler: MessageHandler): Promise<void> {
     this.messageHandler = handler
     this.stopping = false
+    this.outboxQueue.start()
 
     const socket = await this.connectionManager.connect()
     this.setupMessageHandler(socket)
@@ -134,6 +138,9 @@ export class WhatsAppAdapter implements ChannelAdapter {
   async stop(): Promise<void> {
     this.stopping = true
     this.stopOutboxFlush()
+    this.outboxQueue.pause()
+    this.outboxQueue.clear()
+    this.queuedOutboxIDs.clear()
     this.connectionManager.stop()
   }
 
@@ -289,29 +296,36 @@ export class WhatsAppAdapter implements ChannelAdapter {
   }
 
   private async flushOutbox(): Promise<void> {
-    if (this.flushingOutbox || !this.connectionManager.isConnected()) return
-    
-    this.flushingOutbox = true
-    
+    if (!this.connectionManager.isConnected()) return
+
     try {
       const pending = this.options.outboxRepository.listPending("whatsapp")
       if (pending.length === 0) return
 
-      const socket = this.connectionManager.getSocket()
-      if (!socket) return
-
       for (const item of pending) {
-        await this.processOutboxItem(socket, item)
+        this.enqueueOutboxItem(item)
       }
     } catch (error) {
       this.options.logger.warn({ error }, "whatsapp outbox flush failed")
-    } finally {
-      this.flushingOutbox = false
     }
   }
 
+  private enqueueOutboxItem(item: { id: number; userID: string; text: string; retryCount: number; maxRetries: number }): void {
+    if (this.queuedOutboxIDs.has(item.id)) {
+      return
+    }
+    this.queuedOutboxIDs.add(item.id)
+
+    void this.outboxQueue.add(async () => {
+      try {
+        await this.processOutboxItem(item)
+      } finally {
+        this.queuedOutboxIDs.delete(item.id)
+      }
+    })
+  }
+
   private async processOutboxItem(
-    socket: WASocket, 
     item: { id: number; userID: string; text: string; retryCount: number; maxRetries: number }
   ): Promise<void> {
     const target = normalizeJid(item.userID)
@@ -329,9 +343,24 @@ export class WhatsAppAdapter implements ChannelAdapter {
     }
 
     try {
-      await this.options.messageSender.send(target, item.text, async (chunk) => {
-        await socket.sendMessage(target, { text: chunk })
-      })
+      await retryWithBackoff(
+        async () => {
+          const socket = this.connectionManager.getSocket()
+          if (!socket || !this.connectionManager.isConnected()) {
+            throw new Error("whatsapp socket unavailable")
+          }
+
+          await this.options.messageSender.send(target, item.text, async (chunk) => {
+            await socket.sendMessage(target, { text: chunk })
+          })
+        },
+        {
+          retries: 2,
+          minTimeoutMs: this.options.outboxRetryBaseDelayMs ?? 60_000,
+          maxTimeoutMs: 10 * 60_000,
+          factor: 2,
+        },
+      )
       
       this.options.outboxRepository.acknowledge(item.id)
       this.options.logger.info({ jid: target }, "whatsapp proactive message sent")

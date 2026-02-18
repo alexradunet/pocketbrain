@@ -25,10 +25,21 @@ if ! docker info >/dev/null 2>&1; then
   DOCKER_BIN="sudo -E docker"
 fi
 
-$DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" stop pocketbrain syncthing >/dev/null 2>&1 || true
+SERVICES_STOPPED=0
+restore_services() {
+  if [ "$SERVICES_STOPPED" -eq 1 ]; then
+    $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" start tailscale pocketbrain syncthing >/dev/null 2>&1 || true
+  fi
+}
+trap restore_services EXIT
+
+$DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" stop tailscale pocketbrain syncthing >/dev/null 2>&1 || true
+SERVICES_STOPPED=1
 
 tar -czf "$OUTPUT_FILE" -C "$APP_DIR" "${DATA_PATH#${APP_DIR}/}"
 
-$DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" start pocketbrain syncthing >/dev/null 2>&1 || true
+$DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" start tailscale pocketbrain syncthing >/dev/null 2>&1 || true
+SERVICES_STOPPED=0
+trap - EXIT
 
 printf 'Backup created: %s\n' "$OUTPUT_FILE"

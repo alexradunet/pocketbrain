@@ -12,8 +12,12 @@ make ps
 ```
 
 Services:
+- `tailscale` (network sidecar for tailnet connectivity)
 - `pocketbrain` (assistant runtime)
 - `syncthing` (vault synchronization)
+
+Required runtime secret:
+- `TS_AUTHKEY` in `.env` for the `tailscale` service.
 
 ## Dev-control stack (optional)
 

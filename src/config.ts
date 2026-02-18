@@ -1,55 +1,40 @@
 /**
  * Application Configuration
- * Centralized configuration with validation and defaults.
+ * Centralized configuration with schema validation.
  */
 
 import { isAbsolute, join } from "node:path"
+import { z } from "zod"
 
-// Configuration types
+const LOG_LEVEL_VALUES = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const
+
 export interface AppConfig {
   appName: string
   logLevel: string
   dataDir: string
-  
-  // Server settings
   opencodeModel: string | undefined
   opencodeServerUrl: string | undefined
   opencodeHostname: string
   opencodePort: number
-  
-  // Heartbeat settings
   heartbeatIntervalMinutes: number
   heartbeatBaseDelayMs: number
   heartbeatMaxDelayMs: number
   heartbeatNotifyAfterFailures: number
-  
-  // WhatsApp settings
   enableWhatsApp: boolean
   whatsAppAuthDir: string
-  
-  // Message settings
   messageMaxLength: number
   messageChunkDelayMs: number
   messageRateLimitMs: number
-  
-  // Outbox settings
   outboxIntervalMs: number
   outboxMaxRetries: number
   outboxRetryBaseDelayMs: number
-  
-  // Connection settings
   connectionTimeoutMs: number
   connectionReconnectDelayMs: number
-  
-  // Security settings
   whitelistPairToken: string | undefined
-  
-  // Vault settings
   vaultPath: string
   vaultEnabled: boolean
 }
 
-// Default configuration values
 const DEFAULTS = {
   appName: "pocketbrain",
   logLevel: "info",
@@ -69,9 +54,59 @@ const DEFAULTS = {
   connectionReconnectDelayMs: 3000,
 } as const
 
-const LOG_LEVELS = new Set(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+const modelRefPattern = /^[^/]+\/.+$/
 
-// Environment variable parsers
+const AppConfigSchema = z
+  .object({
+    appName: z.string().min(1),
+    logLevel: z.enum(LOG_LEVEL_VALUES),
+    dataDir: z.string().min(1),
+    opencodeModel: z.string().regex(modelRefPattern, "OPENCODE_MODEL must use provider/model format").optional(),
+    opencodeServerUrl: z
+      .string()
+      .url("OPENCODE_SERVER_URL must be a valid URL")
+      .refine((v) => v.startsWith("http://") || v.startsWith("https://"), {
+        message: "OPENCODE_SERVER_URL must use http or https",
+      })
+      .optional(),
+    opencodeHostname: z.string().min(1),
+    opencodePort: z.number().int().min(1).max(65_535),
+    heartbeatIntervalMinutes: z.number().int().min(1),
+    heartbeatBaseDelayMs: z.number().positive(),
+    heartbeatMaxDelayMs: z.number().positive(),
+    heartbeatNotifyAfterFailures: z.number().int().positive(),
+    enableWhatsApp: z.boolean(),
+    whatsAppAuthDir: z.string().min(1),
+    messageMaxLength: z.number().int().positive(),
+    messageChunkDelayMs: z.number().int().nonnegative(),
+    messageRateLimitMs: z.number().int().nonnegative(),
+    outboxIntervalMs: z.number().int().positive(),
+    outboxMaxRetries: z.number().int().positive(),
+    outboxRetryBaseDelayMs: z.number().int().positive(),
+    connectionTimeoutMs: z.number().positive(),
+    connectionReconnectDelayMs: z.number().nonnegative(),
+    whitelistPairToken: z.string().optional(),
+    vaultPath: z.string().min(1),
+    vaultEnabled: z.boolean(),
+  })
+  .superRefine((cfg, ctx) => {
+    if (cfg.enableWhatsApp && !cfg.whatsAppAuthDir.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["whatsAppAuthDir"],
+        message: "WHATSAPP_AUTH_DIR cannot be empty when ENABLE_WHATSAPP=true",
+      })
+    }
+
+    if (cfg.vaultEnabled && !cfg.vaultPath.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["vaultPath"],
+        message: "VAULT_PATH cannot be empty when VAULT_ENABLED=true",
+      })
+    }
+  })
+
 function envBool(value: string | undefined, fallback = false): boolean {
   if (!value) return fallback
   const v = value.trim().toLowerCase()
@@ -79,7 +114,7 @@ function envBool(value: string | undefined, fallback = false): boolean {
 }
 
 function envInt(value: string | undefined, fallback: number): number {
-  if (!value) return fallback
+  if (!value || value.trim().length === 0) return fallback
   const n = Number.parseInt(value, 10)
   return Number.isFinite(n) ? n : fallback
 }
@@ -88,132 +123,62 @@ function envString(value: string | undefined, fallback: string): string {
   return value?.trim() || fallback
 }
 
+function optionalTrimmed(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : undefined
+}
+
 function resolvePath(cwd: string, value: string): string {
   return isAbsolute(value) ? value : join(cwd, value)
 }
 
-function isValidModelReference(value: string): boolean {
-  const [providerID, ...rest] = value.split("/")
-  return Boolean(providerID && rest.length > 0 && rest.join("/"))
-}
-
-function validateConfig(config: AppConfig): void {
-  const errors: string[] = []
-
-  if (!LOG_LEVELS.has(config.logLevel)) {
-    errors.push(`LOG_LEVEL must be one of: ${Array.from(LOG_LEVELS).join(", ")}`)
-  }
-
-  if (!Number.isInteger(config.opencodePort) || config.opencodePort < 1 || config.opencodePort > 65_535) {
-    errors.push("OPENCODE_PORT must be an integer between 1 and 65535")
-  }
-
-  if (!Number.isInteger(config.heartbeatIntervalMinutes) || config.heartbeatIntervalMinutes < 1) {
-    errors.push("HEARTBEAT_INTERVAL_MINUTES must be an integer greater than or equal to 1")
-  }
-
-  if (!Number.isFinite(config.connectionTimeoutMs) || config.connectionTimeoutMs < 1) {
-    errors.push("connection timeout must be a positive number")
-  }
-
-  if (!Number.isFinite(config.connectionReconnectDelayMs) || config.connectionReconnectDelayMs < 0) {
-    errors.push("reconnect delay must be zero or a positive number")
-  }
-
-  if (config.opencodeServerUrl) {
-    try {
-      const parsed = new URL(config.opencodeServerUrl)
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        errors.push("OPENCODE_SERVER_URL must use http or https")
-      }
-    } catch {
-      errors.push("OPENCODE_SERVER_URL must be a valid URL")
-    }
-  }
-
-  if (config.opencodeModel && !isValidModelReference(config.opencodeModel)) {
-    errors.push("OPENCODE_MODEL must use provider/model format")
-  }
-
-  if (!config.dataDir.trim()) {
-    errors.push("DATA_DIR cannot be empty")
-  }
-
-  if (config.enableWhatsApp && !config.whatsAppAuthDir.trim()) {
-    errors.push("WHATSAPP_AUTH_DIR cannot be empty when ENABLE_WHATSAPP=true")
-  }
-
-  if (config.vaultEnabled && !config.vaultPath.trim()) {
-    errors.push("VAULT_PATH cannot be empty when VAULT_ENABLED=true")
-  }
-
-  if (errors.length > 0) {
-    throw new Error(`[config] Invalid configuration:\n- ${errors.join("\n- ")}`)
-  }
-}
-
-/**
- * Load configuration from environment variables
- */
 export function loadConfig(): AppConfig {
   const cwd = process.cwd()
   const dataDir = resolvePath(cwd, envString(Bun.env.DATA_DIR, ".data"))
-  const whatsAppAuthDir = Bun.env.WHATSAPP_AUTH_DIR?.trim()
-  const vaultPath = Bun.env.VAULT_PATH?.trim()
-  
-  const config: AppConfig = {
+  const whatsAppAuthDir = optionalTrimmed(Bun.env.WHATSAPP_AUTH_DIR)
+  const vaultPath = optionalTrimmed(Bun.env.VAULT_PATH)
+
+  const candidate: AppConfig = {
     appName: envString(Bun.env.APP_NAME, DEFAULTS.appName),
     logLevel: envString(Bun.env.LOG_LEVEL, DEFAULTS.logLevel),
     dataDir,
-    
-    opencodeModel: Bun.env.OPENCODE_MODEL?.trim() || undefined,
-    opencodeServerUrl: Bun.env.OPENCODE_SERVER_URL?.trim() || undefined,
+    opencodeModel: optionalTrimmed(Bun.env.OPENCODE_MODEL),
+    opencodeServerUrl: optionalTrimmed(Bun.env.OPENCODE_SERVER_URL),
     opencodeHostname: envString(Bun.env.OPENCODE_HOSTNAME, DEFAULTS.opencodeHostname),
     opencodePort: envInt(Bun.env.OPENCODE_PORT, DEFAULTS.opencodePort),
-    
-    heartbeatIntervalMinutes: envInt(
-      Bun.env.HEARTBEAT_INTERVAL_MINUTES, 
-      DEFAULTS.heartbeatIntervalMinutes
-    ),
+    heartbeatIntervalMinutes: envInt(Bun.env.HEARTBEAT_INTERVAL_MINUTES, DEFAULTS.heartbeatIntervalMinutes),
     heartbeatBaseDelayMs: DEFAULTS.heartbeatBaseDelayMs,
     heartbeatMaxDelayMs: DEFAULTS.heartbeatMaxDelayMs,
     heartbeatNotifyAfterFailures: DEFAULTS.heartbeatNotifyAfterFailures,
-    
     enableWhatsApp: envBool(Bun.env.ENABLE_WHATSAPP, false),
-    whatsAppAuthDir: whatsAppAuthDir
-      ? resolvePath(cwd, whatsAppAuthDir)
-      : join(dataDir, "whatsapp-auth"),
-    
+    whatsAppAuthDir: whatsAppAuthDir ? resolvePath(cwd, whatsAppAuthDir) : join(dataDir, "whatsapp-auth"),
     messageMaxLength: DEFAULTS.messageMaxLength,
     messageChunkDelayMs: DEFAULTS.messageChunkDelayMs,
     messageRateLimitMs: DEFAULTS.messageRateLimitMs,
-    
     outboxIntervalMs: DEFAULTS.outboxIntervalMs,
     outboxMaxRetries: DEFAULTS.outboxMaxRetries,
     outboxRetryBaseDelayMs: DEFAULTS.outboxRetryBaseDelayMs,
-    
     connectionTimeoutMs: DEFAULTS.connectionTimeoutMs,
     connectionReconnectDelayMs: DEFAULTS.connectionReconnectDelayMs,
-    
-    whitelistPairToken: Bun.env.WHITELIST_PAIR_TOKEN?.trim() || undefined,
-    
-    // Vault configuration
+    whitelistPairToken: optionalTrimmed(Bun.env.WHITELIST_PAIR_TOKEN),
     vaultPath: vaultPath ? resolvePath(cwd, vaultPath) : join(dataDir, "vault"),
     vaultEnabled: envBool(Bun.env.VAULT_ENABLED, true),
   }
 
-  validateConfig(config)
-  return config
+  const parsed = AppConfigSchema.parse(candidate)
+  return {
+    ...parsed,
+    opencodeModel: parsed.opencodeModel,
+    opencodeServerUrl: parsed.opencodeServerUrl,
+    whitelistPairToken: parsed.whitelistPairToken,
+  }
 }
 
-/**
- * Find recent model from OpenCode state
- */
 export async function findRecentModel(): Promise<string | null> {
   const home = Bun.env.HOME ?? ""
   const stateHome = Bun.env.XDG_STATE_HOME ?? join(home, ".local", "state")
   const modelFile = join(stateHome, "opencode", "model.json")
-  
+
   try {
     const parsed = (await Bun.file(modelFile).json()) as {
       recent?: Array<{ providerID?: string; modelID?: string }>
@@ -223,7 +188,6 @@ export async function findRecentModel(): Promise<string | null> {
       return `${first.providerID}/${first.modelID}`
     }
   } catch (error) {
-    // File missing or malformed – fall through
     if (Bun.env.DEBUG) {
       console.debug("[config] Could not load recent model:", error)
     }
@@ -231,11 +195,8 @@ export async function findRecentModel(): Promise<string | null> {
   return null
 }
 
-/**
- * Resolve model from environment or state
- */
 export async function resolveModel(): Promise<string | null> {
-  const modelFromEnv = Bun.env.OPENCODE_MODEL?.trim()
+  const modelFromEnv = optionalTrimmed(Bun.env.OPENCODE_MODEL)
   if (modelFromEnv) return modelFromEnv
   return findRecentModel()
 }

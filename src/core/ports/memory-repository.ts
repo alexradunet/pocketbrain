@@ -18,11 +18,6 @@ export interface MemoryRepository {
   append(fact: string, source?: string): boolean
 
   /**
-   * Read all memory entries as formatted text
-   */
-  readAll(): string
-
-  /**
    * Delete a memory entry by ID
    */
   delete(id: number): boolean

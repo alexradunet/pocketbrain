@@ -217,7 +217,6 @@ async function main(): Promise<void> {
         return "Started a new conversation session."
       }
 
-      channelRepository.saveLastChannel("whatsapp", userID)
       return assistant.ask({ channel: "whatsapp", userID, text })
     })
 

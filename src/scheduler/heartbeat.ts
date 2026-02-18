@@ -1,7 +1,7 @@
 /**
  * Heartbeat Scheduler
  * 
- * Manages periodic task execution with exponential backoff.
+ * Manages periodic task execution with per-run retry backoff.
  */
 
 import type { Logger } from "pino"
@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto"
 import type { AssistantCore } from "../core/assistant"
 import type { OutboxRepository } from "../core/ports/outbox-repository"
 import type { ChannelRepository } from "../core/ports/channel-repository"
+import { retryWithBackoff } from "../lib/retry"
 
 export interface HeartbeatOptions {
   intervalMinutes: number
@@ -30,12 +31,10 @@ export class HeartbeatScheduler {
   private nextRunTimeout: ReturnType<typeof setTimeout> | undefined
   private running = false
   private consecutiveFailures = 0
-  private currentBackoffMs: number
 
   constructor(options: HeartbeatOptions, deps: HeartbeatDependencies) {
     this.options = options
     this.deps = deps
-    this.currentBackoffMs = options.intervalMinutes * 60_000
   }
 
   /**
@@ -74,17 +73,36 @@ export class HeartbeatScheduler {
 
     try {
       this.deps.logger.debug({ runID }, "heartbeat run started")
-      const result = await this.deps.assistant.runHeartbeatTasks()
+      const result = await retryWithBackoff(
+        async () => this.deps.assistant.runHeartbeatTasks(),
+        {
+          retries: 2,
+          minTimeoutMs: this.options.baseDelayMs,
+          maxTimeoutMs: this.options.maxDelayMs,
+          factor: 2,
+        },
+        {
+          onFailedAttempt: (error) => {
+            this.deps.logger.warn(
+              {
+                runID,
+                attemptNumber: error.attemptNumber,
+                retriesLeft: error.retriesLeft,
+                message: error.message,
+              },
+              "heartbeat attempt failed, retrying",
+            )
+          },
+        },
+      )
       
-      // Reset on success
       this.consecutiveFailures = 0
-      this.currentBackoffMs = this.options.intervalMinutes * 60_000
-      this.scheduleNextRun(this.currentBackoffMs)
+      this.scheduleNextRun(Math.max(1, this.options.intervalMinutes) * 60_000)
       
       this.deps.logger.info({ runID, result, durationMs: Date.now() - startedAt }, "heartbeat run completed")
     } catch (error) {
       await this.handleFailure(error, startedAt, runID)
-      this.scheduleNextRun(this.currentBackoffMs)
+      this.scheduleNextRun(Math.max(1, this.options.intervalMinutes) * 60_000)
     } finally {
       this.running = false
     }
@@ -92,19 +110,12 @@ export class HeartbeatScheduler {
 
   private async handleFailure(error: unknown, startedAt: number, runID: string): Promise<void> {
     this.consecutiveFailures += 1
-    
-    const delay = Math.min(
-      this.options.baseDelayMs * Math.pow(2, this.consecutiveFailures),
-      this.options.maxDelayMs
-    )
-    this.currentBackoffMs = Math.max(this.options.intervalMinutes * 60_000, delay)
 
     this.deps.logger.error({
       runID,
       error,
       durationMs: Date.now() - startedAt,
       consecutiveFailures: this.consecutiveFailures,
-      nextBackoffMs: this.currentBackoffMs,
     }, "heartbeat run failed")
 
     if (this.consecutiveFailures >= this.options.notifyAfterFailures) {

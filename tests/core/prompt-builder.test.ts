@@ -9,7 +9,7 @@ describe("PromptBuilder", () => {
       vaultPath: "/data/vault",
     })
 
-    const prompt = builder.buildAgentSystemPrompt("# Memory")
+    const prompt = builder.buildAgentSystemPrompt([{ id: 1, fact: "test fact", source: "test" }])
     expect(prompt).toContain("VAULT ACCESS")
     expect(prompt).toContain("vault_read")
   })
@@ -20,7 +20,7 @@ describe("PromptBuilder", () => {
       vaultEnabled: false,
     })
 
-    const prompt = builder.buildAgentSystemPrompt("# Memory")
+    const prompt = builder.buildAgentSystemPrompt([{ id: 1, fact: "test fact" }])
     expect(prompt).not.toContain("VAULT ACCESS")
   })
 

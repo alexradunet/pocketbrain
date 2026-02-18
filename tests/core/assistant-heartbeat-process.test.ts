@@ -62,10 +62,9 @@ describe("AssistantCore heartbeat process", () => {
 
     const memoryRepository: MemoryRepository = {
       append: () => true,
-      readAll: () => "# Memory\n- likes concise updates\n",
       delete: () => true,
       update: () => true,
-      getAll: () => [],
+      getAll: () => [{ id: 1, fact: "likes concise updates", source: "test" }],
     }
 
     const channelRepository: ChannelRepository = {

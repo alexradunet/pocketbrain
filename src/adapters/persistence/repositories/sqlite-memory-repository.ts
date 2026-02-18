@@ -44,13 +44,6 @@ export class SQLiteMemoryRepository implements MemoryRepository {
     return true
   }
 
-  readAll(): string {
-    const rows = this.stmtSelectAll.all() as MemoryRow[]
-    if (rows.length === 0) return "# Memory\n"
-    const lines = rows.map((r) => (r.source ? `- (${r.source}) ${r.fact}` : `- ${r.fact}`))
-    return "# Memory\n" + lines.join("\n") + "\n"
-  }
-
   delete(id: number): boolean {
     const result = this.stmtDelete.run(id)
     return result.changes > 0

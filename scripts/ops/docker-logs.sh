@@ -21,7 +21,7 @@ if [ "${1:-}" = "--dev" ]; then
 fi
 
 if [ "${1:-}" = "--tailscale" ]; then
-  $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f docker-compose.yml logs -f pocketbrain | grep -i tailscale
+  $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f docker-compose.yml logs -f tailscale
 elif [ "${1:-}" = "--error" ]; then
   $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f docker-compose.yml logs -f pocketbrain | grep -i error
 else

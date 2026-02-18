@@ -36,6 +36,7 @@ PocketBrain includes:
 - Operational scripts for deploy, release, backup, and restore
 
 Core runtime services:
+- `tailscale`: networking sidecar for tailnet connectivity
 - `pocketbrain`: assistant process
 - `syncthing`: file sync service for `data/vault`
 

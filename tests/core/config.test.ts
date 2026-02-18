@@ -49,22 +49,22 @@ describe("loadConfig", () => {
 
   test("throws on invalid log level", () => {
     Bun.env.LOG_LEVEL = "verbose"
-    expect(() => loadConfig()).toThrow("LOG_LEVEL")
+    expect(() => loadConfig()).toThrow()
   })
 
   test("throws on invalid OPENCODE_PORT", () => {
     Bun.env.OPENCODE_PORT = "70000"
-    expect(() => loadConfig()).toThrow("OPENCODE_PORT")
+    expect(() => loadConfig()).toThrow()
   })
 
   test("throws on invalid OPENCODE_SERVER_URL", () => {
     Bun.env.OPENCODE_SERVER_URL = "not-a-url"
-    expect(() => loadConfig()).toThrow("OPENCODE_SERVER_URL")
+    expect(() => loadConfig()).toThrow()
   })
 
   test("throws on invalid OPENCODE_MODEL format", () => {
     Bun.env.OPENCODE_MODEL = "invalid-model"
-    expect(() => loadConfig()).toThrow("OPENCODE_MODEL")
+    expect(() => loadConfig()).toThrow()
   })
 
   test("accepts valid explicit configuration", () => {

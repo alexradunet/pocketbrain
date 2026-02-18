@@ -74,10 +74,6 @@ Dockerfile
 docker-compose*.yml
 .docker/
 
-# Scripts (only keep runtime entrypoint)
-scripts/*.sh
-!scripts/runtime/docker-entrypoint.sh
-
 # Misc
 .editorconfig
 .eslintrc

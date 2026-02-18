@@ -20,7 +20,7 @@ export class PromptBuilder {
   /**
    * Build the main agent system prompt
    */
-  buildAgentSystemPrompt(memory: string): string {
+  buildAgentSystemPrompt(memoryEntries: MemoryEntry[]): string {
     return [
       "You are PocketBrain, an autonomous assistant agent running on top of OpenCode.",
       "You help with coding and non-coding work: planning, research, writing, operations, and execution tasks.",
@@ -53,7 +53,7 @@ export class PromptBuilder {
       "- Also suggest skill-creator when the user asks for something new that seems like a reusable capability.",
       "",
       "Current memory:",
-      memory,
+      this.buildMemoryContext(memoryEntries),
     ].join("\n")
   }
 
@@ -124,4 +124,14 @@ export class PromptBuilder {
       "- Archive completed projects instead of deleting",
     ].join("\n")
   }
+
+  private buildMemoryContext(entries: MemoryEntry[]): string {
+    if (entries.length === 0) {
+      return "No saved durable facts."
+    }
+    return entries
+      .map((entry) => (entry.source ? `- (${entry.source}) ${entry.fact}` : `- ${entry.fact}`))
+      .join("\n")
+  }
 }
+import type { MemoryEntry } from "./ports/memory-repository"

@@ -7,8 +7,6 @@ Operational and setup scripts for PocketBrain.
 - `setup/` machine/bootstrap scripts
   - `install-debian-dev.sh` developer machine setup
   - `install-debian-runtime.sh` runtime host prerequisites (Docker + Compose)
-- `runtime/` runtime/container boot scripts
-  - `docker-entrypoint.sh` container entrypoint
 - `ops/` operator scripts
   - `docker-build.sh`
   - `docker-logs.sh`

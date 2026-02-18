@@ -35,6 +35,8 @@ describe("SQLite repositories", () => {
     const repo = new SQLiteChannelRepository()
     repo.saveLastChannel("whatsapp", "123@s.whatsapp.net")
     expect(repo.getLastChannel()).toEqual({ channel: "whatsapp", userID: "123@s.whatsapp.net" })
+    repo.saveLastChannel("telegram", "999")
+    expect(repo.getLastChannel()).toEqual({ channel: "telegram", userID: "999" })
     repo.close()
   })
 

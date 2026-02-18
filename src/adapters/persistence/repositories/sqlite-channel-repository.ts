@@ -36,7 +36,7 @@ export class SQLiteChannelRepository implements ChannelRepository {
     
     try {
       const parsed = JSON.parse(value) as Partial<LastChannel>
-      if (parsed.channel === "whatsapp" && typeof parsed.userID === "string") {
+      if (typeof parsed.channel === "string" && typeof parsed.userID === "string") {
         return { channel: parsed.channel, userID: parsed.userID }
       }
     } catch (error) {

@@ -63,14 +63,16 @@ bun run build
 
 export APP_VERSION="$TAG"
 export GIT_SHA="$TAG"
-$DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" up -d --build pocketbrain syncthing
+$DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" up -d --build tailscale pocketbrain syncthing
 
 NEW_IMAGE_ID="$($DOCKER_BIN image inspect "${RUNTIME_IMAGE}:latest" --format '{{.Id}}' 2>/dev/null || true)"
 if [ -n "$NEW_IMAGE_ID" ]; then
   $DOCKER_BIN tag "$NEW_IMAGE_ID" "${RUNTIME_IMAGE}:${TAG}"
 fi
 
-if wait_for_health "pocketbrain" "$TIMEOUT_SECONDS" && wait_for_health "syncthing" "$TIMEOUT_SECONDS"; then
+if wait_for_health "tailscale" "$TIMEOUT_SECONDS" && \
+   wait_for_health "pocketbrain" "$TIMEOUT_SECONDS" && \
+   wait_for_health "syncthing" "$TIMEOUT_SECONDS"; then
   printf 'Release %s deployed and healthy\n' "$TAG"
   exit 0
 fi
@@ -79,9 +81,11 @@ printf 'Release %s failed health check, rolling back\n' "$TAG" >&2
 
 if [ -n "$PREVIOUS_IMAGE_ID" ]; then
   $DOCKER_BIN tag "$PREVIOUS_IMAGE_ID" "${RUNTIME_IMAGE}:latest"
-  $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" up -d pocketbrain syncthing
+  $DOCKER_BIN compose -p "$RUNTIME_PROJECT" -f "$RUNTIME_COMPOSE_FILE" up -d tailscale pocketbrain syncthing
 
-  if wait_for_health "pocketbrain" "$ROLLBACK_TIMEOUT_SECONDS" && wait_for_health "syncthing" "$ROLLBACK_TIMEOUT_SECONDS"; then
+  if wait_for_health "tailscale" "$ROLLBACK_TIMEOUT_SECONDS" && \
+     wait_for_health "pocketbrain" "$ROLLBACK_TIMEOUT_SECONDS" && \
+     wait_for_health "syncthing" "$ROLLBACK_TIMEOUT_SECONDS"; then
     printf 'Rollback applied and healthy\n' >&2
   else
     printf 'Rollback applied but services are not healthy\n' >&2

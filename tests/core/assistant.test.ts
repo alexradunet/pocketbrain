@@ -46,10 +46,9 @@ describe("AssistantCore", () => {
 
     const memoryRepository: MemoryRepository = {
       append: () => true,
-      readAll: () => "# Memory\n- prefers concise replies\n",
       delete: () => true,
       update: () => true,
-      getAll: () => [],
+      getAll: () => [{ id: 1, fact: "prefers concise replies", source: "test" }],
     }
 
     const channelRepository: ChannelRepository = {
@@ -119,7 +118,6 @@ describe("AssistantCore", () => {
       promptBuilder: new PromptBuilder({ heartbeatIntervalMinutes: 30 }),
       memoryRepository: {
         append: () => true,
-        readAll: () => "",
         delete: () => true,
         update: () => true,
         getAll: () => [],

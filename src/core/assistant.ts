@@ -85,8 +85,8 @@ export class AssistantCore {
       this.deps.channelRepository.saveLastChannel(input.channel, input.userID)
     }
 
-    const memoryContext = this.deps.memoryRepository.readAll()
-    const systemPrompt = this.deps.promptBuilder.buildAgentSystemPrompt(memoryContext)
+    const memoryEntries = this.deps.memoryRepository.getAll()
+    const systemPrompt = this.deps.promptBuilder.buildAgentSystemPrompt(memoryEntries)
 
     this.deps.logger.info(
       { 
@@ -95,7 +95,7 @@ export class AssistantCore {
         userID: input.userID, 
         sessionID, 
         textLength: input.text.length, 
-        memoryContextLength: memoryContext.length 
+        memoryContextLength: memoryEntries.length
       },
       "assistant request started"
     )
@@ -194,8 +194,8 @@ export class AssistantCore {
       "heartbeat sessions ready"
     )
 
-    const memoryContext = this.deps.memoryRepository.readAll()
-    const systemPrompt = this.deps.promptBuilder.buildAgentSystemPrompt(memoryContext)
+    const memoryEntries = this.deps.memoryRepository.getAll()
+    const systemPrompt = this.deps.promptBuilder.buildAgentSystemPrompt(memoryEntries)
     const recentContext = await this.loadRecentContext(client, mainSessionID)
     const prompt = this.deps.promptBuilder.buildHeartbeatPrompt(tasks, recentContext)
 

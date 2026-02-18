@@ -110,14 +110,15 @@ Table: `heartbeat_tasks` in `.data/state.db`
 
 Features:
 - Runs in its own session
-- **Exponential backoff** on failures
+- **Per-run retries with exponential backoff**
+- Scheduler cadence remains fixed by `HEARTBEAT_INTERVAL_MINUTES`
 - **User notification** after 3 consecutive failures
 - Uses the same system prompt + memory
 
-Backoff calculation:
+Retry backoff calculation:
 - Base: 60 seconds
 - Max: 30 minutes
-- Formula: `min(base * 2^failures, max)`
+- Formula: `min(base * 2^attempt, max)`
 
 To add or remove tasks:
 ```sql
