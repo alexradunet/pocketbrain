@@ -1,0 +1,21 @@
+node_modules
+.env
+.env.*
+!.env.example
+.data
+.tmp
+*.db
+*.db-wal
+*.db-shm
+
+# Runtime-generated secrets/state
+data/tailscale/
+data/syncthing-config/config/
+
+# Common secret material
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer

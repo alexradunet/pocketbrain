@@ -1,0 +1,217 @@
+# =============================================================================
+# PocketBrain + Syncthing Stack
+# =============================================================================
+# 
+# This stack runs:
+# - PocketBrain: AI assistant with WhatsApp, memory, heartbeat
+# - Syncthing: File synchronization for the vault
+#
+# Quick Start:
+#   1. Copy .env.example to .env and fill in TS_AUTHKEY
+#   2. Run: docker compose up -d
+#   3. Access Syncthing at: http://localhost:8384 (or via Tailscale)
+#   4. Configure Syncthing to sync your vault folder
+#
+# Security:
+#   - Read-only root filesystem
+#   - No new privileges
+#   - Resource limits
+#   - Network isolation
+# =============================================================================
+
+services:
+  # ==========================================================================
+  # PocketBrain - AI Assistant
+  # ==========================================================================
+  pocketbrain:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+        GIT_SHA: ${GIT_SHA:-unknown}
+    
+    hostname: pocketbrain
+    restart: unless-stopped
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    read_only: true
+    user: "1000:1000"
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Environment variables
+    environment:
+      # Required: Tailscale authentication
+      - TS_AUTHKEY=${TS_AUTHKEY:?TS_AUTHKEY is required. Get one at https://login.tailscale.com/admin/settings/keys}
+      
+      # Tailscale settings
+      - TS_HOSTNAME=${TS_HOSTNAME:-pocketbrain}
+      - TS_USERSPACE=true
+      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:-}
+      
+      # OpenCode / AI settings
+      - OPENCODE_MODEL=${OPENCODE_MODEL:-}
+      - OPENCODE_SERVER_URL=${OPENCODE_SERVER_URL:-}
+      - OPENCODE_HOSTNAME=${OPENCODE_HOSTNAME:-127.0.0.1}
+      - OPENCODE_PORT=${OPENCODE_PORT:-4096}
+      
+      # App settings
+      - APP_NAME=${APP_NAME:-pocketbrain}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      
+      # WhatsApp
+      - ENABLE_WHATSAPP=${ENABLE_WHATSAPP:-false}
+      
+      # Vault - shared with Syncthing
+      - VAULT_ENABLED=true
+      - VAULT_PATH=/data/vault
+      
+      # Security
+      - WHITELIST_PAIR_TOKEN=${WHITELIST_PAIR_TOKEN:-}
+      
+      # Heartbeat
+      - HEARTBEAT_INTERVAL_MINUTES=${HEARTBEAT_INTERVAL_MINUTES:-30}
+    
+    # Volumes
+    volumes:
+      # Main data directory (shared with Syncthing)
+      - pocketbrain-data:/data
+      
+      # Temporary files (required for read-only root)
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 100M
+          mode: 1777
+      - type: tmpfs
+        target: /app/.data
+        tmpfs:
+          size: 128M
+          mode: 755
+      - type: tmpfs
+        target: /var/run/tailscale
+        tmpfs:
+          size: 16M
+          mode: 755
+      - type: tmpfs
+        target: /home/bun/.cache
+        tmpfs:
+          size: 64M
+          mode: 755
+      - type: tmpfs
+        target: /home/bun/.local
+        tmpfs:
+          size: 64M
+          mode: 755
+      - type: tmpfs
+        target: /home/bun/.config
+        tmpfs:
+          size: 64M
+          mode: 755
+    
+    # Network
+    networks:
+      - pocketbrain-net
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '/app/pocketbrain' > /dev/null && (tailscale status 2>/dev/null | grep -q 'Connected' || true)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # Syncthing - File Synchronization
+  # ==========================================================================
+  syncthing:
+    image: syncthing/syncthing:latest
+    hostname: pocketbrain-sync
+    restart: unless-stopped
+    
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    
+    # Run as same UID/GID as pocketbrain for shared volume access
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-UTC}
+    
+    # Volumes
+    volumes:
+      # Syncthing config
+      - syncthing-config:/var/syncthing
+      
+      # Shared vault directory (same as PocketBrain)
+      - pocketbrain-data:/data
+    
+    # Ports
+    # 8384: Web UI (localhost only - access via SSH tunnel or Tailscale)
+    # 22000: TCP file transfers (not exposed - uses Tailscale)
+    # 21027: UDP discovery (not exposed - uses Tailscale)
+    ports:
+      - "127.0.0.1:8384:8384"
+    
+    networks:
+      - pocketbrain-net
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8384"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# =============================================================================
+# Networks
+# =============================================================================
+
+networks:
+  pocketbrain-net:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+
+volumes:
+  pocketbrain-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}
+  
+  syncthing-config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/syncthing-config

@@ -1,0 +1,17 @@
+name: Structure Contract
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  structure-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate repository structure contract
+        run: |
+          chmod +x development/ci/validate-structure.sh
+          development/ci/validate-structure.sh "origin/${{ github.base_ref }}"

@@ -1,0 +1,18 @@
+services:
+  dev-control:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev-control
+    hostname: pocketbrain-dev
+    restart: unless-stopped
+    working_dir: /workspace/pocketbrain
+    volumes:
+      - ../:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dev-bun-cache:/home/bun/.bun/install/cache
+    environment:
+      - TZ=${TZ:-UTC}
+    command: ["sleep", "infinity"]
+
+volumes:
+  dev-bun-cache:
