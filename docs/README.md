@@ -1,17 +1,23 @@
-# Documentation
+# Documentation 📚
 
 Project documentation is organized by intent:
 
-- `architecture/` repository and system design
-- `setup/` developer onboarding and local workflows
-- `deploy/` runtime deployment guides
-- `runbooks/` operational procedures and incident response
+- 🏗️ `architecture/` repository and system design
+- 🛠️ `setup/` developer onboarding and local workflows
+- 🚀 `deploy/` runtime deployment guides
+- 🧯 `runbooks/` operational procedures and incident response
 
 All commands in docs assume execution from repository root.
 
-## Agent Skills
+## Start Here
 
-Operational knowledge is also externalized as OpenCode-compatible skills under:
+- Architecture overview (with diagrams): `docs/architecture/system-overview.md`
+- Repository contract: `docs/architecture/repository-structure.md`
+- Security threat model: `docs/architecture/security-threat-model.md`
+
+## Agent Skills 🤖
+
+Operational knowledge is externalized as OpenCode-compatible skills under:
 
 - `.agents/skills/*/SKILL.md`
 

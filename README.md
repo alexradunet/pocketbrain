@@ -40,6 +40,22 @@ Core runtime services:
 - `pocketbrain`: assistant process
 - `syncthing`: file sync service for `data/vault`
 
+## Architecture at a Glance 🗺️
+
+```mermaid
+flowchart LR
+  User[User 📱] --> WA[WhatsApp Adapter]
+  WA --> Core[AssistantCore]
+  Core --> OpenCode[OpenCode Runtime]
+  Core --> DB[(SQLite state.db)]
+  Core --> Vault[(data/vault Markdown)]
+  Syncthing[Syncthing 🔄] <--> Vault
+```
+
+- Full walkthrough: `docs/architecture/system-overview.md`
+- Repository structure contract: `docs/architecture/repository-structure.md`
+- Security model: `docs/architecture/security-threat-model.md`
+
 ## Project Data
 
 Default runtime data is stored in `data/`:

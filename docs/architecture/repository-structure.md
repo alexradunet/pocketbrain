@@ -1,6 +1,19 @@
-# Repository Structure Contract
+# Repository Structure Contract 🧭
 
 Canonical repository layout for PocketBrain.
+
+## Quick Visual Map
+
+```mermaid
+flowchart TB
+  Root[Repository Root]
+  Root --> Src[src/ app code]
+  Root --> Tests[tests/ automated tests]
+  Root --> Scripts[scripts/ setup + runtime + ops]
+  Root --> Docs[docs/ architecture + guides + runbooks]
+  Root --> Skills[.agents/skills/ reusable workflows]
+  Root --> Dev[development/ CI + contracts]
+```
 
 ## Top-level folders
 
