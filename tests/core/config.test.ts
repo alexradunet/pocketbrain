@@ -12,6 +12,13 @@ const ENV_KEYS = [
   "WHATSAPP_AUTH_DIR",
   "WHATSAPP_WHITELIST_NUMBERS",
   "WHATSAPP_WHITELIST_NUMBER",
+  "SYNCTHING_ENABLED",
+  "SYNCTHING_BASE_URL",
+  "SYNCTHING_API_KEY",
+  "SYNCTHING_TIMEOUT_MS",
+  "SYNCTHING_VAULT_FOLDER_ID",
+  "SYNCTHING_MUTATION_TOOLS_ENABLED",
+  "SYNCTHING_ALLOWED_FOLDER_IDS",
   "VAULT_ENABLED",
   "VAULT_PATH",
 ] as const
@@ -43,6 +50,10 @@ describe("loadConfig", () => {
 
   beforeEach(() => {
     envSnapshot = captureSnapshot()
+    Bun.env.SYNCTHING_ENABLED = "false"
+    delete Bun.env.SYNCTHING_API_KEY
+    delete Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED
+    delete Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS
   })
 
   afterEach(() => {
@@ -80,6 +91,13 @@ describe("loadConfig", () => {
     Bun.env.WHATSAPP_AUTH_DIR = ".data/whatsapp-auth"
     Bun.env.WHATSAPP_WHITELIST_NUMBERS = "15551234567,+44 7700 900123,15551234567"
     Bun.env.WHATSAPP_WHITELIST_NUMBER = "12025550123"
+    Bun.env.SYNCTHING_ENABLED = "true"
+    Bun.env.SYNCTHING_BASE_URL = "http://127.0.0.1:8384"
+    Bun.env.SYNCTHING_API_KEY = "test-api-key"
+    Bun.env.SYNCTHING_TIMEOUT_MS = "7000"
+    Bun.env.SYNCTHING_VAULT_FOLDER_ID = "vault"
+    Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED = "true"
+    Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS = "vault,notes"
     Bun.env.VAULT_ENABLED = "true"
     Bun.env.VAULT_PATH = ".data/vault"
 
@@ -89,5 +107,25 @@ describe("loadConfig", () => {
     expect(config.opencodeServerUrl).toBe("http://127.0.0.1:4096")
     expect(config.opencodeModel).toBe("openai/gpt-5")
     expect(config.whatsAppWhitelistNumbers).toEqual(["15551234567", "447700900123", "12025550123"])
+    expect(config.syncthingEnabled).toBe(true)
+    expect(config.syncthingBaseUrl).toBe("http://127.0.0.1:8384")
+    expect(config.syncthingTimeoutMs).toBe(7000)
+    expect(config.syncthingVaultFolderId).toBe("vault")
+    expect(config.syncthingMutationToolsEnabled).toBe(true)
+    expect(config.syncthingAllowedFolderIds).toEqual(["vault", "notes"])
+  })
+
+  test("throws when Syncthing is enabled without API key", () => {
+    Bun.env.SYNCTHING_ENABLED = "true"
+    Bun.env.SYNCTHING_API_KEY = ""
+    expect(() => loadConfig()).toThrow()
+  })
+
+  test("throws when Syncthing mutation tools enabled without allowlist", () => {
+    Bun.env.SYNCTHING_ENABLED = "true"
+    Bun.env.SYNCTHING_API_KEY = "test-api-key"
+    Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED = "true"
+    Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS = ""
+    expect(() => loadConfig()).toThrow()
   })
 })

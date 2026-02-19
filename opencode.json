@@ -10,6 +10,7 @@
     "./src/adapters/plugins/install-skill.plugin.ts",
     "./src/adapters/plugins/memory.plugin.ts",
     "./src/adapters/plugins/channel-message.plugin.ts",
-    "./src/adapters/plugins/vault.plugin.ts"
+    "./src/adapters/plugins/vault.plugin.ts",
+    "./src/adapters/plugins/syncthing.plugin.ts"
   ]
 }

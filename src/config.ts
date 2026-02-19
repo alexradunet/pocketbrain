@@ -32,6 +32,13 @@ export interface AppConfig {
   connectionReconnectDelayMs: number
   whitelistPairToken: string | undefined
   whatsAppWhitelistNumbers: string[]
+  syncthingEnabled: boolean
+  syncthingBaseUrl: string
+  syncthingApiKey: string | undefined
+  syncthingTimeoutMs: number
+  syncthingVaultFolderId: string | undefined
+  syncthingMutationToolsEnabled: boolean
+  syncthingAllowedFolderIds: string[]
   vaultPath: string
   vaultEnabled: boolean
 }
@@ -53,6 +60,8 @@ const DEFAULTS = {
   outboxRetryBaseDelayMs: 60_000,
   connectionTimeoutMs: 20_000,
   connectionReconnectDelayMs: 3000,
+  syncthingBaseUrl: "http://127.0.0.1:8384",
+  syncthingTimeoutMs: 5000,
 } as const
 
 const modelRefPattern = /^[^/]+\/.+$/
@@ -88,6 +97,13 @@ const AppConfigSchema = z
     connectionReconnectDelayMs: z.number().nonnegative(),
     whitelistPairToken: z.string().optional(),
     whatsAppWhitelistNumbers: z.array(z.string().regex(/^\d+$/)),
+    syncthingEnabled: z.boolean(),
+    syncthingBaseUrl: z.string().url("SYNCTHING_BASE_URL must be a valid URL"),
+    syncthingApiKey: z.string().optional(),
+    syncthingTimeoutMs: z.number().int().positive(),
+    syncthingVaultFolderId: z.string().optional(),
+    syncthingMutationToolsEnabled: z.boolean(),
+    syncthingAllowedFolderIds: z.array(z.string().min(1)),
     vaultPath: z.string().min(1),
     vaultEnabled: z.boolean(),
   })
@@ -106,6 +122,24 @@ const AppConfigSchema = z
         path: ["vaultPath"],
         message: "VAULT_PATH cannot be empty when VAULT_ENABLED=true",
       })
+    }
+
+    if (cfg.syncthingEnabled) {
+      if (!cfg.syncthingApiKey?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["syncthingApiKey"],
+          message: "SYNCTHING_API_KEY is required when SYNCTHING_ENABLED=true",
+        })
+      }
+
+      if (cfg.syncthingMutationToolsEnabled && cfg.syncthingAllowedFolderIds.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["syncthingAllowedFolderIds"],
+          message: "SYNCTHING_ALLOWED_FOLDER_IDS is required when SYNCTHING_MUTATION_TOOLS_ENABLED=true",
+        })
+      }
     }
   })
 
@@ -146,6 +180,16 @@ function parsePhoneWhitelist(values: Array<string | undefined>): string[] {
   return [...unique]
 }
 
+function parseCommaSeparatedList(value: string | undefined): string[] {
+  if (!value) return []
+  const unique = new Set<string>()
+  for (const item of value.split(",")) {
+    const normalized = item.trim()
+    if (normalized) unique.add(normalized)
+  }
+  return [...unique]
+}
+
 function resolvePath(cwd: string, value: string): string {
   return isAbsolute(value) ? value : join(cwd, value)
 }
@@ -183,6 +227,13 @@ export function loadConfig(): AppConfig {
       Bun.env.WHATSAPP_WHITELIST_NUMBERS,
       Bun.env.WHATSAPP_WHITELIST_NUMBER,
     ]),
+    syncthingEnabled: envBool(Bun.env.SYNCTHING_ENABLED, false),
+    syncthingBaseUrl: envString(Bun.env.SYNCTHING_BASE_URL, DEFAULTS.syncthingBaseUrl),
+    syncthingApiKey: optionalTrimmed(Bun.env.SYNCTHING_API_KEY),
+    syncthingTimeoutMs: envInt(Bun.env.SYNCTHING_TIMEOUT_MS, DEFAULTS.syncthingTimeoutMs),
+    syncthingVaultFolderId: optionalTrimmed(Bun.env.SYNCTHING_VAULT_FOLDER_ID),
+    syncthingMutationToolsEnabled: envBool(Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED, false),
+    syncthingAllowedFolderIds: parseCommaSeparatedList(Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS),
     vaultPath: vaultPath ? resolvePath(cwd, vaultPath) : join(dataDir, "vault"),
     vaultEnabled: envBool(Bun.env.VAULT_ENABLED, true),
   }
@@ -194,6 +245,8 @@ export function loadConfig(): AppConfig {
     opencodeServerUrl: parsed.opencodeServerUrl,
     whitelistPairToken: parsed.whitelistPairToken,
     whatsAppWhitelistNumbers: parsed.whatsAppWhitelistNumbers,
+    syncthingApiKey: parsed.syncthingApiKey,
+    syncthingVaultFolderId: parsed.syncthingVaultFolderId,
   }
 }
 

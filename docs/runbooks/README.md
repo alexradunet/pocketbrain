@@ -10,6 +10,8 @@ Canonical operational workflows for PocketBrain.
 - `docs/runbooks/release-ops.md` - release preflight, deploy, and verification
 - `docs/runbooks/incident-response.md` - first-response triage and recovery workflow
 - `docs/runbooks/security-ops.md` - secret rotation, dependency hygiene, and risk updates
+- `docs/runbooks/doctor.md` - runtime diagnostics and guided repair workflow
+- `docs/runbooks/syncthing-ops.md` - syncthing API setup, health checks, and safe scan operations
 - `docs/runbooks/ci-e2e.md` - CI OpenCode model-path E2E setup and troubleshooting
 
 ## Rules

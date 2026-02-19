@@ -9,6 +9,7 @@ const ALLOWED_PLUGINS = [
   "./src/adapters/plugins/memory.plugin.ts",
   "./src/adapters/plugins/channel-message.plugin.ts",
   "./src/adapters/plugins/vault.plugin.ts",
+  "./src/adapters/plugins/syncthing.plugin.ts",
 ]
 
 describe("OpenCode config policy", () => {

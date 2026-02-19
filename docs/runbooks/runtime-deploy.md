@@ -36,6 +36,11 @@ WHITELIST_PAIR_TOKEN=your-secure-token
 OPENCODE_MODEL=provider/model
 WHATSAPP_AUTH_DIR=.data/whatsapp-auth
 VAULT_ENABLED=true
+SYNCTHING_ENABLED=true
+SYNCTHING_BASE_URL=http://127.0.0.1:8384
+SYNCTHING_API_KEY=replace-with-api-key
+SYNCTHING_VAULT_FOLDER_ID=vault
+SYNCTHING_MUTATION_TOOLS_ENABLED=false
 ```
 
 ## 3) Start runtime
