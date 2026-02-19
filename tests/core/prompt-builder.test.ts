@@ -12,6 +12,8 @@ describe("PromptBuilder", () => {
     const prompt = builder.buildAgentSystemPrompt([{ id: 1, fact: "test fact", source: "test" }])
     expect(prompt).toContain("VAULT ACCESS")
     expect(prompt).toContain("vault_read")
+    expect(prompt).toContain("Runtime mode: vault-only.")
+    expect(prompt).toContain("You do not have shell, host, or system command execution capabilities.")
   })
 
   test("omits vault instructions when vault is disabled", () => {
@@ -22,6 +24,7 @@ describe("PromptBuilder", () => {
 
     const prompt = builder.buildAgentSystemPrompt([{ id: 1, fact: "test fact" }])
     expect(prompt).not.toContain("VAULT ACCESS")
+    expect(prompt).toContain("Runtime mode: chat-only without vault access.")
   })
 
   test("builds heartbeat prompt with tasks and recent context", () => {

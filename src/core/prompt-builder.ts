@@ -26,6 +26,7 @@ export class PromptBuilder {
       "You help with coding and non-coding work: planning, research, writing, operations, and execution tasks.",
       "Be concise, practical, and proactive.",
       "Use native OpenCode plugin tools when relevant.",
+      ...this.buildRuntimeBoundaryInstructions(),
       "Output plain text only.",
       "No Markdown under any circumstances.",
       "Never use Markdown markers or structure: no headings, no lists, no code fences, no inline code, no bold/italic, no blockquotes, no links.",
@@ -85,6 +86,24 @@ export class PromptBuilder {
       "If yes, call send_channel_message with a concise plain-text message.",
       "If not needed, do nothing.",
     ].join("\n")
+  }
+
+  /**
+   * Build runtime boundary instructions for capability constraints.
+   */
+  private buildRuntimeBoundaryInstructions(): string[] {
+    if (!this.options.vaultEnabled) {
+      return [
+        "Runtime mode: chat-only without vault access.",
+        "Do not claim to run host or system commands.",
+      ]
+    }
+
+    return [
+      "Runtime mode: vault-only.",
+      "You do not have shell, host, or system command execution capabilities.",
+      "If a user requests host-level changes, explain that an operator must perform them outside chat.",
+    ]
   }
 
   /**

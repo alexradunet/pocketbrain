@@ -73,6 +73,16 @@
   - Keep health checks strict and review when startup logic changes.
   - Include rollback-health validation on every release.
 
+### 6) Capability drift beyond vault-only profile
+
+- Threat: plugin or prompt changes accidentally enable system command behavior in chat runtime.
+- Current controls:
+  - Runtime prompt now declares vault-only capability boundaries.
+  - OpenCode plugin list is limited to install_skill, memory, channel messaging, and vault tools.
+- Required controls:
+  - Keep CI policy tests that fail on forbidden plugin additions.
+  - Review prompt boundary text whenever tool surface changes.
+
 ## Residual Risk Register
 
 | ID | Risk | Current Posture | Residual Level | Mitigation Owner |

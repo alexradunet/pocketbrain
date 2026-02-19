@@ -2,6 +2,14 @@
 
 Use this runbook for deploying or redeploying PocketBrain runtime on Debian.
 
+## Runtime Profile (V1)
+
+PocketBrain V1 runs in `vault-only` profile:
+
+- WhatsApp + memory + vault tools are enabled.
+- No host/system command execution is exposed to chat users.
+- Self-evolution and autonomous code changes are out of scope.
+
 ## 1) Install prerequisites
 
 ```bash
@@ -27,6 +35,7 @@ Optional:
 WHITELIST_PAIR_TOKEN=your-secure-token
 OPENCODE_MODEL=provider/model
 WHATSAPP_AUTH_DIR=.data/whatsapp-auth
+VAULT_ENABLED=true
 ```
 
 ## 3) Start runtime
