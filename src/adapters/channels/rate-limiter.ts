@@ -9,6 +9,7 @@ export interface RateLimiterOptions {
 
 export class RateLimiter {
   private lastSendTime: Map<string, number> = new Map()
+  private queueByUser: Map<string, Promise<void>> = new Map()
   private readonly options: RateLimiterOptions
 
   constructor(options: RateLimiterOptions) {
@@ -19,16 +20,28 @@ export class RateLimiter {
    * Throttle a user
    */
   async throttle(userID: string): Promise<void> {
-    const now = Date.now()
-    const lastTime = this.lastSendTime.get(userID) ?? 0
-    const waitTime = Math.max(0, this.options.minIntervalMs - (now - lastTime))
+    const prior = this.queueByUser.get(userID) ?? Promise.resolve()
+    const current = prior.then(async () => {
+      const now = Date.now()
+      const lastTime = this.lastSendTime.get(userID) ?? 0
+      const waitTime = Math.max(0, this.options.minIntervalMs - (now - lastTime))
 
-    if (waitTime > 0) {
-      await new Promise((resolve) => setTimeout(resolve, waitTime))
+      if (waitTime > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitTime))
+      }
+
+      this.lastSendTime.set(userID, Date.now())
+      this.cleanupOldEntries()
+    })
+
+    this.queueByUser.set(userID, current)
+    try {
+      await current
+    } finally {
+      if (this.queueByUser.get(userID) === current) {
+        this.queueByUser.delete(userID)
+      }
     }
-
-    this.lastSendTime.set(userID, Date.now())
-    this.cleanupOldEntries()
   }
 
   /**
@@ -43,6 +56,7 @@ export class RateLimiter {
    */
   reset(userID: string): void {
     this.lastSendTime.delete(userID)
+    this.queueByUser.delete(userID)
   }
 
   /**
@@ -50,6 +64,7 @@ export class RateLimiter {
    */
   resetAll(): void {
     this.lastSendTime.clear()
+    this.queueByUser.clear()
   }
 
   /**

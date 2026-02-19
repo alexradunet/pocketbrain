@@ -61,4 +61,17 @@ describe("RateLimiter", () => {
     expect(lastTime).toBeDefined()
     expect(lastTime).toBeLessThanOrEqual(Date.now())
   })
+
+  test("concurrent throttles for same user are serialized", async () => {
+    limiter = new RateLimiter({ minIntervalMs: 80 })
+    await limiter.throttle("user1")
+
+    const start = Date.now()
+    const first = limiter.throttle("user1")
+    const second = limiter.throttle("user1")
+    await Promise.all([first, second])
+    const elapsed = Date.now() - start
+
+    expect(elapsed).toBeGreaterThanOrEqual(140)
+  })
 })

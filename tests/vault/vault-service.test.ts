@@ -149,6 +149,12 @@ describe("VaultService", () => {
 
       expect(readFileSync(join(TEST_DIR, "multi.txt"), "utf-8")).toBe("abc")
     })
+
+    test("returns false when append path is invalid", async () => {
+      const result = await vaultService.appendToFile("../outside.txt", "blocked")
+
+      expect(result).toBe(false)
+    })
   })
 
   describe("listFiles", () => {

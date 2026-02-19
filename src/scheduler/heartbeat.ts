@@ -30,6 +30,7 @@ export class HeartbeatScheduler {
   private readonly deps: HeartbeatDependencies
   private nextRunTimeout: ReturnType<typeof setTimeout> | undefined
   private running = false
+  private stopped = true
   private consecutiveFailures = 0
   private notifiedForCurrentFailureIncident = false
 
@@ -49,6 +50,7 @@ export class HeartbeatScheduler {
       return
     }
 
+    this.stopped = false
     this.scheduleNextRun(0)
     
     this.deps.logger.info({ intervalMinutes: this.options.intervalMinutes }, "heartbeat scheduler started")
@@ -58,10 +60,15 @@ export class HeartbeatScheduler {
    * Stop the heartbeat scheduler
    */
   stop(): void {
+    this.stopped = true
     this.clearNextRunTimeout()
   }
 
   private async run(): Promise<void> {
+    if (this.stopped) {
+      return
+    }
+
     const runID = `scheduler-${randomUUID()}`
     if (this.running) {
       this.deps.logger.warn({ runID }, "heartbeat run skipped: previous run still active")
@@ -124,28 +131,40 @@ export class HeartbeatScheduler {
       this.consecutiveFailures >= this.options.notifyAfterFailures &&
       !this.notifiedForCurrentFailureIncident
     ) {
-      await this.notifyFailure()
-      this.notifiedForCurrentFailureIncident = true
+      const notificationSent = await this.notifyFailure()
+      if (notificationSent) {
+        this.notifiedForCurrentFailureIncident = true
+      }
     }
   }
 
-  private async notifyFailure(): Promise<void> {
+  private async notifyFailure(): Promise<boolean> {
     const lastChannel = this.deps.channelRepository.getLastChannel()
     if (!lastChannel) {
       this.deps.logger.warn("heartbeat consecutive failures but no last channel to notify")
-      return
+      return false
     }
 
-    this.deps.outboxRepository.enqueue(
-      lastChannel.channel,
-      lastChannel.userID,
-      `Heartbeat has failed ${this.consecutiveFailures} times in a row. Check logs for details.`
-    )
-    
-    this.deps.logger.warn({ failureCount: this.consecutiveFailures }, "heartbeat notification sent to user")
+    try {
+      this.deps.outboxRepository.enqueue(
+        lastChannel.channel,
+        lastChannel.userID,
+        `Heartbeat has failed ${this.consecutiveFailures} times in a row. Check logs for details.`
+      )
+
+      this.deps.logger.warn({ failureCount: this.consecutiveFailures }, "heartbeat notification sent to user")
+      return true
+    } catch (error) {
+      this.deps.logger.error({ error, failureCount: this.consecutiveFailures }, "heartbeat notification enqueue failed")
+      return false
+    }
   }
 
   private scheduleNextRun(delayMs: number): void {
+    if (this.stopped) {
+      return
+    }
+
     this.clearNextRunTimeout()
     this.nextRunTimeout = setTimeout(() => {
       void this.run()

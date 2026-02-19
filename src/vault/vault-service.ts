@@ -153,12 +153,10 @@ export class VaultService {
       const existing = await this.readFile(relativePath)
       
       if (existing !== null) {
-        await this.writeFile(relativePath, existing + content)
-      } else {
-        await this.writeFile(relativePath, content)
+        return await this.writeFile(relativePath, existing + content)
       }
 
-      return true
+      return await this.writeFile(relativePath, content)
     } catch (error) {
       this.options.logger?.error({ error }, "vault append failed")
       return false

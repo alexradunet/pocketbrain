@@ -4,7 +4,7 @@
  */
 
 import { tool } from "@opencode-ai/plugin"
-import { join, basename, isAbsolute } from "node:path"
+import { join, basename, isAbsolute, posix } from "node:path"
 
 const configuredOpenCodeDir = Bun.env.OPENCODE_CONFIG_DIR?.trim() || process.cwd()
 const OPENCODE_CONFIG_DIR = isAbsolute(configuredOpenCodeDir)
@@ -31,32 +31,73 @@ async function exists(path: string): Promise<boolean> {
   return Bun.file(path).exists()
 }
 
-function parseGithubTreeUrl(input: string): GitHubTreeUrl | null {
+function decodePathSegment(value: string): string | null {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return null
+  }
+}
+
+function isSafeRepositorySubpath(value: string): boolean {
+  if (!value || value.startsWith("/")) return false
+  if (!GITHUB_SUBPATH_PATTERN.test(value)) return false
+
+  const normalized = posix.normalize(value)
+  if (normalized === "." || normalized.startsWith("../") || normalized.includes("/../")) {
+    return false
+  }
+
+  const segments = normalized.split("/")
+  return segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..")
+}
+
+export function parseGithubTreeUrl(input: string): GitHubTreeUrl | null {
   const source = input.trim()
-  const tree = source.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/tree\/([^/]+)\/(.+)$/)
-  if (!tree) return null
 
-  const repo = tree[1]
-  const ref = tree[2]
-  const subpath = tree[3]
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(source)
+  } catch {
+    return null
+  }
 
-  // Validate components to prevent injection
-  const repoParts = repo.split("/")
-  if (repoParts.length !== 2) return null
-  
-  const [owner, repoName] = repoParts
-  if (!owner || !repoName) return null
+  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+    return null
+  }
+  if (parsedUrl.hostname !== "github.com") {
+    return null
+  }
+
+  const segments = parsedUrl.pathname.split("/").filter(Boolean)
+  if (segments.length < 5 || segments[2] !== "tree") {
+    return null
+  }
+
+  const owner = segments[0]
+  const repoName = segments[1]
+  const refRaw = decodePathSegment(segments[3])
+  const subpathParts = segments.slice(4).map(decodePathSegment)
+
+  if (!owner || !repoName || !refRaw || subpathParts.some((part) => part === null)) {
+    return null
+  }
+
   if (!GITHUB_REPO_PATTERN.test(owner) || !GITHUB_REPO_PATTERN.test(repoName)) {
     return null
   }
-  if (!GITHUB_REF_PATTERN.test(ref)) {
-    return null
-  }
-  if (!GITHUB_SUBPATH_PATTERN.test(subpath)) {
+
+  const ref = refRaw.trim()
+  if (!ref || !GITHUB_REF_PATTERN.test(ref)) {
     return null
   }
 
-  return { repo, ref, subpath }
+  const subpath = subpathParts.join("/").trim()
+  if (!isSafeRepositorySubpath(subpath)) {
+    return null
+  }
+
+  return { repo: `${owner}/${repoName}`, ref, subpath: posix.normalize(subpath) }
 }
 
 function safeName(input: string): string {

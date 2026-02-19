@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { retryWithBackoff } from "../../src/lib/retry"
+import { retryWithBackoff, buildRetryOptions } from "../../src/lib/retry"
 
 describe("retryWithBackoff", () => {
   test("retries until operation succeeds", async () => {
@@ -42,5 +42,19 @@ describe("retryWithBackoff", () => {
     ).rejects.toThrow()
 
     expect(attempts).toBe(3)
+  })
+
+  test("builds retry options with deterministic backoff defaults", () => {
+    const options = buildRetryOptions({
+      retries: 3,
+      minTimeoutMs: 100,
+      maxTimeoutMs: 1000,
+    })
+
+    expect(options.retries).toBe(3)
+    expect(options.minTimeout).toBe(100)
+    expect(options.maxTimeout).toBe(1000)
+    expect(options.factor).toBe(2)
+    expect(options.randomize).toBe(false)
   })
 })

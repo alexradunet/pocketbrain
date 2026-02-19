@@ -45,4 +45,21 @@ describe("CommandHandler", () => {
     expect(result.action).toBeUndefined()
     expect(result.response).toContain("Access restricted")
   })
+
+  test("returns remember usage when payload is missing", () => {
+    const handler = new CommandHandler({
+      pairToken: "secret",
+      logger: createLoggerMock(),
+    })
+
+    const result = handler.handle({
+      jid: "123@s.whatsapp.net",
+      text: "/remember",
+      isWhitelisted: true,
+    })
+
+    expect(result.handled).toBe(true)
+    expect(result.response).toBe("Usage: /remember <text>")
+    expect(result.action).toBeUndefined()
+  })
 })

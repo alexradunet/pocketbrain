@@ -7,6 +7,12 @@ import { HeartbeatScheduler } from "../../src/scheduler/heartbeat"
 
 const ONE_MINUTE_MS = 60_000
 
+async function flushMicrotasks(times = 6): Promise<void> {
+  for (let i = 0; i < times; i += 1) {
+    await Promise.resolve()
+  }
+}
+
 function createLoggerMock(): Logger {
   return {
     info: vi.fn(),
@@ -249,6 +255,144 @@ describe("HeartbeatScheduler", () => {
     await Promise.resolve()
 
     expect(outboxRepository.enqueue).toHaveBeenCalledTimes(2)
+
+    scheduler.stop()
+  })
+
+  test("stop prevents rescheduling when a run is already in progress", async () => {
+    vi.useFakeTimers()
+
+    let resolveRun: ((value: string) => void) | undefined
+    const assistant = {
+      runHeartbeatTasks: vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveRun = resolve
+          }),
+      ),
+    }
+    const outboxRepository = { enqueue: vi.fn() }
+    const channelRepository = { getLastChannel: vi.fn().mockReturnValue(null) }
+
+    const scheduler = new HeartbeatScheduler(
+      {
+        intervalMinutes: 1,
+        baseDelayMs: 1,
+        maxDelayMs: 30 * ONE_MINUTE_MS,
+        notifyAfterFailures: 3,
+      },
+      {
+        assistant: assistant as unknown as AssistantCore,
+        outboxRepository: outboxRepository as unknown as OutboxRepository,
+        channelRepository: channelRepository as unknown as ChannelRepository,
+        logger: createLoggerMock(),
+      },
+    )
+
+    scheduler.start()
+    vi.advanceTimersByTime(0)
+    await flushMicrotasks()
+    expect(assistant.runHeartbeatTasks).toHaveBeenCalledTimes(1)
+
+    scheduler.stop()
+    resolveRun?.("ok")
+    await flushMicrotasks()
+
+    const state = scheduler as unknown as { running: boolean }
+    expect(state.running).toBe(false)
+
+    const internalState = scheduler as unknown as {
+      nextRunTimeout?: ReturnType<typeof setTimeout>
+    }
+    expect(internalState.nextRunTimeout).toBeUndefined()
+
+    vi.advanceTimersByTime(ONE_MINUTE_MS + 10)
+    await flushMicrotasks()
+
+    expect(assistant.runHeartbeatTasks).toHaveBeenCalledTimes(1)
+  })
+
+  test("keeps scheduling when failure notification enqueue throws", async () => {
+    vi.useFakeTimers()
+
+    const assistant = {
+      runHeartbeatTasks: vi.fn().mockRejectedValue(new Error("always fail")),
+    }
+    const outboxRepository = {
+      enqueue: vi.fn(() => {
+        throw new Error("outbox unavailable")
+      }),
+    }
+    const channelRepository = {
+      getLastChannel: vi.fn().mockReturnValue({ channel: "whatsapp", userID: "123@s.whatsapp.net" }),
+    }
+
+    const scheduler = new HeartbeatScheduler(
+      {
+        intervalMinutes: 1,
+        baseDelayMs: 1,
+        maxDelayMs: 30 * ONE_MINUTE_MS,
+        notifyAfterFailures: 1,
+      },
+      {
+        assistant: assistant as unknown as AssistantCore,
+        outboxRepository: outboxRepository as unknown as OutboxRepository,
+        channelRepository: channelRepository as unknown as ChannelRepository,
+        logger: createLoggerMock(),
+      },
+    )
+
+    scheduler.start()
+    vi.advanceTimersByTime(0)
+    await flushMicrotasks()
+
+    vi.advanceTimersByTime(ONE_MINUTE_MS + 10)
+    await flushMicrotasks()
+
+    expect(outboxRepository.enqueue).toHaveBeenCalledTimes(2)
+    expect(assistant.runHeartbeatTasks).toHaveBeenCalledTimes(6)
+
+    scheduler.stop()
+  })
+
+  test("retries user notification when target channel appears later", async () => {
+    vi.useFakeTimers()
+
+    const assistant = {
+      runHeartbeatTasks: vi.fn().mockRejectedValue(new Error("always fail")),
+    }
+    const outboxRepository = { enqueue: vi.fn() }
+    const channelRepository = {
+      getLastChannel: vi
+        .fn()
+        .mockReturnValueOnce(null)
+        .mockReturnValue({ channel: "whatsapp", userID: "123@s.whatsapp.net" }),
+    }
+
+    const scheduler = new HeartbeatScheduler(
+      {
+        intervalMinutes: 1,
+        baseDelayMs: 1,
+        maxDelayMs: 30 * ONE_MINUTE_MS,
+        notifyAfterFailures: 1,
+      },
+      {
+        assistant: assistant as unknown as AssistantCore,
+        outboxRepository: outboxRepository as unknown as OutboxRepository,
+        channelRepository: channelRepository as unknown as ChannelRepository,
+        logger: createLoggerMock(),
+      },
+    )
+
+    scheduler.start()
+    vi.advanceTimersByTime(0)
+    await flushMicrotasks()
+
+    vi.advanceTimersByTime(ONE_MINUTE_MS + 10)
+    await flushMicrotasks()
+
+    expect(channelRepository.getLastChannel).toHaveBeenCalledTimes(2)
+    expect(outboxRepository.enqueue).toHaveBeenCalledTimes(1)
 
     scheduler.stop()
   })

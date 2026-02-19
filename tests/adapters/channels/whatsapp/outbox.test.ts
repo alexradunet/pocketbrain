@@ -123,7 +123,7 @@ describe("OutboxProcessor", () => {
     expect(sendMessage).toHaveBeenCalledTimes(1)
   })
 
-  test("acknowledges when max retries are exceeded", async () => {
+  test("schedules final allowed retry when retry count reaches max", async () => {
     const repository = createOutboxRepositoryMock()
     const sendMessage = vi.fn(async () => {
       throw new Error("send failed")
@@ -145,7 +145,35 @@ describe("OutboxProcessor", () => {
       nextRetryAt: null,
     })
 
-    expect(repository.acknowledge).toHaveBeenCalledWith(5)
+    expect(repository.acknowledge).not.toHaveBeenCalled()
+    expect(repository.markRetry).toHaveBeenCalledTimes(1)
+    expect(repository.markRetry).toHaveBeenCalledWith(5, 3, expect.any(String))
+    expect(sendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  test("acknowledges when retry count exceeds max retries", async () => {
+    const repository = createOutboxRepositoryMock()
+    const sendMessage = vi.fn(async () => {
+      throw new Error("send failed")
+    })
+    const processor = new OutboxProcessor({
+      outboxRepository: repository,
+      logger: createLoggerMock(),
+      retryBaseDelayMs: 1,
+      sendMessage,
+    })
+
+    await processor.process({
+      id: 6,
+      channel: "whatsapp",
+      userID: "123456789@s.whatsapp.net",
+      text: "hello",
+      retryCount: 3,
+      maxRetries: 3,
+      nextRetryAt: null,
+    })
+
+    expect(repository.acknowledge).toHaveBeenCalledWith(6)
     expect(repository.markRetry).not.toHaveBeenCalled()
     expect(sendMessage).toHaveBeenCalledTimes(1)
   })

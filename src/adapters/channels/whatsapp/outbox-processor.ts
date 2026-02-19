@@ -32,7 +32,7 @@ export class OutboxProcessor {
       }
 
       const newRetryCount = item.retryCount + 1
-      if (newRetryCount >= item.maxRetries) {
+      if (newRetryCount > item.maxRetries) {
         this.options.logger.error(
           { userID: item.userID, retries: newRetryCount, error },
           "whatsapp outbox max retries exceeded",

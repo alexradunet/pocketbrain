@@ -66,7 +66,7 @@ export class CommandHandler {
     }
 
     // Remember command
-    if (text.startsWith("/remember ")) {
+    if (text === "/remember" || text.startsWith("/remember ")) {
       const note = text.slice(10).trim()
       if (note.length > 0) {
         return {

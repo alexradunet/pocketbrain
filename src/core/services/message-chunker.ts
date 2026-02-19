@@ -15,8 +15,17 @@ export class MessageChunker {
   private readonly options: MessageChunkerOptions
 
   constructor(options: MessageChunkerOptions) {
+    if (!Number.isFinite(options.maxLength) || options.maxLength < 1) {
+      throw new Error("MessageChunker maxLength must be at least 1")
+    }
+
+    const newlineThreshold = options.newlineThreshold ?? 0.5
+    if (!Number.isFinite(newlineThreshold) || newlineThreshold < 0 || newlineThreshold > 1) {
+      throw new Error("MessageChunker newlineThreshold must be between 0 and 1")
+    }
+
     this.options = {
-      newlineThreshold: 0.5,
+      newlineThreshold,
       ...options,
     }
   }
