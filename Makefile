@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: setup-dev setup-runtime setup dev start test typecheck build logs release shell
+.PHONY: setup-dev setup-runtime setup dev start test typecheck build logs release shell vault-init
 
 setup-dev:
 	./scripts/setup/install-debian-dev.sh
@@ -34,3 +34,6 @@ release:
 
 shell:
 	./scripts/ops/runtime-shell.sh $(ARGS)
+
+vault-init:
+	./scripts/setup/init-vault.sh $(or $(VAULT_DIR),vault) $(ARGS)

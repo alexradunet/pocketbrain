@@ -19,3 +19,8 @@ backups/
 *.pfx
 *.crt
 *.cer
+
+# User vault content (track only folder READMEs)
+vault/**
+!vault/**/
+!vault/**/README.md
