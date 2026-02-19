@@ -13,6 +13,7 @@ Canonical operational workflows for PocketBrain.
 - `docs/runbooks/doctor.md` - runtime diagnostics and guided repair workflow
 - `docs/runbooks/syncthing-ops.md` - syncthing API setup, health checks, and safe scan operations
 - `docs/runbooks/ci-e2e.md` - CI OpenCode model-path E2E setup and troubleshooting
+- `docs/runbooks/fresh-vps-validation.md` - post-reinstall validation for vault-backed PocketBrain setup
 
 ## Rules
 
