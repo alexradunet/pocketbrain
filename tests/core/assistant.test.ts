@@ -21,7 +21,7 @@ function createSessionManager(): SessionManager {
 }
 
 describe("AssistantCore", () => {
-  test("ask returns assistant text and tracks whatsapp last channel", async () => {
+  test("ask returns assistant text and tracks last channel generically", async () => {
     const saved: Array<{ channel: string; userID: string }> = []
 
     const fakeClient = {
@@ -74,15 +74,15 @@ describe("AssistantCore", () => {
     })
 
     const response = await assistant.ask({
-      channel: "whatsapp",
-      userID: "123@s.whatsapp.net",
+      channel: "telegram",
+      userID: "user-123",
       text: "hi",
     })
 
     expect(response).toBe("hello")
     expect(saved).toHaveLength(1)
-    expect(saved[0]?.channel).toBe("whatsapp")
-    expect(saved[0]?.userID).toBe("123@s.whatsapp.net")
+    expect(saved[0]?.channel).toBe("telegram")
+    expect(saved[0]?.userID).toBe("user-123")
   })
 
   test("runHeartbeatTasks skips when no tasks exist", async () => {

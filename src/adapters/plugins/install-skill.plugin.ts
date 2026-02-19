@@ -62,7 +62,7 @@ export function parseGithubTreeUrl(input: string): GitHubTreeUrl | null {
     return null
   }
 
-  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+  if (parsedUrl.protocol !== "https:") {
     return null
   }
   if (parsedUrl.hostname !== "github.com") {

@@ -71,9 +71,7 @@ export class AssistantCore {
     const client = this.ensureClient()
     const sessionID = await this.deps.sessionManager.getOrCreateMainSession(client)
 
-    if (input.channel === "whatsapp") {
-      this.deps.channelRepository.saveLastChannel(input.channel, input.userID)
-    }
+    this.deps.channelRepository.saveLastChannel(input.channel, input.userID)
 
     const memoryEntries = this.deps.memoryRepository.getAll()
     const systemPrompt = this.deps.promptBuilder.buildAgentSystemPrompt(memoryEntries)

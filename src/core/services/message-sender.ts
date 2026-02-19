@@ -6,11 +6,11 @@
 
 import type { Logger } from "pino"
 import { MessageChunker } from "./message-chunker"
-import type { RateLimiter } from "../../adapters/channels/rate-limiter"
+import type { ThrottlePort } from "../ports/throttle"
 
 export interface MessageSenderOptions {
   chunker: MessageChunker
-  rateLimiter: RateLimiter
+  rateLimiter: ThrottlePort
   chunkDelayMs: number
   logger: Logger
 }
@@ -21,7 +21,7 @@ export interface SendFunction {
 
 export class MessageSender {
   private readonly chunker: MessageChunker
-  private readonly rateLimiter: RateLimiter
+  private readonly rateLimiter: ThrottlePort
   private readonly chunkDelayMs: number
   private readonly logger: Logger
 

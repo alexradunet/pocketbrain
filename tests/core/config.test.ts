@@ -21,6 +21,9 @@ const ENV_KEYS = [
   "SYNCTHING_AUTO_START",
   "SYNCTHING_MUTATION_TOOLS_ENABLED",
   "SYNCTHING_ALLOWED_FOLDER_IDS",
+  "WHATSAPP_PAIR_MAX_FAILURES",
+  "WHATSAPP_PAIR_FAILURE_WINDOW_MS",
+  "WHATSAPP_PAIR_BLOCK_DURATION_MS",
   "VAULT_ENABLED",
   "VAULT_PATH",
   "VAULT_FOLDER_INBOX",
@@ -98,6 +101,9 @@ describe("loadConfig", () => {
     Bun.env.DATA_DIR = ".data"
     Bun.env.ENABLE_WHATSAPP = "true"
     Bun.env.WHATSAPP_AUTH_DIR = ".data/whatsapp-auth"
+    Bun.env.WHATSAPP_PAIR_MAX_FAILURES = "4"
+    Bun.env.WHATSAPP_PAIR_FAILURE_WINDOW_MS = "120000"
+    Bun.env.WHATSAPP_PAIR_BLOCK_DURATION_MS = "300000"
     Bun.env.WHATSAPP_WHITELIST_NUMBERS = "15551234567,+44 7700 900123,15551234567"
     Bun.env.WHATSAPP_WHITELIST_NUMBER = "12025550123"
     Bun.env.SYNCTHING_ENABLED = "true"
@@ -123,6 +129,9 @@ describe("loadConfig", () => {
     expect(config.opencodeServerUrl).toBe("http://127.0.0.1:4096")
     expect(config.opencodeModel).toBe("openai/gpt-5")
     expect(config.opencodeConfigDir).toContain(".data/vault/99-system/99-pocketbrain")
+    expect(config.whatsAppPairMaxFailures).toBe(4)
+    expect(config.whatsAppPairFailureWindowMs).toBe(120000)
+    expect(config.whatsAppPairBlockDurationMs).toBe(300000)
     expect(config.whatsAppWhitelistNumbers).toEqual(["15551234567", "447700900123", "12025550123"])
     expect(config.syncthingEnabled).toBe(true)
     expect(config.syncthingBaseUrl).toBe("http://127.0.0.1:8384")
@@ -185,6 +194,11 @@ describe("loadConfig", () => {
     Bun.env.SYNCTHING_API_KEY = "test-api-key"
     Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED = "true"
     Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS = ""
+    expect(() => loadConfig()).toThrow()
+  })
+
+  test("throws when WHATSAPP_PAIR_MAX_FAILURES is invalid", () => {
+    Bun.env.WHATSAPP_PAIR_MAX_FAILURES = "0"
     expect(() => loadConfig()).toThrow()
   })
 })

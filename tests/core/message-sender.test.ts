@@ -2,7 +2,7 @@ import { describe, test, expect, vi } from "bun:test"
 import type { Logger } from "pino"
 import { MessageChunker } from "../../src/core/services/message-chunker"
 import { MessageSender } from "../../src/core/services/message-sender"
-import type { RateLimiter } from "../../src/adapters/channels/rate-limiter"
+import type { ThrottlePort } from "../../src/core/ports/throttle"
 
 function createLoggerMock(): Logger {
   return {
@@ -18,7 +18,7 @@ describe("MessageSender", () => {
     const logger = createLoggerMock()
     const rateLimiter = {
       throttle: vi.fn(async (_userID: string) => {}),
-    } as unknown as RateLimiter
+    } as unknown as ThrottlePort
 
     const sender = new MessageSender({
       chunker: new MessageChunker({ maxLength: 5 }),
@@ -40,7 +40,7 @@ describe("MessageSender", () => {
     const logger = createLoggerMock()
     const rateLimiter = {
       throttle: vi.fn(async (_userID: string) => {}),
-    } as unknown as RateLimiter
+    } as unknown as ThrottlePort
 
     const sender = new MessageSender({
       chunker: new MessageChunker({ maxLength: 10 }),

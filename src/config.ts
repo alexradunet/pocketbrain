@@ -33,6 +33,9 @@ export interface AppConfig {
   connectionTimeoutMs: number
   connectionReconnectDelayMs: number
   whitelistPairToken: string | undefined
+  whatsAppPairMaxFailures: number
+  whatsAppPairFailureWindowMs: number
+  whatsAppPairBlockDurationMs: number
   whatsAppWhitelistNumbers: string[]
   syncthingEnabled: boolean
   syncthingBaseUrl: string
@@ -64,6 +67,9 @@ const DEFAULTS = {
   outboxRetryBaseDelayMs: 60_000,
   connectionTimeoutMs: 20_000,
   connectionReconnectDelayMs: 3000,
+  whatsAppPairMaxFailures: 5,
+  whatsAppPairFailureWindowMs: 5 * 60 * 1000,
+  whatsAppPairBlockDurationMs: 15 * 60 * 1000,
   syncthingBaseUrl: "http://127.0.0.1:8384",
   syncthingTimeoutMs: 5000,
   syncthingVaultFolderId: "vault",
@@ -113,6 +119,9 @@ const AppConfigSchema = z
     connectionTimeoutMs: z.number().positive(),
     connectionReconnectDelayMs: z.number().nonnegative(),
     whitelistPairToken: z.string().optional(),
+    whatsAppPairMaxFailures: z.number().int().positive(),
+    whatsAppPairFailureWindowMs: z.number().int().positive(),
+    whatsAppPairBlockDurationMs: z.number().int().positive(),
     whatsAppWhitelistNumbers: z.array(z.string().regex(/^\d+$/)),
     syncthingEnabled: z.boolean(),
     syncthingBaseUrl: z.string().url("SYNCTHING_BASE_URL must be a valid URL"),
@@ -273,6 +282,15 @@ export function loadConfig(): AppConfig {
     connectionTimeoutMs: DEFAULTS.connectionTimeoutMs,
     connectionReconnectDelayMs: DEFAULTS.connectionReconnectDelayMs,
     whitelistPairToken: optionalTrimmed(Bun.env.WHITELIST_PAIR_TOKEN),
+    whatsAppPairMaxFailures: envInt(Bun.env.WHATSAPP_PAIR_MAX_FAILURES, DEFAULTS.whatsAppPairMaxFailures),
+    whatsAppPairFailureWindowMs: envInt(
+      Bun.env.WHATSAPP_PAIR_FAILURE_WINDOW_MS,
+      DEFAULTS.whatsAppPairFailureWindowMs,
+    ),
+    whatsAppPairBlockDurationMs: envInt(
+      Bun.env.WHATSAPP_PAIR_BLOCK_DURATION_MS,
+      DEFAULTS.whatsAppPairBlockDurationMs,
+    ),
     whatsAppWhitelistNumbers: parsePhoneWhitelist([
       Bun.env.WHATSAPP_WHITELIST_NUMBERS,
       Bun.env.WHATSAPP_WHITELIST_NUMBER,

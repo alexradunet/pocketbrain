@@ -33,12 +33,19 @@ export default async function createChannelMessagePlugin(options: ChannelMessage
           const target = channelRepository.getLastChannel()
           if (!target) return "No last-used channel found yet."
 
-          if (target.channel !== "whatsapp" || typeof target.userID !== "string") {
+          if (
+            typeof target.channel !== "string" ||
+            target.channel.trim().length === 0 ||
+            typeof target.userID !== "string" ||
+            target.userID.trim().length === 0
+          ) {
             return "Last-used channel data is invalid."
           }
 
-          outboxRepository.enqueue(target.channel, target.userID, text)
-          return `Queued message for ${target.channel}:${target.userID}`
+          const channel = target.channel.trim()
+          const userID = target.userID.trim()
+          outboxRepository.enqueue(channel, userID, text)
+          return `Queued message for ${channel}:${userID}`
         },
       }),
     },

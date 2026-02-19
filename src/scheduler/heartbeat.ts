@@ -6,9 +6,9 @@
 
 import type { Logger } from "pino"
 import { randomUUID } from "node:crypto"
-import type { AssistantCore } from "../core/assistant"
 import type { OutboxRepository } from "../core/ports/outbox-repository"
-import type { ChannelRepository } from "../core/ports/channel-repository"
+import type { ChannelRepository, LastChannel } from "../core/ports/channel-repository"
+import type { HeartbeatRunner } from "../core/ports/heartbeat-runner"
 import { retryWithBackoff } from "../lib/retry"
 
 export interface HeartbeatOptions {
@@ -19,10 +19,15 @@ export interface HeartbeatOptions {
 }
 
 export interface HeartbeatDependencies {
-  assistant: AssistantCore
+  heartbeatRunner: HeartbeatRunner
   outboxRepository: OutboxRepository
   channelRepository: ChannelRepository
   logger: Logger
+}
+
+interface NotificationTarget {
+  channel: string
+  userID: string
 }
 
 export class HeartbeatScheduler {
@@ -82,7 +87,7 @@ export class HeartbeatScheduler {
     try {
       this.deps.logger.debug({ runID }, "heartbeat run started")
       const result = await retryWithBackoff(
-        async () => this.deps.assistant.runHeartbeatTasks(),
+        async () => this.deps.heartbeatRunner.runHeartbeatTasks(),
         {
           retries: 2,
           minTimeoutMs: this.options.baseDelayMs,
@@ -139,25 +144,42 @@ export class HeartbeatScheduler {
   }
 
   private async notifyFailure(): Promise<boolean> {
-    const lastChannel = this.deps.channelRepository.getLastChannel()
-    if (!lastChannel) {
-      this.deps.logger.warn("heartbeat consecutive failures but no last channel to notify")
+    const target = this.resolveNotificationTarget(this.deps.channelRepository.getLastChannel())
+    if (!target) {
+      this.deps.logger.warn("heartbeat consecutive failures but no valid notification target")
       return false
     }
 
     try {
       this.deps.outboxRepository.enqueue(
-        lastChannel.channel,
-        lastChannel.userID,
+        target.channel,
+        target.userID,
         `Heartbeat has failed ${this.consecutiveFailures} times in a row. Check logs for details.`
       )
 
-      this.deps.logger.warn({ failureCount: this.consecutiveFailures }, "heartbeat notification sent to user")
+      this.deps.logger.warn(
+        { failureCount: this.consecutiveFailures, channel: target.channel },
+        "heartbeat notification sent",
+      )
       return true
     } catch (error) {
       this.deps.logger.error({ error, failureCount: this.consecutiveFailures }, "heartbeat notification enqueue failed")
       return false
     }
+  }
+
+  private resolveNotificationTarget(lastChannel: LastChannel | null): NotificationTarget | null {
+    if (!lastChannel) {
+      return null
+    }
+
+    const channel = lastChannel.channel.trim()
+    const userID = lastChannel.userID.trim()
+    if (!channel || !userID) {
+      return null
+    }
+
+    return { channel, userID }
   }
 
   private scheduleNextRun(delayMs: number): void {

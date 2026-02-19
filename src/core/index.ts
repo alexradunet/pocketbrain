@@ -21,6 +21,8 @@ export type {
   OutboxRepository,
   OutboxMessage,
   HeartbeatRepository,
+  HeartbeatRunner,
+  ThrottlePort,
   ChannelAdapter,
   ChannelAuthOptions,
   WhatsAppDependencies,

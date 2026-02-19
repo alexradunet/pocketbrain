@@ -29,6 +29,9 @@ export interface WhatsAppAdapterOptions {
   outboxRepository: OutboxRepository
   messageSender: MessageSender
   pairToken: string | undefined
+  pairMaxFailures?: number
+  pairFailureWindowMs?: number
+  pairBlockDurationMs?: number
   outboxIntervalMs?: number
   outboxRetryBaseDelayMs?: number
   connectingTimeoutMs?: number
@@ -84,6 +87,20 @@ function normalizeJid(jid: string): string {
   }
   
   return ""
+}
+
+export function expandDirectWhitelistIDs(jid: string): string[] {
+  const normalized = normalizeJid(jid)
+  if (!normalized || !isDirectJid(normalized)) {
+    return []
+  }
+
+  const numericUserID = normalized.match(/^(\d+)@(?:s\.whatsapp\.net|lid)$/)?.[1]
+  if (!numericUserID) {
+    return [normalized]
+  }
+
+  return [`${numericUserID}@s.whatsapp.net`, `${numericUserID}@lid`]
 }
 
 interface IncomingMessage {
@@ -151,6 +168,9 @@ export class WhatsAppAdapter implements ChannelAdapter {
     this.commandHandler = new CommandHandler({
       pairToken: this.options.pairToken,
       logger: this.options.logger,
+      pairMaxFailures: this.options.pairMaxFailures,
+      pairFailureWindowMs: this.options.pairFailureWindowMs,
+      pairBlockDurationMs: this.options.pairBlockDurationMs,
     })
 
     this.outboxProcessor = new OutboxProcessor({
@@ -257,20 +277,41 @@ export class WhatsAppAdapter implements ChannelAdapter {
     const commandResult = this.commandHandler.handle({ jid, text, isWhitelisted })
 
     if (commandResult.handled) {
+      // Mark as read for commands too
+      const socket = this.connectionManager.getSocket()
+      if (socket && msg.key?.id) {
+        try {
+          await socket.readMessages([{ remoteJid: jid, id: msg.key.id, fromMe: false }])
+        } catch { /* best-effort */ }
+      }
       await this.handleCommandResult(jid, commandResult)
       return
     }
 
     // Not a command - process through handler
     if (this.messageHandler) {
-      await this.processUserMessage(jid, text)
+      const messageKey = {
+        remoteJid: msg.key?.remoteJid ?? jid,
+        id: msg.key?.id ?? '',
+        fromMe: false,
+      }
+      await this.processUserMessage(jid, text, messageKey)
     }
   }
 
   private async handleCommandResult(jid: string, result: CommandResult): Promise<void> {
     switch (result.action) {
       case "pair": {
-        const created = this.options.whitelistRepository.addToWhitelist("whatsapp", jid)
+        const whitelistIDs = expandDirectWhitelistIDs(jid)
+        const targetIDs = whitelistIDs.length > 0 ? whitelistIDs : [jid]
+        let created = false
+
+        for (const targetID of targetIDs) {
+          if (this.options.whitelistRepository.addToWhitelist("whatsapp", targetID)) {
+            created = true
+          }
+        }
+
         await this.send(
           jid,
           created ? "Pairing successful. You are now whitelisted." : "You are already whitelisted.",
@@ -309,8 +350,24 @@ export class WhatsAppAdapter implements ChannelAdapter {
     }
   }
 
-  private async processUserMessage(jid: string, text: string): Promise<void> {
+  private async processUserMessage(
+    jid: string,
+    text: string,
+    messageKey: { remoteJid: string; id: string; fromMe?: boolean },
+  ): Promise<void> {
     if (!this.messageHandler) return
+
+    const socket = this.connectionManager.getSocket()
+
+    // Best-effort UX: read receipt + typing indicator
+    if (socket) {
+      try {
+        await socket.readMessages([messageKey])
+      } catch { /* best-effort */ }
+      try {
+        await socket.sendPresenceUpdate('composing', jid)
+      } catch { /* best-effort */ }
+    }
 
     try {
       const answer = await this.messageHandler(jid, text)
@@ -322,6 +379,12 @@ export class WhatsAppAdapter implements ChannelAdapter {
         await this.send(jid, "I hit an internal error while processing that. Please try again.")
       } catch (sendError) {
         this.options.logger.error({ error: sendError, jid }, "failed to send whatsapp fallback error message")
+      }
+    } finally {
+      if (socket) {
+        try {
+          await socket.sendPresenceUpdate('paused', jid)
+        } catch { /* best-effort */ }
       }
     }
   }

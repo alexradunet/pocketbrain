@@ -33,4 +33,10 @@ describe("install-skill plugin URL parsing", () => {
 
     expect(parsed).toBeNull()
   })
+
+  test("rejects non-https github urls", () => {
+    const parsed = parseGithubTreeUrl("http://github.com/org/repo/tree/main/skills/my-skill")
+
+    expect(parsed).toBeNull()
+  })
 })

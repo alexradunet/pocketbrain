@@ -174,7 +174,7 @@ async function main(): Promise<void> {
         notifyAfterFailures: cfg.heartbeatNotifyAfterFailures,
       },
       {
-        assistant,
+        heartbeatRunner: assistant,
         outboxRepository,
         channelRepository,
         logger,
@@ -232,6 +232,16 @@ async function main(): Promise<void> {
 
   // Setup WhatsApp if enabled
   if (cfg.enableWhatsApp) {
+    logger.info(
+      {
+        pairEnabled: Boolean(cfg.whitelistPairToken),
+        pairMaxFailures: cfg.whatsAppPairMaxFailures,
+        pairFailureWindowMs: cfg.whatsAppPairFailureWindowMs,
+        pairBlockDurationMs: cfg.whatsAppPairBlockDurationMs,
+      },
+      "configured WhatsApp pairing policy",
+    )
+
     // Create shared services
     const rateLimiter = new RateLimiter({ minIntervalMs: cfg.messageRateLimitMs })
     const messageChunker = new MessageChunker({ maxLength: cfg.messageMaxLength })
@@ -250,6 +260,9 @@ async function main(): Promise<void> {
       outboxRepository,
       messageSender,
       pairToken: cfg.whitelistPairToken,
+      pairMaxFailures: cfg.whatsAppPairMaxFailures,
+      pairFailureWindowMs: cfg.whatsAppPairFailureWindowMs,
+      pairBlockDurationMs: cfg.whatsAppPairBlockDurationMs,
       outboxIntervalMs: cfg.outboxIntervalMs,
       outboxRetryBaseDelayMs: cfg.outboxRetryBaseDelayMs,
       connectingTimeoutMs: cfg.connectionTimeoutMs,

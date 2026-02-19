@@ -10,6 +10,9 @@ import { timingSafeEqual } from "node:crypto"
 export interface CommandHandlerOptions {
   pairToken: string | undefined
   logger: Logger
+  pairMaxFailures?: number
+  pairFailureWindowMs?: number
+  pairBlockDurationMs?: number
 }
 
 export interface CommandContext {
@@ -27,9 +30,16 @@ export interface CommandResult {
 
 export class CommandHandler {
   private readonly options: CommandHandlerOptions
+  private readonly pairMaxFailures: number
+  private readonly pairFailureWindowMs: number
+  private readonly pairBlockDurationMs: number
+  private readonly pairFailures = new Map<string, { count: number; windowStartedAt: number; blockedUntil: number }>()
 
   constructor(options: CommandHandlerOptions) {
     this.options = options
+    this.pairMaxFailures = options.pairMaxFailures ?? 5
+    this.pairFailureWindowMs = options.pairFailureWindowMs ?? 5 * 60 * 1000
+    this.pairBlockDurationMs = options.pairBlockDurationMs ?? 15 * 60 * 1000
   }
 
   /**
@@ -39,20 +49,16 @@ export class CommandHandler {
     const { text, jid, isWhitelisted } = context
 
     // Pair command
-    if (text.startsWith("/pair")) {
-      return this.handlePair(text, jid)
+    const pairToken = this.extractPairToken(text)
+    if (pairToken !== null) {
+      return this.handlePair(pairToken, jid)
     }
 
     // Check whitelist for other commands
     if (!isWhitelisted) {
       return {
         handled: true,
-        response: [
-          "Access restricted.",
-          `Your WhatsApp ID: ${jid}`,
-          "Send /pair <token> to whitelist yourself.",
-          "If you don't have a token, ask admin to add you to WHATSAPP_WHITELIST_NUMBERS or DATA_DIR/state.db (whitelist table).",
-        ].join("\n"),
+        response: this.buildAccessRestrictedResponse(jid),
       }
     }
 
@@ -83,8 +89,35 @@ export class CommandHandler {
     return { handled: false }
   }
 
-  private handlePair(text: string, jid: string): CommandResult {
-    const token = text.slice("/pair".length).trim()
+  private extractPairToken(text: string): string | null {
+    const match = text.match(/^\/pair(?:\s+(.+))?$/)
+    if (!match) {
+      return null
+    }
+
+    return match[1]?.trim() ?? ""
+  }
+
+  private buildAccessRestrictedResponse(jid: string): string {
+    const lines = ["Access restricted.", `Your WhatsApp ID: ${jid}`]
+
+    if (this.options.pairToken) {
+      lines.push("Send /pair <token> to whitelist yourself.")
+    } else {
+      lines.push("Pairing is disabled by admin.")
+    }
+
+    lines.push("If you need access, ask admin to add you to the WhatsApp whitelist.")
+    return lines.join("\n")
+  }
+
+  private handlePair(token: string, jid: string): CommandResult {
+    if (this.isPairBlocked(jid)) {
+      return {
+        handled: true,
+        response: "Too many failed pairing attempts. Please wait before trying again.",
+      }
+    }
 
     if (!this.options.pairToken) {
       return {
@@ -105,6 +138,12 @@ export class CommandHandler {
     const providedToken = Buffer.from(token)
     
     if (expectedToken.length !== providedToken.length) {
+      if (this.registerPairFailure(jid)) {
+        return {
+          handled: true,
+          response: "Too many failed pairing attempts. Please wait before trying again.",
+        }
+      }
       return {
         handled: true,
         response: "Invalid pairing token.",
@@ -114,11 +153,19 @@ export class CommandHandler {
     const isValid = timingSafeEqual(expectedToken, providedToken)
     
     if (!isValid) {
+      if (this.registerPairFailure(jid)) {
+        return {
+          handled: true,
+          response: "Too many failed pairing attempts. Please wait before trying again.",
+        }
+      }
       return {
         handled: true,
         response: "Invalid pairing token.",
       }
     }
+
+    this.pairFailures.delete(jid)
 
     this.options.logger.info({ jid }, "whatsapp pairing successful")
     return {
@@ -126,5 +173,48 @@ export class CommandHandler {
       action: "pair",
       payload: jid,
     }
+  }
+
+  private isPairBlocked(jid: string): boolean {
+    const state = this.pairFailures.get(jid)
+    if (!state) {
+      return false
+    }
+
+    const now = Date.now()
+    if (state.blockedUntil > now) {
+      return true
+    }
+
+    if (state.blockedUntil > 0 && state.blockedUntil <= now) {
+      this.pairFailures.delete(jid)
+    }
+
+    return false
+  }
+
+  private registerPairFailure(jid: string): boolean {
+    const now = Date.now()
+    const existing = this.pairFailures.get(jid)
+
+    if (!existing || now - existing.windowStartedAt > this.pairFailureWindowMs) {
+      const blocked = this.pairMaxFailures <= 1
+      this.pairFailures.set(jid, {
+        count: 1,
+        windowStartedAt: now,
+        blockedUntil: blocked ? now + this.pairBlockDurationMs : 0,
+      })
+      return blocked
+    }
+
+    const nextCount = existing.count + 1
+    const blocked = nextCount >= this.pairMaxFailures
+    this.pairFailures.set(jid, {
+      count: nextCount,
+      windowStartedAt: existing.windowStartedAt,
+      blockedUntil: blocked ? now + this.pairBlockDurationMs : 0,
+    })
+
+    return blocked
   }
 }

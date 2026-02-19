@@ -3,11 +3,13 @@
  * Throttles message sending per user.
  */
 
+import type { ThrottlePort } from "../../core/ports/throttle"
+
 export interface RateLimiterOptions {
   minIntervalMs: number
 }
 
-export class RateLimiter {
+export class RateLimiter implements ThrottlePort {
   private lastSendTime: Map<string, number> = new Map()
   private queueByUser: Map<string, Promise<void>> = new Map()
   private readonly options: RateLimiterOptions
