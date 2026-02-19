@@ -2,32 +2,13 @@
 
 OpenCode skill equivalent: `pocketbrain-dev-setup`.
 
-This guide sets up a contributor environment from repository root.
+This is a short entry point. The canonical developer setup workflow lives in runbooks.
 
-## Prerequisites
+## Canonical references
 
-- Debian/Ubuntu/macOS/Linux shell
-- Bun 1.3.x
-- Git
+- Developer setup workflow: `docs/runbooks/dev-setup.md`
+- Skills catalog: `docs/setup/agent-skills.md`
 
-## Setup
+## Quick pointer
 
-```bash
-make setup-dev
-```
-
-Or manually:
-
-```bash
-bun install
-cp .env.example .env
-bun run setup
-```
-
-## Development commands
-
-```bash
-make dev
-make test
-make build
-```
+Use `docs/runbooks/dev-setup.md` for prerequisites, setup, validation commands, and troubleshooting.

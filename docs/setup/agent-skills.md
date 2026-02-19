@@ -1,6 +1,6 @@
 # Agent Skills Catalog
 
-PocketBrain externalizes repeatable operational workflows as skills so OpenCode agents can load them on demand.
+PocketBrain externalizes repeatable workflows as OpenCode skills.
 
 ## Skill location
 
@@ -18,11 +18,13 @@ PocketBrain externalizes repeatable operational workflows as skills so OpenCode 
 
 ## Usage
 
-In OpenCode, ask explicitly for the skill you want to apply, for example:
+Ask explicitly for the skill to apply, for example:
 
 - "Use `pocketbrain-runtime-deploy` to deploy this host"
 - "Use `pocketbrain-release-ops` for this release"
 - "Use `pocketbrain-incident-response` to triage this outage"
+
+Each skill references canonical runbooks in `docs/runbooks/`.
 
 ## Authoring rules
 

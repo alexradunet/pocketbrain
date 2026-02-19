@@ -1,0 +1,68 @@
+# Runtime Deploy Runbook
+
+Use this runbook for deploying or redeploying PocketBrain runtime on Debian.
+
+## 1) Install prerequisites
+
+```bash
+make setup-runtime
+```
+
+## 2) Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Required minimum:
+
+```dotenv
+ENABLE_WHATSAPP=true
+DATA_DIR=.data
+```
+
+Optional:
+
+```dotenv
+WHITELIST_PAIR_TOKEN=your-secure-token
+OPENCODE_MODEL=provider/model
+WHATSAPP_AUTH_DIR=.data/whatsapp-auth
+```
+
+## 3) Start runtime
+
+```bash
+bun install
+make start
+```
+
+## 4) Verify health
+
+```bash
+make logs
+```
+
+## 5) Configure always-on runtime
+
+- Use `docs/deploy/systemd/pocketbrain.service`.
+- Enable service on boot:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now pocketbrain
+sudo systemctl status pocketbrain
+```
+
+## 6) Update workflow
+
+```bash
+git pull
+bun install
+make start
+```
+
+## 7) Managed release
+
+```bash
+make release TAG=$(git rev-parse --short HEAD)
+```

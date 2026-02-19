@@ -112,7 +112,7 @@ Vault API surface is in `src/vault/vault-service.ts`; tools are exposed via `src
 flowchart TD
   Tool[vault_* tools]
   Tool --> VS[VaultService]
-  VS --> FS[Filesystem under data/vault]
+  VS --> FS[Filesystem under .data/vault]
   VS --> Links[markdown-links.ts]
   VS --> Tags[markdown-tags.ts]
 

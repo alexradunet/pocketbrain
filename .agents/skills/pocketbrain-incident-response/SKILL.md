@@ -10,44 +10,17 @@ metadata:
 ## What I do
 
 - Triage incident severity
-- Run first-10-minute diagnostics
+- Run first-response diagnostics
 - Execute scenario-based mitigation and recovery verification
 
 ## When to use me
 
 Use this during runtime outages, degraded behavior, or suspected data integrity incidents.
 
-## First 10 minutes
+## Canonical references
 
-1. Confirm impacted runtime process (`pocketbrain`).
-2. Capture state:
-
-```bash
-make logs
-```
-
-3. Freeze risky manual changes until root cause is identified.
-
-## Scenario playbooks
-
-### PocketBrain unhealthy
-- inspect startup and health logs
-- validate env/config
-- rollback with `make release TAG=<last-known-good-tag>` when needed
-
-### Tailscale disconnected
-- validate `TS_AUTHKEY`
-- restart runtime with corrected key
-- verify `tailscale status` on host
-
-### SQLite/state corruption
-- preserve current `.data/` snapshot for forensics
-- restore known-good state via VPS/provider backup workflow
-- verify recovery health and behavior
-
-### WhatsApp reconnect loop
-- validate auth directory persistence and permissions
-- rotate/re-pair auth state if stale
+- Primary workflow: `docs/runbooks/incident-response.md`
+- Related recovery/deploy flow: `docs/runbooks/runtime-deploy.md`
 
 ## Recovery verification
 

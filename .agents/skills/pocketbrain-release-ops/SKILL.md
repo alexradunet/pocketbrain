@@ -10,38 +10,17 @@ metadata:
 ## What I do
 
 - Apply release checklist gates
-- Run managed release workflow
-- Validate runtime health and post-deploy behavior
+- Execute the canonical release workflow
+- Verify post-release health and behavior
 
 ## When to use me
 
 Use this for every production or staging release candidate.
 
-## Canonical workflow
+## Canonical references
 
-1. Pre-release checks:
-
-```bash
-bun run typecheck
-bun run test:processes
-bun run test
-bun run build
-```
-
-2. Deploy release:
-
-```bash
-make release TAG=$(git rev-parse --short HEAD)
-```
-
-3. Validate:
-- `pocketbrain` and `syncthing` are healthy
-- startup logs include expected version/git SHA
-- one end-to-end command path works (`/new` or `/remember`)
-
-4. Rollback readiness:
-- identify previous known-good tag
-- ensure auto-rollback path remains available in `scripts/ops/release.sh`
+- Primary workflow: `docs/runbooks/release-ops.md`
+- Deploy context: `docs/runbooks/runtime-deploy.md`
 
 ## Release record
 

@@ -9,54 +9,22 @@ metadata:
 
 ## What I do
 
-- Install runtime prerequisites on Debian
-- Configure runtime environment
-- Start and verify PocketBrain and Syncthing services
-- Hand off update and health commands
+- Execute the canonical runtime deployment workflow on Debian
+- Verify startup and health checks
+- Hand off stable update/log commands
 
 ## When to use me
 
 Use this for first-time runtime deployment or redeployment on a server.
 
-## Canonical workflow
+## Canonical references
 
-1. Install prerequisites:
-
-```bash
-make setup-runtime
-```
-
-2. Configure environment:
-
-```bash
-cp .env.example .env
-```
-
-Set at minimum:
-
-```dotenv
-TS_AUTHKEY=tskey-auth-...
-```
-
-3. Start runtime:
-
-```bash
-make up
-```
-
-4. Verify health:
-
-```bash
-make logs
-```
-
-5. Confirm always-on behavior:
-- Runtime service enabled on boot
-- Runtime process restarts on failure
+- Primary workflow: `docs/runbooks/runtime-deploy.md`
+- First-time install context: `docs/runbooks/runtime-install.md`
 
 ## Operational handoff
 
 ```bash
 make logs
-git pull && bun install && bun run start
+git pull && bun install && make start
 ```

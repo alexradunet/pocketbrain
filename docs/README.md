@@ -1,25 +1,21 @@
-# Documentation 📚
+# Documentation
 
-Project documentation is organized by intent:
+All commands assume execution from repository root.
 
-- 🏗️ `architecture/` repository and system design
-- 🛠️ `setup/` developer onboarding and local workflows
-- 🚀 `deploy/` runtime deployment guides
-- 🧯 `runbooks/` operational procedures and incident response
+## Canonical Operations
 
-All commands in docs assume execution from repository root.
+- Runbooks index: `docs/runbooks/README.md`
+- Developer setup entry point: `docs/setup/developer-onboarding.md`
+- Runtime deploy entry point: `docs/deploy/debian-runtime-zero-to-deploy.md`
+- VPS hardening guide: `docs/deploy/secure-vps-and-run-pocketbrain.md`
 
-## Start Here
+## Architecture
 
-- Architecture overview (with diagrams): `docs/architecture/system-overview.md`
-- Coding architecture (modules/classes/flows): `docs/architecture/coding-architecture.md`
-- Repository contract: `docs/architecture/repository-structure.md`
+- System overview: `docs/architecture/system-overview.md`
+- Coding architecture: `docs/architecture/coding-architecture.md`
+- Repository structure contract: `docs/architecture/repository-structure.md`
 - Security threat model: `docs/architecture/security-threat-model.md`
 
-## Agent Skills 🤖
+## Skills
 
-Operational knowledge is externalized as OpenCode-compatible skills under:
-
-- `.agents/skills/*/SKILL.md`
-
-See `docs/setup/agent-skills.md` for the current skill catalog and usage guidance.
+- Catalog and usage: `docs/setup/agent-skills.md`

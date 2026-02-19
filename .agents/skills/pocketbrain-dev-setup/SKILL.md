@@ -9,46 +9,17 @@ metadata:
 
 ## What I do
 
-- Prepare local prerequisites for development
-- Install dependencies and initialize local configuration
-- Validate the basic dev workflow (`dev`, `test`, `build`)
+- Guide contributor machine setup and validation
+- Keep onboarding aligned with canonical local workflow
 
 ## When to use me
 
 Use this when onboarding a developer machine or fixing a broken local setup.
 
-## Canonical workflow
+## Canonical references
 
-1. Run setup:
-
-```bash
-make setup-dev
-```
-
-2. Ensure environment file exists:
-
-```bash
-cp .env.example .env
-```
-
-3. Run CLI onboarding if needed:
-
-```bash
-bun run setup
-```
-
-4. Validate developer commands:
-
-```bash
-make test
-make build
-```
-
-5. Start local dev runtime:
-
-```bash
-make dev
-```
+- Primary workflow: `docs/runbooks/dev-setup.md`
+- Additional context: `docs/setup/developer-onboarding.md`
 
 ## Troubleshooting
 

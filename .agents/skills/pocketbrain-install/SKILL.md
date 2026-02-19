@@ -15,45 +15,18 @@ Use this for end-to-end first install on a Debian host.
 
 1. Bun runtime installed
 2. `.env` created with required runtime values
-3. Runtime stack starts successfully
+3. Runtime starts successfully
 4. `pocketbrain` starts cleanly
 5. Operator receives handoff commands for logs and updates
 
-## Canonical workflow
+## Canonical references
 
-1. Install runtime prerequisites:
-
-```bash
-make setup-runtime
-```
-
-2. Configure environment:
-
-```bash
-cp .env.example .env
-```
-
-Set required value:
-
-```dotenv
-TS_AUTHKEY=tskey-auth-...
-```
-
-3. Deploy runtime:
-
-```bash
-make up
-```
-
-4. Verify:
-
-```bash
-make logs
-```
+- Install workflow: `docs/runbooks/runtime-install.md`
+- Deploy workflow details: `docs/runbooks/runtime-deploy.md`
 
 ## Operational handoff
 
 ```bash
 make logs
-git pull && bun install && bun run start
+git pull && bun install && make start
 ```

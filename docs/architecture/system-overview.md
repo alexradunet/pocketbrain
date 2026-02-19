@@ -4,9 +4,9 @@ This page explains how PocketBrain works end-to-end, with diagrams and a fast me
 
 ## 1) Big Picture
 
-- 🎯 Goal: one assistant runtime with persistent memory + synced markdown vault.
-- 🧱 Style: dependency-injected core, adapter-based infrastructure, SQLite state.
-- 📦 Runtime services: `pocketbrain`, `syncthing`, `tailscale`.
+- Goal: one assistant runtime with persistent memory and a local markdown vault.
+- Style: dependency-injected core, adapter-based infrastructure, SQLite state.
+- Runtime service: `pocketbrain`.
 
 ```mermaid
 flowchart LR
@@ -16,8 +16,7 @@ flowchart LR
   AC --> OC[OpenCode Runtime]
   AC --> DB[(SQLite state.db)]
   AC --> VP[Vault Plugin]
-  VP --> Vault[(data/vault Markdown)]
-  Syncthing[Syncthing 🔄] <--> Vault
+  VP --> Vault[(.data/vault Markdown)]
 ```
 
 ## 2) Request Flow (Normal Chat)
@@ -46,9 +45,9 @@ sequenceDiagram
 
 ## 3) Data Ownership Model
 
-- 🗂️ `data/vault/` = your long-lived knowledge (Markdown, editor-friendly).
-- 🧾 `data/state.db` = runtime/application state (sessions, memory, whitelist, outbox, heartbeat tasks).
-- 🔐 Clear boundary: content stays in files, operational state stays in SQLite.
+- `.data/vault/` = long-lived knowledge files (Markdown).
+- `.data/state.db` = runtime state (sessions, memory, whitelist, outbox, heartbeat tasks).
+- Content stays in files, operational state stays in SQLite.
 
 ## 4) Core Components
 
@@ -92,12 +91,12 @@ flowchart TB
   AC --> OC
 ```
 
-## 6) Why This Architecture Is Practical ✅
+## 6) Why This Architecture Is Practical
 
-- 😌 Easy to reason about: composition root + explicit dependencies.
-- 🧪 Testable: core depends on ports, tests can mock adapters.
-- 📝 PKM-friendly: Markdown vault remains tool-agnostic (Obsidian/VSCode).
-- 🔁 Reliable operations: outbox retries + heartbeat retries + WAL SQLite.
+- Easy to reason about: composition root + explicit dependencies.
+- Testable: core depends on ports, tests can mock adapters.
+- Markdown vault remains tool-agnostic.
+- Reliable operations: outbox retries + heartbeat retries + WAL SQLite.
 
 ## 7) Where To Read Next
 

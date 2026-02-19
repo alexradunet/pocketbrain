@@ -13,23 +13,10 @@ metadata:
 - Validate expected workflow behavior with and without secret
 - Provide quick troubleshooting steps for skipped/failing E2E
 
-## Required CI secret
+## Canonical references
 
-- Secret name: `OPENCODE_MODEL`
-- Format: `provider/model`
-- Example: `openai/gpt-5`
-
-## GitHub setup
-
-1. Open repository settings -> Secrets and variables -> Actions.
-2. Add secret `OPENCODE_MODEL`.
-3. Re-run a PR workflow.
-4. Confirm `Run OpenCode E2E test (optional)` executes in `.github/workflows/quality-gates.yml`.
-
-## Validation
-
-- Without secret: E2E step is skipped.
-- With secret: E2E step runs `bun run test:opencode:e2e` and must pass.
+- Primary workflow: `docs/runbooks/ci-e2e.md`
+- CI pipeline file: `.github/workflows/quality-gates.yml`
 
 ## Troubleshooting
 

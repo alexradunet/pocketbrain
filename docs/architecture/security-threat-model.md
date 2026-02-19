@@ -3,7 +3,7 @@
 ## Scope
 
 - Runtime application in `src/`
-- Runtime data in `data/` (`DATA_DIR`)
+- Runtime data in `.data/` (`DATA_DIR`)
 - Runtime process managed by Bun/service manager
 - Operational scripts in `scripts/ops/` and provider snapshot tooling
 
@@ -12,12 +12,12 @@
 - User conversation data and memory facts (`state.db` tables: `memory`, `kv`, `outbox`, `whitelist`).
 - WhatsApp auth state (`DATA_DIR/whatsapp-auth`).
 - Vault content (`DATA_DIR/vault`).
-- Runtime credentials (`TS_AUTHKEY`, `WHITELIST_PAIR_TOKEN`, provider auth via OpenCode config).
+- Runtime credentials (`WHITELIST_PAIR_TOKEN`, provider auth via OpenCode config).
 
 ## Trust Boundaries
 
-1. External network -> WhatsApp/Tailscale edge.
-2. Runtime process -> host filesystem (`data/`).
+1. External network -> WhatsApp edge.
+2. Runtime process -> host filesystem (`.data/`).
 3. Operator shell -> scripts that control release/runtime + VPS/provider backup tooling.
 4. OpenCode runtime -> model provider endpoints.
 
@@ -68,7 +68,7 @@
 - Threat: system reports healthy while key dependencies are broken.
 - Current controls:
   - Runtime startup checks and structured logs.
-  - Release script waits for healthy services.
+  - Release workflow runs preflight validation commands.
 - Required controls:
   - Keep health checks strict and review when startup logic changes.
   - Include rollback-health validation on every release.
@@ -78,7 +78,7 @@
 | ID | Risk | Current Posture | Residual Level | Mitigation Owner |
 |---|---|---|---|---|
 | RR-01 | WhatsApp provider/runtime external dependency outage | No local failover | Medium | Operations |
-| RR-02 | Human error in manual restore selection | Scripted restore, no guardrail by environment | Medium | Operations |
+| RR-02 | Human error in VPS snapshot/restore selection | Manual provider workflow | Medium | Operations |
 | RR-03 | Secret rotation lag | Policy added, enforcement manual | Medium | Security/Operations |
 | RR-04 | E2E model-path test skipped when secret missing | CI has optional gate | Low-Medium | DevOps |
 

@@ -1,6 +1,6 @@
 # Scripts
 
-Operational and setup scripts for PocketBrain.
+Executable helper scripts. `make` at repository root is the canonical interface.
 
 ## Layout
 
@@ -11,5 +11,3 @@ Operational and setup scripts for PocketBrain.
   - `runtime-logs.sh`
   - `runtime-shell.sh`
   - `release.sh`
-
-Use `make` targets at repository root as the primary command interface.

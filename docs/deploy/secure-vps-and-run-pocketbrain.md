@@ -1,6 +1,6 @@
 # Secure VPS and Run PocketBrain
 
-Use this guide to harden a fresh Debian VPS and run PocketBrain as an always-on Bun service.
+Use this guide to harden a fresh Debian VPS. Runtime deploy steps are canonicalized in runbooks.
 
 ## 1) Baseline host security
 
@@ -67,34 +67,7 @@ cd pocketbrain
 make setup-runtime
 ```
 
-## 6) Configure PocketBrain
-
-```bash
-cp .env.example .env
-```
-
-Set values appropriate for your environment. Common starting point:
-
-```dotenv
-APP_NAME=pocketbrain
-LOG_LEVEL=info
-ENABLE_WHATSAPP=true
-WHITELIST_PAIR_TOKEN=change-me
-DATA_DIR=.data
-WHATSAPP_AUTH_DIR=.data/whatsapp-auth
-```
-
-## 7) Initialize and run
-
-```bash
-bun install
-bun run setup
-bun run start
-```
-
-For ongoing operation, run under systemd.
-
-## 8) Run as a systemd service
+## 6) Run as a systemd service
 
 Use the template shipped in the repository:
 
@@ -124,17 +97,7 @@ Stream logs:
 make logs
 ```
 
-## 9) Update workflow
-
-```bash
-git pull
-bun install
-bun run test
-bun run build
-sudo systemctl restart pocketbrain
-```
-
-## 10) Backup and restore drill
+## 7) Backup and restore drill
 
 Use your VPS/provider snapshot backup workflow for this drill:
 
@@ -145,3 +108,11 @@ Use your VPS/provider snapshot backup workflow for this drill:
    - `make logs`
 
 Run this drill regularly and keep off-host backup retention enabled.
+
+## 8) Runtime deployment and updates
+
+Use canonical runbooks:
+
+- `docs/runbooks/runtime-install.md`
+- `docs/runbooks/runtime-deploy.md`
+- `docs/runbooks/release-ops.md`
