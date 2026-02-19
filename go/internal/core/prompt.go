@@ -3,16 +3,12 @@ package core
 import (
 	"fmt"
 	"strings"
-
-	"github.com/pocketbrain/pocketbrain/internal/config"
 )
 
 // PromptBuilderOptions configures the prompt builder.
 type PromptBuilderOptions struct {
 	HeartbeatIntervalMinutes int
-	VaultEnabled             bool
-	VaultProfile             string
-	VaultFolders             config.VaultFolders
+	WorkspaceEnabled         bool
 }
 
 // PromptBuilder constructs system prompts for the assistant.
@@ -49,7 +45,7 @@ func (b *PromptBuilder) BuildAgentSystemPrompt(memoryEntries []MemoryEntry) stri
 		"",
 		fmt.Sprintf("Heartbeat interval: %d minutes", b.opts.HeartbeatIntervalMinutes),
 		"",
-		b.buildVaultInstructions(),
+		b.buildWorkspaceInstructions(),
 		"",
 		"Memory rules:",
 		"- Memory is durable user memory only (stable preferences, profile, constraints, recurring goals).",
@@ -111,64 +107,46 @@ func (b *PromptBuilder) BuildProactiveNotificationPrompt() string {
 
 // buildRuntimeBoundaryInstructions returns mode-specific capability constraints.
 func (b *PromptBuilder) buildRuntimeBoundaryInstructions() []string {
-	if !b.opts.VaultEnabled {
+	if !b.opts.WorkspaceEnabled {
 		return []string{
-			"Runtime mode: chat-only without vault access.",
+			"Runtime mode: chat-only without workspace access.",
 			"Do not claim to run host or system commands.",
 		}
 	}
 	return []string{
-		"Runtime mode: vault-only.",
+		"Runtime mode: workspace-only.",
 		"You do not have shell, host, or system command execution capabilities.",
 		"If a user requests host-level changes, explain that an operator must perform them outside chat.",
 	}
 }
 
-// buildVaultInstructions returns vault access instructions, or an empty string
-// when vault access is disabled.
-func (b *PromptBuilder) buildVaultInstructions() string {
-	if !b.opts.VaultEnabled {
+// buildWorkspaceInstructions returns workspace access instructions, or an empty
+// string when workspace access is disabled.
+func (b *PromptBuilder) buildWorkspaceInstructions() string {
+	if !b.opts.WorkspaceEnabled {
 		return ""
 	}
 
 	lines := []string{
-		"VAULT ACCESS:",
-		"You have access to a personal knowledge vault organized as markdown files.",
-		"Do not assume a fixed folder taxonomy.",
-		"Adapt to each user's existing vault structure and naming conventions.",
+		"WORKSPACE ACCESS:",
+		"You have access to a file workspace exposed as a WebDAV directory via Taildrive.",
+		"Files are plain markdown and other document formats.",
+		"Adapt to the user's existing directory structure and naming conventions.",
 		"",
-		"Vault tools available:",
-		"- vault_read: Read any file by path",
-		"- vault_write: Create or overwrite a file",
-		"- vault_append: Append to a file (good for daily notes)",
-		"- vault_list: List files in a folder",
-		"- vault_search: Search files by name",
-		"- vault_move: Move/rename files between folders",
-		"- vault_backlinks: Find notes linking to a wiki-link target",
-		"- vault_tag_search: Find notes containing a tag",
-		"- vault_daily: Access today's daily note",
-		"- vault_daily_track: Set metrics in today's daily tracking section",
-		"- vault_obsidian_config: Read .obsidian settings (daily folder, new note location, attachment folder, link style)",
-		"- vault_stats: Get vault statistics",
+		"Workspace tools available:",
+		"- workspace_read: Read any file by path",
+		"- workspace_write: Create or overwrite a file",
+		"- workspace_append: Append to a file",
+		"- workspace_list: List files in a folder",
+		"- workspace_search: Search files by name, content, or both",
+		"- workspace_move: Move/rename files between folders",
+		"- workspace_stats: Get workspace statistics",
 		"",
-	}
-
-	profile := strings.TrimSpace(b.opts.VaultProfile)
-	if profile != "" {
-		lines = append(lines, "Detected vault preferences and conventions:", profile, "")
-	}
-
-	lines = append(lines,
-		"When using the vault:",
-		"- After a vault is imported or first connected, call vault_obsidian_config to verify note/attachment locations",
-		"- If config is missing or inconsistent, ask the user to confirm daily notes folder, default new note folder, and attachment folder",
-		"- Before major write operations, inspect the vault (for example with vault_list and vault_search) to mirror existing organization",
-		"- Prefer linking between notes using relative paths",
-		"- Use daily notes for timestamped entries and quick captures",
-		"- Use vault_daily_track for structured daily metrics (mood, sleep, energy, focus, etc)",
-		"- Move items from inbox/ to appropriate folders after processing",
+		"When using the workspace:",
+		"- Before major write operations, inspect the workspace with workspace_list and workspace_search to mirror existing organization",
+		"- Prefer relative paths when linking between notes",
 		"- Archive completed projects instead of deleting",
-	)
+	}
 
 	return strings.Join(lines, "\n")
 }

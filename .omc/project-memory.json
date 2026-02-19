@@ -1,0 +1,250 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771541139122,
+  "projectRoot": "/home/debian/pocketbrain",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      },
+      {
+        "name": "C/C++",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "Makefile"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "bun --watch src/index.ts",
+      "start": "bun src/index.ts",
+      "setup": "bun src/cli/setup.ts",
+      "typecheck": "tsc --noEmit",
+      "test": "bun test tests/**/*.test.ts",
+      "test:core": "bun test tests/core",
+      "test:adapters": "bun test tests/adapters",
+      "test:scheduler": "bun test tests/scheduler",
+      "test:store": "bun test tests/store",
+      "test:vault": "bun test tests/vault",
+      "test:processes": "bun run test:core && bun run test:adapters && bun run test:scheduler && bun run test:store && bun run test:vault",
+      "build": "bun build --compile --minify --outfile /tmp/pocketbrain-build ./src/index.ts",
+      "test:opencode:e2e": "bun test tests/opencode.e2e.ts"
+    }
+  },
+  "conventions": {
+    "namingStyle": "camelCase",
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "src",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1771541139088,
+      "keyFiles": [
+        "README.md"
+      ]
+    },
+    "go": {
+      "path": "go",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1771541139091,
+      "keyFiles": [
+        "go.mod",
+        "go.sum",
+        "main.go"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 2,
+      "lastAccessed": 1771541139105,
+      "keyFiles": [
+        "config.ts",
+        "index.ts"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 1,
+      "lastAccessed": 1771541139107,
+      "keyFiles": [
+        "opencode.e2e.ts"
+      ]
+    },
+    "src/lib": {
+      "path": "src/lib",
+      "purpose": "Library code",
+      "fileCount": 5,
+      "lastAccessed": 1771541139118,
+      "keyFiles": [
+        "markdown-links.ts",
+        "markdown-tags.ts",
+        "retry.ts"
+      ]
+    },
+    "tests/lib": {
+      "path": "tests/lib",
+      "purpose": "Library code",
+      "fileCount": 2,
+      "lastAccessed": 1771541139118,
+      "keyFiles": [
+        "markdown-links.test.ts",
+        "markdown-tags.test.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "go/internal/app/app.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541273030,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/vault/service.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541273625,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/ai/tools_vault.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541274058,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/config/config.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541274357,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/core/prompt.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541274914,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/core/ports.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541275305,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/ai/tools.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541275842,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/ai/provider.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541276182,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/ai/tools_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541281077,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/ai/tools_memory.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541281509,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/ai/tools_channel.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541281984,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/vault/markdown.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541282265,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/config/config_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541282781,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/vault/service_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541283434,
+      "type": "file"
+    },
+    {
+      "path": "go/go.mod",
+      "accessCount": 1,
+      "lastAccessed": 1771541283787,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/core/session.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541284284,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/workspace/workspace_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541357345,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/workspace/workspace.go",
+      "accessCount": 1,
+      "lastAccessed": 1771541400084,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

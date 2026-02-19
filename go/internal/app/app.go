@@ -12,8 +12,9 @@ import (
 	"github.com/pocketbrain/pocketbrain/internal/core"
 	"github.com/pocketbrain/pocketbrain/internal/scheduler"
 	"github.com/pocketbrain/pocketbrain/internal/store"
+	"github.com/pocketbrain/pocketbrain/internal/taildrive"
 	"github.com/pocketbrain/pocketbrain/internal/tui"
-	"github.com/pocketbrain/pocketbrain/internal/vault"
+	"github.com/pocketbrain/pocketbrain/internal/workspace"
 )
 
 // Run is the composition root. It wires all dependencies and starts the app.
@@ -110,21 +111,16 @@ func Run(headless bool) error {
 		logger.Warn("no heartbeat tasks configured; add tasks via SQL: INSERT INTO heartbeat_tasks (task) VALUES ('your task')")
 	}
 
-	// --- Phase 2: Vault + AI + Assistant ---
+	// --- Phase 2: Workspace + AI + Assistant ---
 
-	// Initialize vault service.
-	var vaultService *vault.Service
-	if cfg.VaultEnabled {
-		vaultService = vault.New(vault.Options{
-			VaultPath:       cfg.VaultPath,
-			DailyNoteFormat: cfg.DailyNoteFormat,
-			Folders:         cfg.VaultFolders,
-			Logger:          logger,
-		})
-		if err := vaultService.Initialize(); err != nil {
-			return fmt.Errorf("vault: %w", err)
+	// Initialize workspace service.
+	var workspaceService *workspace.Workspace
+	if cfg.WorkspaceEnabled {
+		workspaceService = workspace.New(cfg.WorkspacePath, logger)
+		if err := workspaceService.Initialize(); err != nil {
+			return fmt.Errorf("workspace: %w", err)
 		}
-		logger.Info("vault initialized", "path", cfg.VaultPath)
+		logger.Info("workspace initialized", "path", cfg.WorkspacePath)
 	}
 
 	// Create AI provider (stub until Fantasy is wired).
@@ -132,8 +128,8 @@ func Run(headless bool) error {
 
 	// Register tool registry.
 	toolRegistry := ai.NewRegistry()
-	if vaultService != nil {
-		ai.RegisterVaultTools(toolRegistry, vaultService)
+	if workspaceService != nil {
+		ai.RegisterWorkspaceTools(toolRegistry, workspaceService)
 	}
 	ai.RegisterMemoryTools(toolRegistry, memoryRepo)
 	ai.RegisterChannelTools(toolRegistry, channelRepo, outboxRepo)
@@ -145,8 +141,7 @@ func Run(headless bool) error {
 	// Create prompt builder.
 	promptBuilder := core.NewPromptBuilder(core.PromptBuilderOptions{
 		HeartbeatIntervalMinutes: cfg.HeartbeatIntervalMinutes,
-		VaultEnabled:             cfg.VaultEnabled,
-		VaultFolders:             cfg.VaultFolders,
+		WorkspaceEnabled:         cfg.WorkspaceEnabled,
 	})
 
 	// Create assistant core.
@@ -167,8 +162,30 @@ func Run(headless bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	shutdown := newShutdown(logger, cancel, db)
 
-	if vaultService != nil {
-		shutdown.addCloser(vaultService.Stop)
+	if workspaceService != nil {
+		shutdown.addCloser(func() { _ = workspaceService.Stop() })
+	}
+
+	// --- Phase 5: Taildrive file server ---
+	if cfg.TaildriveEnabled && workspaceService != nil {
+		tdSvc, err := taildrive.New(taildrive.Config{
+			Enabled:   true,
+			ShareName: cfg.TaildriveShareName,
+			AutoShare: cfg.TaildriveAutoShare,
+			RootDir:   workspaceService.RootPath(),
+			Logger:    logger,
+		})
+		if err != nil {
+			return fmt.Errorf("taildrive: %w", err)
+		}
+		if err := tdSvc.Start(); err != nil {
+			return fmt.Errorf("taildrive start: %w", err)
+		}
+		shutdown.addCloser(func() { _ = tdSvc.Stop() })
+		logger.Info("taildrive file server ready",
+			"addr", tdSvc.Addr(),
+			"shareName", cfg.TaildriveShareName,
+		)
 	}
 
 	// Wire and start the heartbeat scheduler (assistant implements HeartbeatRunner).

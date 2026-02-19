@@ -8,17 +8,6 @@ import (
 	"strings"
 )
 
-// VaultFolders maps logical folder names to vault-relative paths.
-type VaultFolders struct {
-	Inbox     string
-	Daily     string
-	Journal   string
-	Projects  string
-	Areas     string
-	Resources string
-	Archive   string
-}
-
 // Config holds all application configuration.
 type Config struct {
 	AppName  string
@@ -65,11 +54,9 @@ type Config struct {
 	TaildriveShareName string
 	TaildriveAutoShare bool
 
-	// Vault / PKM
-	VaultPath          string
-	VaultEnabled       bool
-	VaultFolders       VaultFolders
-	DailyNoteFormat    string
+	// Workspace (files exposed via Taildrive)
+	WorkspacePath    string
+	WorkspaceEnabled bool
 
 	// Derived paths
 	PocketBrainHome string
@@ -83,17 +70,22 @@ func Load() (*Config, error) {
 	}
 
 	dataDir := resolvePath(cwd, envStr("DATA_DIR", ".data"))
-	vaultEnabled := envBool("VAULT_ENABLED", true)
-	vaultPathRaw := strings.TrimSpace(os.Getenv("VAULT_PATH"))
 
-	var vaultPath string
-	if vaultPathRaw != "" {
-		vaultPath = resolvePath(cwd, vaultPathRaw)
-	} else {
-		vaultPath = filepath.Join(dataDir, "vault")
+	// Workspace path: WORKSPACE_PATH > VAULT_PATH (compat) > default
+	workspaceEnabled := envBool("WORKSPACE_ENABLED", envBool("VAULT_ENABLED", true))
+	workspacePathRaw := strings.TrimSpace(os.Getenv("WORKSPACE_PATH"))
+	if workspacePathRaw == "" {
+		workspacePathRaw = strings.TrimSpace(os.Getenv("VAULT_PATH"))
 	}
 
-	pocketBrainHome := filepath.Join(vaultPath, "99-system", "99-pocketbrain")
+	var workspacePath string
+	if workspacePathRaw != "" {
+		workspacePath = resolvePath(cwd, workspacePathRaw)
+	} else {
+		workspacePath = filepath.Join(dataDir, "workspace")
+	}
+
+	pocketBrainHome := filepath.Join(workspacePath, "99-system", "99-pocketbrain")
 	if v := strings.TrimSpace(os.Getenv("POCKETBRAIN_HOME")); v != "" {
 		pocketBrainHome = resolvePath(cwd, v)
 	}
@@ -104,8 +96,6 @@ func Load() (*Config, error) {
 	} else {
 		waAuthDir = resolvePath(cwd, waAuthDir)
 	}
-
-	daily := envStr("VAULT_FOLDER_DAILY", "daily")
 
 	cfg := &Config{
 		AppName:  envStr("APP_NAME", "pocketbrain"),
@@ -141,21 +131,11 @@ func Load() (*Config, error) {
 		WhatsAppWhitelistNumbers:    parsePhoneWhitelist(os.Getenv("WHATSAPP_WHITELIST_NUMBERS"), os.Getenv("WHATSAPP_WHITELIST_NUMBER")),
 
 		TaildriveEnabled:   envBool("TAILDRIVE_ENABLED", false),
-		TaildriveShareName: envStr("TAILDRIVE_SHARE_NAME", "vault"),
+		TaildriveShareName: envStr("TAILDRIVE_SHARE_NAME", "workspace"),
 		TaildriveAutoShare: envBool("TAILDRIVE_AUTO_SHARE", true),
 
-		VaultPath:       vaultPath,
-		VaultEnabled:    vaultEnabled,
-		DailyNoteFormat: envStr("DAILY_NOTE_FORMAT", "YYYY-MM-DD"),
-		VaultFolders: VaultFolders{
-			Inbox:     envStr("VAULT_FOLDER_INBOX", "inbox"),
-			Daily:     daily,
-			Journal:   daily,
-			Projects:  envStr("VAULT_FOLDER_PROJECTS", "projects"),
-			Areas:     envStr("VAULT_FOLDER_AREAS", "areas"),
-			Resources: envStr("VAULT_FOLDER_RESOURCES", "resources"),
-			Archive:   envStr("VAULT_FOLDER_ARCHIVE", "archive"),
-		},
+		WorkspacePath:    workspacePath,
+		WorkspaceEnabled: workspaceEnabled,
 
 		PocketBrainHome: pocketBrainHome,
 	}
@@ -170,8 +150,8 @@ func (c *Config) validate() error {
 	if c.EnableWhatsApp && c.WhatsAppAuthDir == "" {
 		return fmt.Errorf("WHATSAPP_AUTH_DIR cannot be empty when ENABLE_WHATSAPP=true")
 	}
-	if c.VaultEnabled && c.VaultPath == "" {
-		return fmt.Errorf("VAULT_PATH cannot be empty when VAULT_ENABLED=true")
+	if c.WorkspaceEnabled && c.WorkspacePath == "" {
+		return fmt.Errorf("WORKSPACE_PATH cannot be empty when WORKSPACE_ENABLED=true")
 	}
 	if c.HeartbeatIntervalMinutes < 1 {
 		return fmt.Errorf("HEARTBEAT_INTERVAL_MINUTES must be >= 1")

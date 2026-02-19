@@ -14,9 +14,8 @@ func clearEnv() {
 		"WHATSAPP_PAIR_FAILURE_WINDOW_MS", "WHATSAPP_PAIR_BLOCK_DURATION_MS",
 		"WHATSAPP_WHITELIST_NUMBERS", "WHATSAPP_WHITELIST_NUMBER",
 		"TAILDRIVE_ENABLED", "TAILDRIVE_SHARE_NAME", "TAILDRIVE_AUTO_SHARE",
-		"VAULT_PATH", "VAULT_ENABLED", "POCKETBRAIN_HOME",
-		"VAULT_FOLDER_INBOX", "VAULT_FOLDER_DAILY", "VAULT_FOLDER_PROJECTS",
-		"VAULT_FOLDER_AREAS", "VAULT_FOLDER_RESOURCES", "VAULT_FOLDER_ARCHIVE",
+		"WORKSPACE_PATH", "WORKSPACE_ENABLED", "VAULT_PATH", "VAULT_ENABLED",
+		"POCKETBRAIN_HOME",
 	} {
 		os.Unsetenv(key)
 	}
@@ -42,31 +41,20 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.EnableWhatsApp != false {
 		t.Error("EnableWhatsApp should default to false")
 	}
-	if cfg.VaultEnabled != true {
-		t.Error("VaultEnabled should default to true")
+	if cfg.WorkspaceEnabled != true {
+		t.Error("WorkspaceEnabled should default to true")
 	}
 	if cfg.TaildriveEnabled != false {
 		t.Error("TaildriveEnabled should default to false")
 	}
-	if cfg.TaildriveShareName != "vault" {
-		t.Errorf("TaildriveShareName = %q, want %q", cfg.TaildriveShareName, "vault")
+	if cfg.TaildriveShareName != "workspace" {
+		t.Errorf("TaildriveShareName = %q, want %q", cfg.TaildriveShareName, "workspace")
 	}
 	if cfg.MessageMaxLength != 3500 {
 		t.Errorf("MessageMaxLength = %d, want 3500", cfg.MessageMaxLength)
 	}
 	if cfg.OutboxMaxRetries != 3 {
 		t.Errorf("OutboxMaxRetries = %d, want 3", cfg.OutboxMaxRetries)
-	}
-
-	// Vault folders defaults
-	if cfg.VaultFolders.Inbox != "inbox" {
-		t.Errorf("VaultFolders.Inbox = %q, want %q", cfg.VaultFolders.Inbox, "inbox")
-	}
-	if cfg.VaultFolders.Daily != "daily" {
-		t.Errorf("VaultFolders.Daily = %q, want %q", cfg.VaultFolders.Daily, "daily")
-	}
-	if cfg.VaultFolders.Journal != cfg.VaultFolders.Daily {
-		t.Error("VaultFolders.Journal should equal Daily")
 	}
 }
 
@@ -75,7 +63,7 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("APP_NAME", "testbrain")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("HEARTBEAT_INTERVAL_MINUTES", "15")
-	t.Setenv("VAULT_ENABLED", "false")
+	t.Setenv("WORKSPACE_ENABLED", "false")
 	t.Setenv("ENABLE_WHATSAPP", "false")
 	t.Setenv("TAILDRIVE_ENABLED", "true")
 
@@ -93,8 +81,8 @@ func TestLoadFromEnv(t *testing.T) {
 	if cfg.HeartbeatIntervalMinutes != 15 {
 		t.Errorf("HeartbeatIntervalMinutes = %d, want 15", cfg.HeartbeatIntervalMinutes)
 	}
-	if cfg.VaultEnabled != false {
-		t.Error("VaultEnabled should be false")
+	if cfg.WorkspaceEnabled != false {
+		t.Error("WorkspaceEnabled should be false")
 	}
 	if cfg.TaildriveEnabled != true {
 		t.Error("TaildriveEnabled should be true")
