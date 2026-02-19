@@ -39,11 +39,7 @@ export class SQLiteChannelRepository implements ChannelRepository {
       if (typeof parsed.channel === "string" && typeof parsed.userID === "string") {
         return { channel: parsed.channel, userID: parsed.userID }
       }
-    } catch (error) {
-      // Invalid stored value, ignore but log in debug mode
-      if (Bun.env.DEBUG) {
-        console.debug("[channel-repo] Failed to parse last channel:", error)
-      }
+    } catch {
     }
     return null
   }

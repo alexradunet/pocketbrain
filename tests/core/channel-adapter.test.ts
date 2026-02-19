@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test"
+import pino from "pino"
 import type { ChannelAdapter, ChannelAuthOptions, MessageHandler } from "../../src/core/ports/channel-adapter"
 
 class MockAdapter implements ChannelAdapter {
@@ -83,11 +84,7 @@ describe("ChannelAuthOptions", () => {
   test("should accept required options", () => {
     const options: ChannelAuthOptions = {
       authDir: "/tmp/auth",
-      logger: {
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      } as any,
+      logger: pino({ enabled: false }),
     }
 
     expect(options.authDir).toBe("/tmp/auth")
