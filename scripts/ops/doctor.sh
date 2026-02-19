@@ -113,6 +113,13 @@ if [[ "$VAULT_PATH" != /* ]]; then
   VAULT_PATH="${REPO_ROOT}/${VAULT_PATH}"
 fi
 
+OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-${VAULT_PATH}/99-system/99-pocketbrain}"
+if [[ "$OPENCODE_CONFIG_DIR" != /* ]]; then
+  OPENCODE_CONFIG_DIR="${REPO_ROOT}/${OPENCODE_CONFIG_DIR}"
+fi
+
+POCKETBRAIN_SKILLS_DIR="${OPENCODE_CONFIG_DIR}/.agents/skills"
+
 WHATSAPP_AUTH_DIR="${WHATSAPP_AUTH_DIR:-${DATA_DIR}/whatsapp-auth}"
 if [[ "$WHATSAPP_AUTH_DIR" != /* ]]; then
   WHATSAPP_AUTH_DIR="${REPO_ROOT}/${WHATSAPP_AUTH_DIR}"
@@ -140,6 +147,8 @@ ensure_dir() {
 
 ensure_dir "$DATA_DIR" "DATA_DIR"
 ensure_dir "$VAULT_PATH" "vault path"
+ensure_dir "$OPENCODE_CONFIG_DIR" "PocketBrain vault home"
+ensure_dir "$POCKETBRAIN_SKILLS_DIR" "PocketBrain runtime skills dir"
 
 ENABLE_WHATSAPP="${ENABLE_WHATSAPP:-false}"
 if [[ "${ENABLE_WHATSAPP,,}" == "true" || "${ENABLE_WHATSAPP}" == "1" ]]; then

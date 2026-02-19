@@ -18,6 +18,11 @@ describe("VaultService", () => {
     mkdirSync(TEST_DIR, { recursive: true })
     vaultService = createVaultService(TEST_DIR)
     await vaultService.initialize()
+    mkdirSync(join(TEST_DIR, "inbox"), { recursive: true })
+    mkdirSync(join(TEST_DIR, "daily"), { recursive: true })
+    mkdirSync(join(TEST_DIR, "journal"), { recursive: true })
+    mkdirSync(join(TEST_DIR, "projects"), { recursive: true })
+    mkdirSync(join(TEST_DIR, "resources"), { recursive: true })
   })
 
   afterEach(async () => {
@@ -26,14 +31,8 @@ describe("VaultService", () => {
   })
 
   describe("initialize", () => {
-    test("creates directory structure", () => {
-      expect(existsSync(join(TEST_DIR, "inbox"))).toBe(true)
-      expect(existsSync(join(TEST_DIR, "daily"))).toBe(true)
-      expect(existsSync(join(TEST_DIR, "journal"))).toBe(true)
-      expect(existsSync(join(TEST_DIR, "projects"))).toBe(true)
-      expect(existsSync(join(TEST_DIR, "areas"))).toBe(true)
-      expect(existsSync(join(TEST_DIR, "resources"))).toBe(true)
-      expect(existsSync(join(TEST_DIR, "archive"))).toBe(true)
+    test("creates vault root if missing", () => {
+      expect(existsSync(TEST_DIR)).toBe(true)
     })
   })
 
@@ -361,6 +360,19 @@ describe("VaultService", () => {
 
       expect(path).toBe(`daily/${expectedDate}.md`)
     })
+
+    test("resolves today's path from obsidian daily-notes config", async () => {
+      mkdirSync(join(TEST_DIR, ".obsidian"), { recursive: true })
+      writeFileSync(
+        join(TEST_DIR, ".obsidian", "daily-notes.json"),
+        JSON.stringify({ folder: "01-daily-journey", format: "YYYY/MM/DD" }),
+      )
+
+      const path = await vaultService.getTodayDailyNotePath()
+      const today = new Date()
+      const expected = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getDate()).padStart(2, "0")}`
+      expect(path).toBe(`01-daily-journey/${expected}.md`)
+    })
   })
 
   describe("appendToDaily", () => {
@@ -373,8 +385,9 @@ describe("VaultService", () => {
       expect(result).toBe(true)
       const content = readFileSync(join(TEST_DIR, "daily", `${dateStr}.md`), "utf-8")
       expect(content).toContain(`# ${dateStr}`)
-      expect(content).toContain("## Morning")
-      expect(content).toContain("- Task 1")
+      expect(content).toContain("## Timeline")
+      expect(content).toContain("## Tracking")
+      expect(content).toMatch(/- \d{2}:\d{2} ## Morning\n- Task 1/)
     })
 
     test("appends to existing daily note", async () => {
@@ -387,7 +400,129 @@ describe("VaultService", () => {
       expect(result).toBe(true)
       const content = readFileSync(join(TEST_DIR, "daily", `${dateStr}.md`), "utf-8")
       expect(content).toContain("# Existing")
-      expect(content).toContain("## Evening")
+      expect(content).toContain("## Timeline")
+      expect(content).toMatch(/- \d{2}:\d{2} ## Evening/)
+    })
+
+    test("uses obsidian configured folder and format when appending", async () => {
+      mkdirSync(join(TEST_DIR, ".obsidian"), { recursive: true })
+      writeFileSync(
+        join(TEST_DIR, ".obsidian", "daily-notes.json"),
+        JSON.stringify({ folder: "01-daily-journey", format: "YYYY-MM-DD" }),
+      )
+
+      const result = await vaultService.appendToDaily("Configured destination")
+      expect(result).toBe(true)
+
+      const dateStr = new Date().toISOString().split("T")[0]
+      const path = join(TEST_DIR, "01-daily-journey", `${dateStr}.md`)
+      expect(existsSync(path)).toBe(true)
+      const content = readFileSync(path, "utf-8")
+      expect(content).toMatch(/- \d{2}:\d{2} Configured destination/)
+    })
+  })
+
+  describe("upsertDailyTracking", () => {
+    test("adds and updates tracking metrics", async () => {
+      const first = await vaultService.upsertDailyTracking("Mood", "8/10")
+      expect(first).toBe(true)
+
+      const second = await vaultService.upsertDailyTracking("Mood", "9/10")
+      expect(second).toBe(true)
+
+      const dateStr = new Date().toISOString().split("T")[0]
+      const content = readFileSync(join(TEST_DIR, "daily", `${dateStr}.md`), "utf-8")
+      expect(content).toContain("## Tracking")
+      expect(content).toContain("- Mood: 9/10")
+      expect(content).not.toContain("- Mood: 8/10")
+    })
+
+    test("rejects empty tracking metric or value", async () => {
+      const noMetric = await vaultService.upsertDailyTracking("", "value")
+      const noValue = await vaultService.upsertDailyTracking("mood", "")
+
+      expect(noMetric).toBe(false)
+      expect(noValue).toBe(false)
+    })
+  })
+
+  describe("getObsidianConfigSummary", () => {
+    test("returns defaults when .obsidian config is missing", async () => {
+      const summary = await vaultService.getObsidianConfigSummary()
+
+      expect(summary.obsidianConfigFound).toBe(false)
+      expect(summary.dailyNotes.folder).toBe("daily")
+      expect(summary.newNotes.location).toBe("current")
+      expect(summary.newNotes.folder).toBe("(not set)")
+      expect(summary.attachments.folder).toBe("(current note folder)")
+      expect(summary.links.style).toBe("wikilink")
+      expect(summary.warnings).toContain("daily-notes core plugin is not enabled in core-plugins.json")
+    })
+
+    test("reads obsidian config files and emits warnings", async () => {
+      mkdirSync(join(TEST_DIR, ".obsidian"), { recursive: true })
+      writeFileSync(
+        join(TEST_DIR, ".obsidian", "app.json"),
+        JSON.stringify({
+          newFileLocation: "folder",
+          newFileFolderPath: "00-inbox",
+          attachmentFolderPath: "/",
+          useMarkdownLinks: true,
+        }),
+      )
+      writeFileSync(
+        join(TEST_DIR, ".obsidian", "daily-notes.json"),
+        JSON.stringify({
+          folder: "01-daily-journey",
+          format: "YYYY-MM-DD",
+          template: "99-system/daily-template.md",
+        }),
+      )
+      writeFileSync(join(TEST_DIR, ".obsidian", "templates.json"), JSON.stringify({ folder: "99-system/templates" }))
+      writeFileSync(join(TEST_DIR, ".obsidian", "core-plugins.json"), JSON.stringify(["daily-notes", "templates"]))
+
+      const summary = await vaultService.getObsidianConfigSummary()
+
+      expect(summary.obsidianConfigFound).toBe(true)
+      expect(summary.dailyNotes.folder).toBe("01-daily-journey")
+      expect(summary.dailyNotes.pluginEnabled).toBe(true)
+      expect(summary.newNotes.location).toBe("folder")
+      expect(summary.newNotes.folder).toBe("00-inbox")
+      expect(summary.attachments.folder).toBe("/")
+      expect(summary.links.style).toBe("markdown")
+      expect(summary.templates.folder).toBe("99-system/templates")
+      expect(summary.warnings).toContain("attachments are configured to save at the vault root")
+    })
+
+    test("uses fingerprint cache and invalidates on obsidian config changes", async () => {
+      mkdirSync(join(TEST_DIR, ".obsidian"), { recursive: true })
+      writeFileSync(join(TEST_DIR, ".obsidian", "daily-notes.json"), JSON.stringify({ folder: "daily" }))
+
+      const first = await vaultService.getObsidianConfigState()
+      const second = await vaultService.getObsidianConfigState()
+
+      expect(first.cacheHit).toBe(false)
+      expect(second.cacheHit).toBe(true)
+
+      await Bun.sleep(5)
+      writeFileSync(join(TEST_DIR, ".obsidian", "daily-notes.json"), JSON.stringify({ folder: "journal" }))
+
+      const third = await vaultService.getObsidianConfigState()
+
+      expect(third.cacheHit).toBe(false)
+      expect(third.summary.dailyNotes.folder).toBe("journal")
+    })
+
+    test("invalidates cache when top-level folders change", async () => {
+      const first = await vaultService.getObsidianConfigState()
+      const second = await vaultService.getObsidianConfigState()
+      expect(second.cacheHit).toBe(true)
+
+      mkdirSync(join(TEST_DIR, "new-top-level"), { recursive: true })
+
+      const third = await vaultService.getObsidianConfigState()
+      expect(first.fingerprint).not.toBe(third.fingerprint)
+      expect(third.cacheHit).toBe(false)
     })
   })
 
@@ -395,7 +530,7 @@ describe("VaultService", () => {
     test("returns zero for empty vault", async () => {
       const stats = await vaultService.getStats()
 
-      expect(stats.totalFiles).toBe(7) // 7 folders created by initialize
+      expect(stats.totalFiles).toBe(5) // test fixture folders
       expect(stats.totalSize).toBe(0)
       expect(stats.lastModified).toBeNull()
     })

@@ -86,17 +86,21 @@ function buildOpencodeEnv(overrides: OpenCodeEnv): NodeJS.ProcessEnv {
 }
 
 function resolveOpencodeEnv(current: EnvMap, mode: OpenCodeProfileMode): OpenCodeEnv {
+  const dataDir = current.DATA_DIR || Bun.env.DATA_DIR || ".data"
+  const vaultPath = current.VAULT_PATH || `${dataDir}/vault`
+  const pocketBrainHome = `${vaultPath}/99-system/99-pocketbrain`
+
   if (mode === "system") {
     return {
       OPENCODE_MODEL: current.OPENCODE_MODEL || Bun.env.OPENCODE_MODEL,
+      OPENCODE_CONFIG_DIR: resolve(process.cwd(), current.OPENCODE_CONFIG_DIR || pocketBrainHome),
     }
   }
 
-  const dataDir = current.DATA_DIR || Bun.env.DATA_DIR || ".data"
   const xdgStateHome = current.XDG_STATE_HOME || `${dataDir}/opencode-state`
   const xdgDataHome = current.XDG_DATA_HOME || `${dataDir}/opencode-data`
   const xdgConfigHome = current.XDG_CONFIG_HOME || `${dataDir}/opencode-config-home`
-  const opencodeConfigDir = current.OPENCODE_CONFIG_DIR || `${dataDir}/opencode-config`
+  const opencodeConfigDir = current.OPENCODE_CONFIG_DIR || pocketBrainHome
 
   return {
     OPENCODE_MODEL: current.OPENCODE_MODEL || Bun.env.OPENCODE_MODEL,

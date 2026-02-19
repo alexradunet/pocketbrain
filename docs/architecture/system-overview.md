@@ -46,6 +46,7 @@ sequenceDiagram
 ## 3) Data Ownership Model
 
 - `.data/vault/` = long-lived knowledge files (Markdown).
+- `.data/vault/99-system/99-pocketbrain/` = synced PocketBrain OpenCode config + skills/process knowledge.
 - `.data/state.db` = runtime state (sessions, memory, whitelist, outbox, heartbeat tasks).
 - Content stays in files, operational state stays in SQLite.
 

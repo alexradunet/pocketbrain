@@ -5,8 +5,13 @@
  */
 
 import { tool } from "@opencode-ai/plugin"
-import { vaultProvider } from "../../vault/vault-provider"
-import type { VaultSearchMode } from "../../vault/vault-service"
+import { isAbsolute, join } from "node:path"
+import {
+  createVaultService,
+  DEFAULT_VAULT_FOLDERS,
+  type VaultSearchMode,
+  type VaultService,
+} from "../../vault/vault-service"
 
 interface VaultReadArgs {
   path: string
@@ -51,8 +56,61 @@ interface VaultDailyArgs {
   content?: string
 }
 
+interface VaultDailyTrackArgs {
+  metric: string
+  value: string
+}
+
+interface VaultObsidianConfigArgs {
+  verify?: boolean
+  refresh?: boolean
+}
+
+let cachedVaultService: VaultService | null = null
+
+function envBool(value: string | undefined, fallback = false): boolean {
+  if (!value) return fallback
+  const normalized = value.trim().toLowerCase()
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on"
+}
+
+function resolveVaultPath(): string {
+  const cwd = process.cwd()
+  const dataDirValue = Bun.env.DATA_DIR?.trim() || ".data"
+  const dataDir = isAbsolute(dataDirValue) ? dataDirValue : join(cwd, dataDirValue)
+  const vaultPathValue = Bun.env.VAULT_PATH?.trim()
+  if (vaultPathValue) {
+    return isAbsolute(vaultPathValue) ? vaultPathValue : join(cwd, vaultPathValue)
+  }
+  return join(dataDir, "vault")
+}
+
+function resolveVaultFolders() {
+  const daily = Bun.env.VAULT_FOLDER_DAILY?.trim() || DEFAULT_VAULT_FOLDERS.daily
+
+  return {
+    inbox: Bun.env.VAULT_FOLDER_INBOX?.trim() || DEFAULT_VAULT_FOLDERS.inbox,
+    daily,
+    journal: daily,
+    projects: Bun.env.VAULT_FOLDER_PROJECTS?.trim() || DEFAULT_VAULT_FOLDERS.projects,
+    areas: Bun.env.VAULT_FOLDER_AREAS?.trim() || DEFAULT_VAULT_FOLDERS.areas,
+    resources: Bun.env.VAULT_FOLDER_RESOURCES?.trim() || DEFAULT_VAULT_FOLDERS.resources,
+    archive: Bun.env.VAULT_FOLDER_ARCHIVE?.trim() || DEFAULT_VAULT_FOLDERS.archive,
+  }
+}
+
+async function getVaultService(): Promise<VaultService | null> {
+  if (cachedVaultService) return cachedVaultService
+  if (!envBool(Bun.env.VAULT_ENABLED, true)) return null
+
+  const service = createVaultService(resolveVaultPath(), undefined, resolveVaultFolders())
+  await service.initialize()
+  cachedVaultService = service
+  return service
+}
+
 export default async function createVaultPlugin() {
-  const vaultService = vaultProvider.getVaultService()
+  const vaultService = await getVaultService()
   
   // If vault is not enabled, return empty tool set
   if (!vaultService) {
@@ -206,12 +264,12 @@ export default async function createVaultPlugin() {
       }),
 
       vault_daily: tool({
-        description: "Get today's daily note path or append to it. Creates the daily note if it doesn't exist. Daily notes are stored in daily/YYYY-MM-DD.md",
+        description: "Get today's daily note path or append a timestamped entry to it. Respects .obsidian/daily-notes.json folder/format/template when available.",
         args: {
           content: tool.schema.string().optional().describe("Content to append to today's daily note (if not provided, returns the path)"),
         },
         async execute(args: VaultDailyArgs) {
-          const dailyPath = vaultService.getDailyNotePath()
+          const dailyPath = await vaultService.getTodayDailyNotePath()
           
           if (!args.content) {
             // Just return the path
@@ -225,9 +283,71 @@ export default async function createVaultPlugin() {
           // Append to daily note
           const success = await vaultService.appendToDaily(args.content)
           if (success) {
-            return `Successfully added to today's daily note (${dailyPath})`
+            return `Successfully added timestamped entry to today's daily note (${dailyPath})`
           }
           return `Error: Failed to update daily note`
+        },
+      }),
+
+      vault_daily_track: tool({
+        description: "Set or update a metric in today's daily tracking section (for example mood, sleep, energy, focus).",
+        args: {
+          metric: tool.schema.string().describe("Tracking metric name, for example mood or sleep"),
+          value: tool.schema.string().describe("Metric value, for example 8/10 or 7h"),
+        },
+        async execute(args: VaultDailyTrackArgs) {
+          const dailyPath = await vaultService.getTodayDailyNotePath()
+          const success = await vaultService.upsertDailyTracking(args.metric, args.value)
+          if (success) {
+            return `Updated daily tracking (${args.metric}) in ${dailyPath}`
+          }
+          return "Error: Failed to update daily tracking. metric and value must both be non-empty."
+        },
+      }),
+
+      vault_obsidian_config: tool({
+        description: "Read .obsidian configuration and summarize where daily notes, new notes, and attachments are saved. Use this after vault import and before heavy note operations.",
+        args: {
+          verify: tool.schema
+            .boolean()
+            .optional()
+            .describe("If true, include validation warnings and recommended checks (default: true)"),
+          refresh: tool.schema
+            .boolean()
+            .optional()
+            .describe("Force refresh and bypass cached vault fingerprint check (default: false)"),
+        },
+        async execute(args: VaultObsidianConfigArgs) {
+          const state = await vaultService.getObsidianConfigState(args.refresh ?? false)
+          const summary = state.summary
+
+          if (!summary.obsidianConfigFound) {
+            return "No .obsidian config found. Ask the user to confirm daily notes folder, new note destination, and attachment folder before creating notes."
+          }
+
+          const lines = [
+            "Obsidian config summary:",
+            `- Daily notes: folder=${summary.dailyNotes.folder}, format=${summary.dailyNotes.format}, template=${summary.dailyNotes.templateFile}, pluginEnabled=${summary.dailyNotes.pluginEnabled}`,
+            `- New notes: location=${summary.newNotes.location}, folder=${summary.newNotes.folder}`,
+            `- Attachments: folder=${summary.attachments.folder}`,
+            `- Link style: ${summary.links.style}`,
+            `- Templates folder: ${summary.templates.folder}`,
+            `- Cache: ${state.cacheHit ? "hit" : "miss"}`,
+          ]
+
+          const verify = args.verify ?? true
+          if (verify) {
+            if (summary.warnings.length === 0) {
+              lines.push("- Validation: no config warnings detected")
+            } else {
+              lines.push(`- Validation: ${summary.warnings.length} warning(s)`)
+              for (const warning of summary.warnings) {
+                lines.push(`  - ${warning}`)
+              }
+            }
+          }
+
+          return lines.join("\n")
         },
       }),
 

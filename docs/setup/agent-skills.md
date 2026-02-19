@@ -4,7 +4,9 @@ PocketBrain externalizes repeatable workflows as OpenCode skills.
 
 ## Skill location
 
-- Project-local skills: `.agents/skills/<name>/SKILL.md`
+- Active runtime skills: `$OPENCODE_CONFIG_DIR/.agents/skills/<name>/SKILL.md`
+- Default runtime path when vault is enabled: `VAULT_PATH/99-system/99-pocketbrain/.agents/skills/`
+- Repository copies under `.agents/skills/` are treated as bundled defaults and can be seeded into the runtime path.
 
 ## Current skills
 
@@ -15,6 +17,7 @@ PocketBrain externalizes repeatable workflows as OpenCode skills.
 - `pocketbrain-incident-response` - first-response triage and recovery
 - `pocketbrain-security-ops` - secret rotation, dependency hygiene, and residual risk process
 - `pocketbrain-ci-e2e` - CI E2E secret setup and validation behavior
+- `pocketbrain-vault-autoconfig` - adapt to each vault's Obsidian settings and conventions
 
 ## Usage
 

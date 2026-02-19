@@ -16,6 +16,7 @@ Follow:
 
 - Logs stream works: `make logs`
 - Service is healthy: `sudo systemctl status pocketbrain`
+- PocketBrain vault home exists: `ls .data/vault/99-system/99-pocketbrain`
 - Update path validated:
 
 ```bash

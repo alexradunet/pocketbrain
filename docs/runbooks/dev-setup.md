@@ -23,6 +23,8 @@ make build
 make dev
 ```
 
+PocketBrain runtime skill/config home defaults to `VAULT_PATH/99-system/99-pocketbrain` when vault is enabled.
+
 ## 4) Troubleshooting
 
 - `bun: command not found`: ensure Bun is installed and in `PATH`.

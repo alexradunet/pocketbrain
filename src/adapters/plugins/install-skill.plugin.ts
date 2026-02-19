@@ -6,7 +6,11 @@
 import { tool } from "@opencode-ai/plugin"
 import { join, basename, isAbsolute } from "node:path"
 
-const SKILLS_DIR = join(process.cwd(), ".agents", "skills")
+const configuredOpenCodeDir = Bun.env.OPENCODE_CONFIG_DIR?.trim() || process.cwd()
+const OPENCODE_CONFIG_DIR = isAbsolute(configuredOpenCodeDir)
+  ? configuredOpenCodeDir
+  : join(process.cwd(), configuredOpenCodeDir)
+const SKILLS_DIR = join(OPENCODE_CONFIG_DIR, ".agents", "skills")
 const configuredDataDir = Bun.env.DATA_DIR?.trim() || ".data"
 const DATA_DIR = isAbsolute(configuredDataDir)
   ? configuredDataDir
@@ -90,7 +94,7 @@ export default async function createInstallSkillPlugin({ $ }: PluginContext) {
           const targetDir = join(SKILLS_DIR, targetName)
 
           if (await exists(targetDir)) {
-            return `Skill '${targetName}' already exists at .agents/skills/${targetName}`
+            return `Skill '${targetName}' already exists at ${targetDir}`
           }
 
           // Validate target name
@@ -125,7 +129,7 @@ export default async function createInstallSkillPlugin({ $ }: PluginContext) {
             await $`mkdir -p ${targetDir}`
             await $`cp -R ${srcDir}/. ${targetDir}`
 
-            return `Installed skill '${targetName}' to .agents/skills/${targetName}`
+            return `Installed skill '${targetName}' to ${targetDir}`
           } finally {
             await $`rm -rf ${tmpDir}`
           }

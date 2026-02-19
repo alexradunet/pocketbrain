@@ -8,6 +8,16 @@ export interface PromptBuilderOptions {
   heartbeatIntervalMinutes: number
   vaultEnabled?: boolean
   vaultPath?: string
+  vaultProfile?: string
+  vaultFolders?: {
+    inbox: string
+    daily: string
+    journal: string
+    projects: string
+    areas: string
+    resources: string
+    archive: string
+  }
 }
 
 export class PromptBuilder {
@@ -52,6 +62,7 @@ export class PromptBuilder {
       "- Installed skills must be placed under .agents/skills.",
       "- Self-improve: if a task would benefit from a reusable workflow, or repeats, or could be standardized, proactively use skill-creator to draft a new skill after the task is handled.",
       "- Also suggest skill-creator when the user asks for something new that seems like a reusable capability.",
+      "- When vault access is enabled, proactively apply pocketbrain-vault-autoconfig behavior at session start and after vault imports.",
       "",
       "Current memory:",
       this.buildMemoryContext(memoryEntries),
@@ -114,17 +125,13 @@ export class PromptBuilder {
       return ""
     }
 
+    const discoveredProfile = this.options.vaultProfile?.trim()
+
     return [
       "VAULT ACCESS:",
       "You have access to a personal knowledge vault organized as markdown files.",
-      "The vault follows this structure:",
-      "- inbox/: Quick captures and fleeting notes",
-      "- daily/: Daily notes (YYYY-MM-DD.md format)",
-      "- journal/: Long-form writing and reflections",
-      "- projects/: Active projects with goals and tasks",
-      "- areas/: Ongoing areas of responsibility (health, finance, etc)",
-      "- resources/: Reference material (books, articles, recipes)",
-      "- archive/: Completed or dormant items",
+      "Do not assume a fixed folder taxonomy.",
+      "Adapt to each user's existing vault structure and naming conventions.",
       "",
       "Vault tools available:",
       "- vault_read: Read any file by path",
@@ -136,11 +143,20 @@ export class PromptBuilder {
       "- vault_backlinks: Find notes linking to a wiki-link target",
       "- vault_tag_search: Find notes containing a tag",
       "- vault_daily: Access today's daily note",
+      "- vault_daily_track: Set metrics in today's daily tracking section",
+      "- vault_obsidian_config: Read .obsidian settings (daily folder, new note location, attachment folder, link style)",
       "- vault_stats: Get vault statistics",
       "",
+      discoveredProfile ? "Detected vault preferences and conventions:" : "",
+      discoveredProfile || "",
+      discoveredProfile ? "" : "",
       "When using the vault:",
+      "- After a vault is imported or first connected, call vault_obsidian_config to verify note/attachment locations",
+      "- If config is missing or inconsistent, ask the user to confirm daily notes folder, default new note folder, and attachment folder",
+      "- Before major write operations, inspect the vault (for example with vault_list and vault_search) to mirror existing organization",
       "- Prefer linking between notes using relative paths",
       "- Use daily notes for timestamped entries and quick captures",
+      "- Use vault_daily_track for structured daily metrics (mood, sleep, energy, focus, etc)",
       "- Move items from inbox/ to appropriate folders after processing",
       "- Archive completed projects instead of deleting",
     ].join("\n")

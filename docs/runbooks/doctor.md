@@ -17,6 +17,7 @@ make doctor ARGS="--deep"
 
 - `.env` presence
 - Data/vault/WhatsApp auth directory existence and writability
+- PocketBrain vault home and runtime skill directory writability (`99-system/99-pocketbrain`)
 - SQLite state DB presence
 - Service health (`fail2ban`, `unattended-upgrades`, `tailscaled`, `pocketbrain` when installed)
 - UFW baseline (`active`, `deny incoming`, `OpenSSH` allow)

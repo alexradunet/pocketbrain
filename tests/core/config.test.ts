@@ -8,6 +8,7 @@ const ENV_KEYS = [
   "HEARTBEAT_INTERVAL_MINUTES",
   "OPENCODE_SERVER_URL",
   "OPENCODE_MODEL",
+  "OPENCODE_CONFIG_DIR",
   "ENABLE_WHATSAPP",
   "WHATSAPP_AUTH_DIR",
   "WHATSAPP_WHITELIST_NUMBERS",
@@ -22,6 +23,12 @@ const ENV_KEYS = [
   "SYNCTHING_ALLOWED_FOLDER_IDS",
   "VAULT_ENABLED",
   "VAULT_PATH",
+  "VAULT_FOLDER_INBOX",
+  "VAULT_FOLDER_DAILY",
+  "VAULT_FOLDER_PROJECTS",
+  "VAULT_FOLDER_AREAS",
+  "VAULT_FOLDER_RESOURCES",
+  "VAULT_FOLDER_ARCHIVE",
 ] as const
 
 type EnvKey = (typeof ENV_KEYS)[number]
@@ -87,6 +94,7 @@ describe("loadConfig", () => {
     Bun.env.HEARTBEAT_INTERVAL_MINUTES = "10"
     Bun.env.OPENCODE_SERVER_URL = "http://127.0.0.1:4096"
     Bun.env.OPENCODE_MODEL = "openai/gpt-5"
+    Bun.env.OPENCODE_CONFIG_DIR = ".data/vault/99-system/99-pocketbrain"
     Bun.env.DATA_DIR = ".data"
     Bun.env.ENABLE_WHATSAPP = "true"
     Bun.env.WHATSAPP_AUTH_DIR = ".data/whatsapp-auth"
@@ -102,12 +110,19 @@ describe("loadConfig", () => {
     Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS = "vault,notes"
     Bun.env.VAULT_ENABLED = "true"
     Bun.env.VAULT_PATH = ".data/vault"
+    Bun.env.VAULT_FOLDER_INBOX = "00-inbox"
+    Bun.env.VAULT_FOLDER_DAILY = "01-daily-journey"
+    Bun.env.VAULT_FOLDER_PROJECTS = "02-projects"
+    Bun.env.VAULT_FOLDER_AREAS = "03-areas"
+    Bun.env.VAULT_FOLDER_RESOURCES = "04-resources"
+    Bun.env.VAULT_FOLDER_ARCHIVE = "05-archive"
 
     const config = loadConfig()
     expect(config.logLevel).toBe("debug")
     expect(config.opencodePort).toBe(4096)
     expect(config.opencodeServerUrl).toBe("http://127.0.0.1:4096")
     expect(config.opencodeModel).toBe("openai/gpt-5")
+    expect(config.opencodeConfigDir).toContain(".data/vault/99-system/99-pocketbrain")
     expect(config.whatsAppWhitelistNumbers).toEqual(["15551234567", "447700900123", "12025550123"])
     expect(config.syncthingEnabled).toBe(true)
     expect(config.syncthingBaseUrl).toBe("http://127.0.0.1:8384")
@@ -116,6 +131,38 @@ describe("loadConfig", () => {
     expect(config.syncthingAutoStart).toBe(true)
     expect(config.syncthingMutationToolsEnabled).toBe(true)
     expect(config.syncthingAllowedFolderIds).toEqual(["vault", "notes"])
+    expect(config.vaultFolders.projects).toBe("02-projects")
+    expect(config.vaultFolders.daily).toBe("01-daily-journey")
+    expect(config.vaultFolders.journal).toBe("01-daily-journey")
+  })
+
+  test("uses generic vault folder defaults", () => {
+    delete Bun.env.OPENCODE_CONFIG_DIR
+    delete Bun.env.VAULT_FOLDER_INBOX
+    delete Bun.env.VAULT_FOLDER_DAILY
+    delete Bun.env.VAULT_FOLDER_PROJECTS
+    delete Bun.env.VAULT_FOLDER_AREAS
+    delete Bun.env.VAULT_FOLDER_RESOURCES
+    delete Bun.env.VAULT_FOLDER_ARCHIVE
+
+    const config = loadConfig()
+    expect(config.vaultFolders).toEqual({
+      inbox: "inbox",
+      daily: "daily",
+      journal: "daily",
+      projects: "projects",
+      areas: "areas",
+      resources: "resources",
+      archive: "archive",
+    })
+    expect(config.opencodeConfigDir).toContain(".data/vault/99-system/99-pocketbrain")
+  })
+
+  test("uses explicit OPENCODE_CONFIG_DIR when provided", () => {
+    Bun.env.OPENCODE_CONFIG_DIR = "/tmp/pocketbrain-opencode"
+
+    const config = loadConfig()
+    expect(config.opencodeConfigDir).toBe("/tmp/pocketbrain-opencode")
   })
 
   test("defaults Syncthing vault folder ID to vault when enabled", () => {

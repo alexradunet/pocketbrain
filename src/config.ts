@@ -5,6 +5,7 @@
 
 import { isAbsolute, join } from "node:path"
 import { z } from "zod"
+import type { VaultFolders } from "./vault/vault-service"
 
 const LOG_LEVEL_VALUES = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const
 
@@ -13,6 +14,7 @@ export interface AppConfig {
   logLevel: string
   dataDir: string
   opencodeModel: string | undefined
+  opencodeConfigDir: string
   opencodeServerUrl: string | undefined
   opencodeHostname: string
   opencodePort: number
@@ -42,6 +44,7 @@ export interface AppConfig {
   syncthingAllowedFolderIds: string[]
   vaultPath: string
   vaultEnabled: boolean
+  vaultFolders: VaultFolders
 }
 
 const DEFAULTS = {
@@ -65,6 +68,16 @@ const DEFAULTS = {
   syncthingTimeoutMs: 5000,
   syncthingVaultFolderId: "vault",
   syncthingAutoStart: true,
+  pocketBrainVaultHomeRelative: "99-system/99-pocketbrain",
+  vaultFolders: {
+    inbox: "inbox",
+    daily: "daily",
+    journal: "daily",
+    projects: "projects",
+    areas: "areas",
+    resources: "resources",
+    archive: "archive",
+  },
 } as const
 
 const modelRefPattern = /^[^/]+\/.+$/
@@ -75,6 +88,7 @@ const AppConfigSchema = z
     logLevel: z.enum(LOG_LEVEL_VALUES),
     dataDir: z.string().min(1),
     opencodeModel: z.string().regex(modelRefPattern, "OPENCODE_MODEL must use provider/model format").optional(),
+    opencodeConfigDir: z.string().min(1),
     opencodeServerUrl: z
       .string()
       .url("OPENCODE_SERVER_URL must be a valid URL")
@@ -110,6 +124,15 @@ const AppConfigSchema = z
     syncthingAllowedFolderIds: z.array(z.string().min(1)),
     vaultPath: z.string().min(1),
     vaultEnabled: z.boolean(),
+    vaultFolders: z.object({
+      inbox: z.string().min(1),
+      daily: z.string().min(1),
+      journal: z.string().min(1),
+      projects: z.string().min(1),
+      areas: z.string().min(1),
+      resources: z.string().min(1),
+      archive: z.string().min(1),
+    }),
   })
   .superRefine((cfg, ctx) => {
     if (cfg.enableWhatsApp && !cfg.whatsAppAuthDir.trim()) {
@@ -198,17 +221,40 @@ function resolvePath(cwd: string, value: string): string {
   return isAbsolute(value) ? value : join(cwd, value)
 }
 
+function resolveVaultFoldersFromEnv(): VaultFolders {
+  const daily = envString(Bun.env.VAULT_FOLDER_DAILY, DEFAULTS.vaultFolders.daily)
+
+  return {
+    inbox: envString(Bun.env.VAULT_FOLDER_INBOX, DEFAULTS.vaultFolders.inbox),
+    daily,
+    journal: daily,
+    projects: envString(Bun.env.VAULT_FOLDER_PROJECTS, DEFAULTS.vaultFolders.projects),
+    areas: envString(Bun.env.VAULT_FOLDER_AREAS, DEFAULTS.vaultFolders.areas),
+    resources: envString(Bun.env.VAULT_FOLDER_RESOURCES, DEFAULTS.vaultFolders.resources),
+    archive: envString(Bun.env.VAULT_FOLDER_ARCHIVE, DEFAULTS.vaultFolders.archive),
+  }
+}
+
 export function loadConfig(): AppConfig {
   const cwd = process.cwd()
   const dataDir = resolvePath(cwd, envString(Bun.env.DATA_DIR, ".data"))
   const whatsAppAuthDir = optionalTrimmed(Bun.env.WHATSAPP_AUTH_DIR)
   const vaultPath = optionalTrimmed(Bun.env.VAULT_PATH)
+  const opencodeConfigDirRaw = optionalTrimmed(Bun.env.OPENCODE_CONFIG_DIR)
+  const resolvedVaultPath = vaultPath ? resolvePath(cwd, vaultPath) : join(dataDir, "vault")
+  const vaultEnabled = envBool(Bun.env.VAULT_ENABLED, true)
+  const opencodeConfigDir = opencodeConfigDirRaw
+    ? resolvePath(cwd, opencodeConfigDirRaw)
+    : vaultEnabled
+      ? join(resolvedVaultPath, DEFAULTS.pocketBrainVaultHomeRelative)
+      : cwd
 
   const candidate: AppConfig = {
     appName: envString(Bun.env.APP_NAME, DEFAULTS.appName),
     logLevel: envString(Bun.env.LOG_LEVEL, DEFAULTS.logLevel),
     dataDir,
     opencodeModel: optionalTrimmed(Bun.env.OPENCODE_MODEL),
+    opencodeConfigDir,
     opencodeServerUrl: optionalTrimmed(Bun.env.OPENCODE_SERVER_URL),
     opencodeHostname: envString(Bun.env.OPENCODE_HOSTNAME, DEFAULTS.opencodeHostname),
     opencodePort: envInt(Bun.env.OPENCODE_PORT, DEFAULTS.opencodePort),
@@ -241,8 +287,9 @@ export function loadConfig(): AppConfig {
     syncthingAutoStart: envBool(Bun.env.SYNCTHING_AUTO_START, DEFAULTS.syncthingAutoStart),
     syncthingMutationToolsEnabled: envBool(Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED, false),
     syncthingAllowedFolderIds: parseCommaSeparatedList(Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS),
-    vaultPath: vaultPath ? resolvePath(cwd, vaultPath) : join(dataDir, "vault"),
-    vaultEnabled: envBool(Bun.env.VAULT_ENABLED, true),
+    vaultPath: resolvedVaultPath,
+    vaultEnabled,
+    vaultFolders: resolveVaultFoldersFromEnv(),
   }
 
   const parsed = AppConfigSchema.parse(candidate)

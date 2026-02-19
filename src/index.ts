@@ -6,6 +6,8 @@
  */
 
 import pino from "pino"
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import { loadConfig } from "./config"
 
 // Core imports
@@ -34,15 +36,24 @@ import { ensureSyncthingAvailable } from "./adapters/syncthing/bootstrap"
 import { HeartbeatScheduler } from "./scheduler/heartbeat"
 
 // Vault imports
-import { createVaultService, VaultService } from "./vault/vault-service"
+import { createVaultService, type ObsidianConfigSummary, VaultService } from "./vault/vault-service"
 import { vaultProvider } from "./vault/vault-provider"
 
-// Set OpenCode config directory
-process.env.OPENCODE_CONFIG_DIR ??= process.cwd()
+const OPENCODE_PLUGIN_RELATIVE_PATHS = [
+  "./src/adapters/plugins/install-skill.plugin.ts",
+  "./src/adapters/plugins/memory.plugin.ts",
+  "./src/adapters/plugins/channel-message.plugin.ts",
+  "./src/adapters/plugins/vault.plugin.ts",
+  "./src/adapters/plugins/syncthing.plugin.ts",
+]
 
 async function main(): Promise<void> {
   // Load configuration
   const cfg = loadConfig()
+  process.env.OPENCODE_CONFIG_DIR = cfg.opencodeConfigDir
+
+  await bootstrapVaultPocketBrainHome(cfg.opencodeConfigDir)
+
   const logger = pino({ level: cfg.logLevel })
 
   await ensureSyncthingAvailable({
@@ -106,11 +117,30 @@ async function main(): Promise<void> {
     logger,
   })
 
+  // Initialize vault if enabled before assistant init so vault tools are available.
+  let vaultService: VaultService | undefined
+  let vaultProfile = ""
+
+  if (cfg.vaultEnabled) {
+    logger.info({ vaultPath: cfg.vaultPath, folders: cfg.vaultFolders }, "initializing vault")
+    vaultService = createVaultService(cfg.vaultPath, logger, cfg.vaultFolders)
+    await vaultService.initialize()
+    const vaultConfig = await vaultService.getObsidianConfigSummary()
+    vaultProfile = formatVaultProfile(vaultConfig)
+    logger.info({ obsidianConfigFound: vaultConfig.obsidianConfigFound }, "vault profile detected")
+    vaultProvider.setVaultService(vaultService)
+    logger.info("vault initialized (sync via Syncthing)")
+  } else {
+    logger.info("vault disabled")
+  }
+
   // Create prompt builder
   const promptBuilder = new PromptBuilder({
     heartbeatIntervalMinutes: cfg.heartbeatIntervalMinutes,
     vaultEnabled: cfg.vaultEnabled,
     vaultPath: cfg.vaultPath,
+    vaultFolders: cfg.vaultFolders,
+    vaultProfile,
   })
 
   // Create assistant core with injected dependencies
@@ -126,19 +156,6 @@ async function main(): Promise<void> {
 
   // Initialize assistant
   await assistant.init()
-  
-  // Initialize vault if enabled
-  let vaultService: VaultService | undefined
-  
-  if (cfg.vaultEnabled) {
-    logger.info({ vaultPath: cfg.vaultPath }, "initializing vault")
-    vaultService = createVaultService(cfg.vaultPath, logger)
-    await vaultService.initialize()
-    vaultProvider.setVaultService(vaultService)
-    logger.info("vault initialized (sync via Syncthing)")
-  } else {
-    logger.info("vault disabled")
-  }
 
   // Create heartbeat scheduler
   let heartbeatScheduler: HeartbeatScheduler | undefined
@@ -255,6 +272,97 @@ async function main(): Promise<void> {
   } else {
     logger.warn("No channel enabled. Set ENABLE_WHATSAPP=true.")
   }
+}
+
+async function bootstrapVaultPocketBrainHome(opencodeConfigDir: string): Promise<void> {
+  await mkdir(opencodeConfigDir, { recursive: true })
+
+  const requiredFolders = [
+    ".agents/skills",
+    "skills",
+    "processes",
+    "knowledge",
+    "runbooks",
+    "config",
+  ]
+
+  for (const folder of requiredFolders) {
+    await mkdir(join(opencodeConfigDir, folder), { recursive: true })
+  }
+
+  await writeVaultOpencodeConfig(opencodeConfigDir)
+  await seedBundledSkills(opencodeConfigDir)
+}
+
+async function writeVaultOpencodeConfig(opencodeConfigDir: string): Promise<void> {
+  const configPath = join(opencodeConfigDir, "opencode.json")
+  const plugin = OPENCODE_PLUGIN_RELATIVE_PATHS.map((relativePath) => join(process.cwd(), relativePath.slice(2)))
+  const config = {
+    $schema: "https://opencode.ai/config.json",
+    permission: {
+      skill: {
+        "pocketbrain-*": "allow",
+        "*": "ask",
+      },
+    },
+    plugin,
+  }
+
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8")
+}
+
+async function seedBundledSkills(opencodeConfigDir: string): Promise<void> {
+  const sourceSkillsDir = join(process.cwd(), ".agents", "skills")
+  const targetSkillsDir = join(opencodeConfigDir, ".agents", "skills")
+
+  let sourceSkillDirs: string[] = []
+  try {
+    const entries = await readdir(sourceSkillsDir, { withFileTypes: true })
+    sourceSkillDirs = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  } catch {
+    return
+  }
+
+  for (const skillDirName of sourceSkillDirs) {
+    const sourceFile = join(sourceSkillsDir, skillDirName, "SKILL.md")
+    const targetDir = join(targetSkillsDir, skillDirName)
+    const targetFile = join(targetDir, "SKILL.md")
+
+    await mkdir(targetDir, { recursive: true })
+
+    const targetExists = await Bun.file(targetFile).exists()
+    if (targetExists) continue
+
+    try {
+      const content = await readFile(sourceFile, "utf-8")
+      await writeFile(targetFile, content, "utf-8")
+    } catch {
+      continue
+    }
+  }
+}
+
+function formatVaultProfile(summary: ObsidianConfigSummary): string {
+  if (!summary.obsidianConfigFound) {
+    return "No .obsidian config detected yet. Confirm user conventions before writing many files."
+  }
+
+  const lines = [
+    `Daily notes folder: ${summary.dailyNotes.folder}`,
+    `Daily format: ${summary.dailyNotes.format}`,
+    `Daily template: ${summary.dailyNotes.templateFile}`,
+    `Default new-note location: ${summary.newNotes.location}`,
+    `Default new-note folder: ${summary.newNotes.folder}`,
+    `Attachment folder: ${summary.attachments.folder}`,
+    `Link style: ${summary.links.style}`,
+    `Templates folder: ${summary.templates.folder}`,
+  ]
+
+  if (summary.warnings.length > 0) {
+    lines.push(`Warnings: ${summary.warnings.join("; ")}`)
+  }
+
+  return lines.join("\n")
 }
 
 // Run main

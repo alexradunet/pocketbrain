@@ -34,6 +34,7 @@ Optional:
 ```dotenv
 WHITELIST_PAIR_TOKEN=your-secure-token
 OPENCODE_MODEL=provider/model
+OPENCODE_CONFIG_DIR=.data/vault/99-system/99-pocketbrain
 WHATSAPP_AUTH_DIR=.data/whatsapp-auth
 VAULT_ENABLED=true
 SYNCTHING_ENABLED=true
@@ -43,6 +44,11 @@ SYNCTHING_VAULT_FOLDER_ID=vault
 SYNCTHING_AUTO_START=true
 SYNCTHING_MUTATION_TOOLS_ENABLED=false
 ```
+
+Notes:
+
+- If `OPENCODE_CONFIG_DIR` is unset and vault is enabled, PocketBrain defaults it to `VAULT_PATH/99-system/99-pocketbrain`.
+- Keep runtime state local (`.data/state.db`, WhatsApp auth, XDG runtime dirs). The vault path stores portable config and skills.
 
 ## 3) Start runtime
 

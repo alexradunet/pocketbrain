@@ -25,7 +25,11 @@ make release TAG=$(git rev-parse --short HEAD)
 - Runtime data root: `.data/` (via `DATA_DIR`)
 - SQLite state: `.data/state.db`
 - Vault: `.data/vault/`
+- PocketBrain vault home (default): `.data/vault/99-system/99-pocketbrain/`
+- OpenCode config dir (default): `.data/vault/99-system/99-pocketbrain/`
 - WhatsApp auth: `.data/whatsapp-auth/`
+
+Portable PocketBrain config, skills, and process knowledge are stored in the vault path above. Runtime caches and machine-local auth/runtime state stay local.
 
 ## Repository Layout
 
