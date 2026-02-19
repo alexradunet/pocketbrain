@@ -7,15 +7,17 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import { VaultService, createVaultService } from "../../src/vault/vault-service"
 import { join } from "node:path"
-import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync } from "node:fs"
+import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, symlinkSync } from "node:fs"
 
 const TEST_DIR = join(__dirname, ".test-data", "vault-service")
+const OUTSIDE_DIR = join(__dirname, ".test-data", "vault-service-outside")
 
 describe("VaultService", () => {
   let vaultService: VaultService
 
   beforeEach(async () => {
     mkdirSync(TEST_DIR, { recursive: true })
+    mkdirSync(OUTSIDE_DIR, { recursive: true })
     vaultService = createVaultService(TEST_DIR)
     await vaultService.initialize()
     mkdirSync(join(TEST_DIR, "inbox"), { recursive: true })
@@ -28,6 +30,7 @@ describe("VaultService", () => {
   afterEach(async () => {
     await vaultService.stop()
     rmSync(TEST_DIR, { recursive: true, force: true })
+    rmSync(OUTSIDE_DIR, { recursive: true, force: true })
   })
 
   describe("initialize", () => {
@@ -62,6 +65,15 @@ describe("VaultService", () => {
 
     test("blocks path traversal", async () => {
       const content = await vaultService.readFile("../outside.txt")
+      expect(content).toBeNull()
+    })
+
+    test("blocks symlink traversal", async () => {
+      writeFileSync(join(OUTSIDE_DIR, "secret.txt"), "do-not-read")
+      symlinkSync(OUTSIDE_DIR, join(TEST_DIR, "escape"), "dir")
+
+      const content = await vaultService.readFile("escape/secret.txt")
+
       expect(content).toBeNull()
     })
   })
@@ -101,6 +113,15 @@ describe("VaultService", () => {
     test("rejects path traversal writes", async () => {
       const result = await vaultService.writeFile("../outside.txt", "blocked")
       expect(result).toBe(false)
+    })
+
+    test("rejects writing through symlinked folders", async () => {
+      symlinkSync(OUTSIDE_DIR, join(TEST_DIR, "escape"), "dir")
+
+      const result = await vaultService.writeFile("escape/new.txt", "blocked")
+
+      expect(result).toBe(false)
+      expect(existsSync(join(OUTSIDE_DIR, "new.txt"))).toBe(false)
     })
   })
 
@@ -349,6 +370,17 @@ describe("VaultService", () => {
       expect(result).toBe(false)
       expect(existsSync(join(TEST_DIR, "source.txt"))).toBe(true)
     })
+
+    test("rejects moving files through symlinked destination", async () => {
+      writeFileSync(join(TEST_DIR, "source.txt"), "content")
+      symlinkSync(OUTSIDE_DIR, join(TEST_DIR, "escape"), "dir")
+
+      const result = await vaultService.moveFile("source.txt", "escape/moved.txt")
+
+      expect(result).toBe(false)
+      expect(existsSync(join(TEST_DIR, "source.txt"))).toBe(true)
+      expect(existsSync(join(OUTSIDE_DIR, "moved.txt"))).toBe(false)
+    })
   })
 
   describe("getDailyNotePath", () => {
@@ -372,6 +404,34 @@ describe("VaultService", () => {
       const today = new Date()
       const expected = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getDate()).padStart(2, "0")}`
       expect(path).toBe(`01-daily-journey/${expected}.md`)
+    })
+
+    test("supports overlapping date tokens safely", async () => {
+      mkdirSync(join(TEST_DIR, ".obsidian"), { recursive: true })
+      writeFileSync(
+        join(TEST_DIR, ".obsidian", "daily-notes.json"),
+        JSON.stringify({ folder: "daily", format: "MMMM D" }),
+      )
+
+      const path = await vaultService.getTodayDailyNotePath()
+      const today = new Date()
+      const monthNamesFull = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ]
+      const expected = `${monthNamesFull[today.getMonth()]} ${today.getDate()}`
+
+      expect(path).toBe(`daily/${expected}.md`)
     })
   })
 

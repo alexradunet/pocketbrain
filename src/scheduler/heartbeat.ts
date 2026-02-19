@@ -31,6 +31,7 @@ export class HeartbeatScheduler {
   private nextRunTimeout: ReturnType<typeof setTimeout> | undefined
   private running = false
   private consecutiveFailures = 0
+  private notifiedForCurrentFailureIncident = false
 
   constructor(options: HeartbeatOptions, deps: HeartbeatDependencies) {
     this.options = options
@@ -97,6 +98,7 @@ export class HeartbeatScheduler {
       )
       
       this.consecutiveFailures = 0
+      this.notifiedForCurrentFailureIncident = false
       this.scheduleNextRun(Math.max(1, this.options.intervalMinutes) * 60_000)
       
       this.deps.logger.info({ runID, result, durationMs: Date.now() - startedAt }, "heartbeat run completed")
@@ -118,8 +120,12 @@ export class HeartbeatScheduler {
       consecutiveFailures: this.consecutiveFailures,
     }, "heartbeat run failed")
 
-    if (this.consecutiveFailures >= this.options.notifyAfterFailures) {
+    if (
+      this.consecutiveFailures >= this.options.notifyAfterFailures &&
+      !this.notifiedForCurrentFailureIncident
+    ) {
       await this.notifyFailure()
+      this.notifiedForCurrentFailureIncident = true
     }
   }
 

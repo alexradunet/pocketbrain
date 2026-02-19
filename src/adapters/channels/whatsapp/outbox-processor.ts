@@ -1,6 +1,5 @@
 import type { Logger } from "pino"
 import type { OutboxMessage, OutboxRepository } from "../../../core/ports/outbox-repository"
-import { retryWithBackoff } from "../../../lib/retry"
 
 export interface OutboxProcessorOptions {
   outboxRepository: OutboxRepository
@@ -18,17 +17,7 @@ export class OutboxProcessor {
 
   async process(item: OutboxMessage): Promise<void> {
     try {
-      await retryWithBackoff(
-        async () => {
-          await this.options.sendMessage(item.userID, item.text)
-        },
-        {
-          retries: 2,
-          minTimeoutMs: this.options.retryBaseDelayMs ?? 60_000,
-          maxTimeoutMs: 10 * 60_000,
-          factor: 2,
-        },
-      )
+      await this.options.sendMessage(item.userID, item.text)
 
       this.options.outboxRepository.acknowledge(item.id)
       this.options.logger.info({ userID: item.userID }, "whatsapp proactive message sent")

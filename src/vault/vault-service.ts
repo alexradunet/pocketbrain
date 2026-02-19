@@ -9,7 +9,7 @@
  */
 
 import { join, dirname, resolve, relative, sep } from "node:path"
-import { mkdir, readdir, stat, rename } from "node:fs/promises"
+import { mkdir, readdir, stat, lstat, rename, realpath } from "node:fs/promises"
 import type { Logger } from "pino"
 import { normalizeWikiLinkTarget, parseWikiLinks } from "../lib/markdown-links"
 import { extractMarkdownTags } from "../lib/markdown-tags"
@@ -113,7 +113,7 @@ export class VaultService {
    */
   async readFile(relativePath: string): Promise<string | null> {
     try {
-      const filePath = this.resolvePathWithinVault(relativePath)
+      const filePath = await this.resolveExistingPathWithinVault(relativePath)
       if (!filePath) return null
       const file = Bun.file(filePath)
       return await file.text()
@@ -127,9 +127,15 @@ export class VaultService {
    */
   async writeFile(relativePath: string, content: string): Promise<boolean> {
     try {
-      const filePath = this.resolvePathWithinVault(relativePath)
+      const filePath = await this.resolveWritablePathWithinVault(relativePath)
       if (!filePath) return false
       await mkdir(dirname(filePath), { recursive: true })
+
+      // Re-check in case a symlink appeared between validation and mkdir/write.
+      if (!(await this.isWritablePathSafe(filePath))) {
+        return false
+      }
+
       await Bun.write(filePath, content)
       return true
     } catch (error) {
@@ -164,7 +170,7 @@ export class VaultService {
    */
   async listFiles(folderPath: string = ""): Promise<VaultFile[]> {
     try {
-      const fullPath = this.resolvePathWithinVault(folderPath, true)
+      const fullPath = await this.resolveExistingPathWithinVault(folderPath, true)
       if (!fullPath) return []
       const entries = await readdir(fullPath, { withFileTypes: true })
 
@@ -174,7 +180,10 @@ export class VaultService {
         if (entry.name.startsWith(".")) continue
 
         const entryPath = join(fullPath, entry.name)
-        const stats = await stat(entryPath)
+        const stats = await lstat(entryPath)
+        if (stats.isSymbolicLink()) {
+          continue
+        }
 
         files.push({
           path: join(folderPath, entry.name),
@@ -443,11 +452,16 @@ export class VaultService {
    */
   async moveFile(fromPath: string, toPath: string): Promise<boolean> {
     try {
-      const source = this.resolvePathWithinVault(fromPath)
-      const dest = this.resolvePathWithinVault(toPath)
+      const source = await this.resolveExistingPathWithinVault(fromPath)
+      const dest = await this.resolveWritablePathWithinVault(toPath)
       if (!source || !dest) return false
 
       await mkdir(dirname(dest), { recursive: true })
+
+      if (!(await this.isWritablePathSafe(dest))) {
+        return false
+      }
+
       await rename(source, dest)
 
       return true
@@ -527,6 +541,132 @@ export class VaultService {
     return resolvedPath
   }
 
+  private async resolveExistingPathWithinVault(inputPath: string, allowRoot = false): Promise<string | null> {
+    const resolvedPath = this.resolvePathWithinVault(inputPath, allowRoot)
+    if (!resolvedPath) {
+      return null
+    }
+
+    if (!(await this.isExistingPathSafe(resolvedPath))) {
+      return null
+    }
+
+    return resolvedPath
+  }
+
+  private async resolveWritablePathWithinVault(inputPath: string): Promise<string | null> {
+    const resolvedPath = this.resolvePathWithinVault(inputPath)
+    if (!resolvedPath) {
+      return null
+    }
+
+    if (!(await this.isWritablePathSafe(resolvedPath))) {
+      return null
+    }
+
+    return resolvedPath
+  }
+
+  private async isExistingPathSafe(targetPath: string): Promise<boolean> {
+    if (!(await this.hasNoSymlinkSegments(targetPath))) {
+      return false
+    }
+
+    try {
+      const [rootReal, targetReal] = await Promise.all([
+        realpath(this.vaultRootPath),
+        realpath(targetPath),
+      ])
+      return isWithinRoot(rootReal, targetReal)
+    } catch {
+      return false
+    }
+  }
+
+  private async isWritablePathSafe(targetPath: string): Promise<boolean> {
+    if (!(await this.hasNoSymlinkSegments(targetPath))) {
+      return false
+    }
+
+    const nearestExistingAncestor = await this.findNearestExistingAncestor(targetPath)
+    if (!nearestExistingAncestor) {
+      return false
+    }
+
+    try {
+      const [rootReal, ancestorReal] = await Promise.all([
+        realpath(this.vaultRootPath),
+        realpath(nearestExistingAncestor),
+      ])
+      if (!isWithinRoot(rootReal, ancestorReal)) {
+        return false
+      }
+
+      const targetStat = await lstat(targetPath).catch(() => null)
+      if (targetStat?.isSymbolicLink()) {
+        return false
+      }
+
+      if (targetStat) {
+        const targetReal = await realpath(targetPath)
+        return isWithinRoot(rootReal, targetReal)
+      }
+
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private async hasNoSymlinkSegments(targetPath: string): Promise<boolean> {
+    const relToRoot = relative(this.vaultRootPath, targetPath)
+    if (relToRoot.length === 0) {
+      return true
+    }
+
+    const segments = relToRoot.split(sep).filter(Boolean)
+    let current = this.vaultRootPath
+
+    for (const segment of segments) {
+      current = join(current, segment)
+
+      try {
+        const stats = await lstat(current)
+        if (stats.isSymbolicLink()) {
+          return false
+        }
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          continue
+        }
+        return false
+      }
+    }
+
+    return true
+  }
+
+  private async findNearestExistingAncestor(targetPath: string): Promise<string | null> {
+    let current = targetPath
+
+    while (true) {
+      try {
+        await lstat(current)
+        return current
+      } catch (error) {
+        if (!isNotFoundError(error)) {
+          return null
+        }
+
+        const parent = dirname(current)
+        if (parent === current) {
+          return null
+        }
+        current = parent
+      }
+    }
+  }
+
   private normalizeSearchMode(mode: VaultSearchMode | string): VaultSearchMode {
     return mode === "content" || mode === "both" || mode === "name" ? mode : "name"
   }
@@ -558,7 +698,11 @@ export class VaultService {
   }
 
   private async getFileSignature(relativePath: string): Promise<string> {
-    const absolutePath = join(this.vaultRootPath, relativePath)
+    const absolutePath = await this.resolveExistingPathWithinVault(relativePath)
+    if (!absolutePath) {
+      return `${relativePath}:missing`
+    }
+
     try {
       const fileStat = await stat(absolutePath)
       return `${relativePath}:${fileStat.size}:${Math.floor(fileStat.mtimeMs)}`
@@ -604,7 +748,10 @@ export class VaultService {
 
   private async readObsidianJson<T>(fileName: string): Promise<T | null> {
     try {
-      const configPath = join(this.vaultRootPath, ".obsidian", fileName)
+      const configPath = await this.resolveExistingPathWithinVault(join(".obsidian", fileName))
+      if (!configPath) {
+        return null
+      }
       const file = Bun.file(configPath)
       if (!(await file.exists())) {
         return null
@@ -649,28 +796,25 @@ function formatObsidianDate(value: Date, pattern: string): string {
   const dayNamesFull = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
   const dayNamesShort = dayNamesFull.map((name) => name.slice(0, 3))
 
-  const tokens: Array<[string, string]> = [
-    ["YYYY", String(fullYear)],
-    ["YY", String(fullYear).slice(-2)],
-    ["MMMM", monthNamesFull[month]],
-    ["MMM", monthNamesShort[month]],
-    ["MM", pad2(month + 1)],
-    ["M", String(month + 1)],
-    ["DD", pad2(value.getDate())],
-    ["D", String(value.getDate())],
-    ["dddd", dayNamesFull[day]],
-    ["ddd", dayNamesShort[day]],
-    ["HH", pad2(value.getHours())],
-    ["H", String(value.getHours())],
-    ["mm", pad2(value.getMinutes())],
-    ["m", String(value.getMinutes())],
-  ]
-
-  let output = pattern
-  for (const [token, replacement] of tokens) {
-    output = output.replaceAll(token, replacement)
+  const tokenMap: Record<string, string> = {
+    YYYY: String(fullYear),
+    YY: String(fullYear).slice(-2),
+    MMMM: monthNamesFull[month],
+    MMM: monthNamesShort[month],
+    MM: pad2(month + 1),
+    M: String(month + 1),
+    DD: pad2(value.getDate()),
+    D: String(value.getDate()),
+    dddd: dayNamesFull[day],
+    ddd: dayNamesShort[day],
+    HH: pad2(value.getHours()),
+    H: String(value.getHours()),
+    mm: pad2(value.getMinutes()),
+    m: String(value.getMinutes()),
   }
-  return output
+
+  const tokenPattern = /(YYYY|MMMM|dddd|MMM|ddd|MM|DD|HH|mm|YY|M|D|H|m)/g
+  return pattern.replace(tokenPattern, (token) => tokenMap[token] ?? token)
 }
 
 function pad2(value: number): string {
@@ -753,6 +897,15 @@ function normalizeNewFileLocation(value: string | null): "current" | "folder" | 
     return value
   }
   return "unknown"
+}
+
+function isWithinRoot(rootPath: string, candidatePath: string): boolean {
+  const rel = relative(rootPath, candidatePath)
+  return rel !== ".." && !rel.startsWith(`..${sep}`)
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && (error as { code?: string }).code === "ENOENT"
 }
 
 /**

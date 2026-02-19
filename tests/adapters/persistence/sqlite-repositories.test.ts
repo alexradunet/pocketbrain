@@ -50,6 +50,17 @@ describe("SQLite repositories", () => {
     repo.close()
   })
 
+  test("memory repository allows idempotent update on same row", () => {
+    const repo = new SQLiteMemoryRepository()
+    expect(repo.append("User likes coffee", "test")).toBe(true)
+
+    const entry = repo.getAll()[0]
+    expect(entry).toBeDefined()
+    expect(repo.update(entry!.id, "user   likes    coffee")).toBe(true)
+
+    repo.close()
+  })
+
   test("whitelist repository add/check/remove", () => {
     const repo = new SQLiteWhitelistRepository()
     expect(repo.addToWhitelist("whatsapp", "123@s.whatsapp.net")).toBe(true)

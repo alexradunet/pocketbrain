@@ -147,4 +147,109 @@ describe("HeartbeatScheduler", () => {
 
     scheduler.stop()
   })
+
+  test("sends only one notification per failure incident until recovery", async () => {
+    vi.useFakeTimers()
+
+    const assistant = {
+      runHeartbeatTasks: vi.fn().mockRejectedValue(new Error("always fail")),
+    }
+    const outboxRepository = { enqueue: vi.fn() }
+    const channelRepository = {
+      getLastChannel: vi.fn().mockReturnValue({ channel: "whatsapp", userID: "123@s.whatsapp.net" }),
+    }
+
+    const scheduler = new HeartbeatScheduler(
+      {
+        intervalMinutes: 1,
+        baseDelayMs: 1,
+        maxDelayMs: 30 * ONE_MINUTE_MS,
+        notifyAfterFailures: 2,
+      },
+      {
+        assistant: assistant as unknown as AssistantCore,
+        outboxRepository: outboxRepository as unknown as OutboxRepository,
+        channelRepository: channelRepository as unknown as ChannelRepository,
+        logger: createLoggerMock(),
+      }
+    )
+
+    scheduler.start()
+    vi.advanceTimersByTime(10_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    vi.advanceTimersByTime(70_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    vi.advanceTimersByTime(70_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(outboxRepository.enqueue).toHaveBeenCalledTimes(1)
+
+    scheduler.stop()
+  })
+
+  test("sends a new notification after recovery and another failure streak", async () => {
+    vi.useFakeTimers()
+
+    let call = 0
+    const assistant = {
+      runHeartbeatTasks: vi.fn().mockImplementation(async () => {
+        call += 1
+        if (call <= 6 || (call >= 8 && call <= 13)) {
+          throw new Error("fail")
+        }
+        return "ok"
+      }),
+    }
+
+    const outboxRepository = { enqueue: vi.fn() }
+    const channelRepository = {
+      getLastChannel: vi.fn().mockReturnValue({ channel: "whatsapp", userID: "123@s.whatsapp.net" }),
+    }
+
+    const scheduler = new HeartbeatScheduler(
+      {
+        intervalMinutes: 1,
+        baseDelayMs: 1,
+        maxDelayMs: 30 * ONE_MINUTE_MS,
+        notifyAfterFailures: 2,
+      },
+      {
+        assistant: assistant as unknown as AssistantCore,
+        outboxRepository: outboxRepository as unknown as OutboxRepository,
+        channelRepository: channelRepository as unknown as ChannelRepository,
+        logger: createLoggerMock(),
+      }
+    )
+
+    scheduler.start()
+
+    vi.advanceTimersByTime(10_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    vi.advanceTimersByTime(70_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    vi.advanceTimersByTime(70_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    vi.advanceTimersByTime(70_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    vi.advanceTimersByTime(70_000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(outboxRepository.enqueue).toHaveBeenCalledTimes(2)
+
+    scheduler.stop()
+  })
 })

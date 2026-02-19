@@ -34,6 +34,7 @@ export class ConnectionManager {
   private connected = false
   private reconnectScheduled = false
   private connectTimeout?: ReturnType<typeof setTimeout>
+  private reconnectTimeout?: ReturnType<typeof setTimeout>
   private stopping = false
 
   constructor(options: ConnectionManagerOptions) {
@@ -63,6 +64,8 @@ export class ConnectionManager {
   stop(): void {
     this.stopping = true
     this.clearConnectTimeout()
+    this.clearReconnectTimeout()
+    this.reconnectScheduled = false
     this.socket?.end?.(new Error("stopping"))
     this.socket = undefined
     this.connected = false
@@ -91,14 +94,19 @@ export class ConnectionManager {
     this.reconnectScheduled = true
     this.connected = false
     this.clearConnectTimeout()
+    this.clearReconnectTimeout()
     
     this.options.logger.warn({ delayMs, reason }, "whatsapp reconnect scheduled")
     
-    setTimeout(() => {
-      if (!this.stopping) {
-        this.reconnectScheduled = false
-        void this.connect()
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = undefined
+
+      if (this.stopping) {
+        return
       }
+
+      this.reconnectScheduled = false
+      void this.connect()
     }, delayMs)
   }
 
@@ -143,6 +151,7 @@ export class ConnectionManager {
     this.connected = true
     this.reconnectScheduled = false
     this.clearConnectTimeout()
+    this.clearReconnectTimeout()
     this.options.logger.info("whatsapp adapter connected")
     this.options.onOpen?.()
   }
@@ -171,6 +180,13 @@ export class ConnectionManager {
     if (this.connectTimeout) {
       clearTimeout(this.connectTimeout)
       this.connectTimeout = undefined
+    }
+  }
+
+  private clearReconnectTimeout(): void {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout)
+      this.reconnectTimeout = undefined
     }
   }
 }

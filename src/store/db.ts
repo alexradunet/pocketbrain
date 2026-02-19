@@ -19,6 +19,54 @@ export const db = new Database(join(DATA_DIR, "state.db"))
 db.run("PRAGMA journal_mode = WAL")
 db.run("PRAGMA foreign_keys = ON")
 
+export function normalizeMemoryFact(fact: string): string {
+  return fact.toLowerCase().replace(/\s+/g, " ").trim()
+}
+
+interface TableInfoRow {
+  name: string
+}
+
+interface MemorySeedRow {
+  id: number
+  fact: string
+}
+
+function hasColumn(database: Database, tableName: string, columnName: string): boolean {
+  const columns = database.query<TableInfoRow, []>(`PRAGMA table_info(${tableName})`).all() as TableInfoRow[]
+  return columns.some((column) => column.name === columnName)
+}
+
+export function migrateMemoryTable(database: Database): void {
+  if (!hasColumn(database, "memory", "fact_normalized")) {
+    database.run("ALTER TABLE memory ADD COLUMN fact_normalized TEXT")
+  }
+
+  const rows = database
+    .query<MemorySeedRow, []>(
+      "SELECT id, fact FROM memory WHERE fact_normalized IS NULL OR TRIM(fact_normalized) = ''",
+    )
+    .all() as MemorySeedRow[]
+
+  if (rows.length === 0) {
+    return
+  }
+
+  const update = database.prepare("UPDATE memory SET fact_normalized = ? WHERE id = ?")
+  database.run("BEGIN")
+  try {
+    for (const row of rows) {
+      update.run(normalizeMemoryFact(row.fact), row.id)
+    }
+    database.run("COMMIT")
+  } catch (error) {
+    database.run("ROLLBACK")
+    throw error
+  } finally {
+    update.finalize()
+  }
+}
+
 // Schema setup
 db.run(`
   CREATE TABLE IF NOT EXISTS kv (
@@ -57,17 +105,8 @@ db.run(`
     created_at TEXT NOT NULL
   )
 `)
-
+migrateMemoryTable(db)
 db.run(`CREATE INDEX IF NOT EXISTS idx_memory_normalized ON memory(fact_normalized)`)
-
-// Migrate existing data to have normalized field
-try {
-  const existingNormalized = db.query("SELECT fact_normalized FROM memory LIMIT 1").get()
-  if (!existingNormalized) {
-    db.run("UPDATE memory SET fact_normalized = LOWER(REPLACE(fact, ' ', ''))")
-  }
-} catch {
-}
 
 db.run(`
   CREATE TABLE IF NOT EXISTS heartbeat_tasks (

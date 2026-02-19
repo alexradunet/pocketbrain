@@ -296,6 +296,10 @@ async function bootstrapVaultPocketBrainHome(opencodeConfigDir: string): Promise
 
 async function writeVaultOpencodeConfig(opencodeConfigDir: string): Promise<void> {
   const configPath = join(opencodeConfigDir, "opencode.json")
+  if (await Bun.file(configPath).exists()) {
+    return
+  }
+
   const plugin = OPENCODE_PLUGIN_RELATIVE_PATHS.map((relativePath) => join(process.cwd(), relativePath.slice(2)))
   const config = {
     $schema: "https://opencode.ai/config.json",

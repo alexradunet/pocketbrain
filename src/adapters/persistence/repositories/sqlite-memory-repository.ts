@@ -4,7 +4,7 @@
  */
 
 import type { MemoryRepository, MemoryEntry } from "../../../core/ports/memory-repository"
-import { db } from "../../../store/db"
+import { db, normalizeMemoryFact } from "../../../store/db"
 
 interface MemoryRow {
   id: number
@@ -17,6 +17,7 @@ export class SQLiteMemoryRepository implements MemoryRepository {
   private readonly stmtInsert: ReturnType<typeof db.prepare>
   private readonly stmtSelectAll: ReturnType<typeof db.prepare>
   private readonly stmtCheck: ReturnType<typeof db.prepare>
+  private readonly stmtCheckOther: ReturnType<typeof db.prepare>
   private readonly stmtDelete: ReturnType<typeof db.prepare>
   private readonly stmtUpdate: ReturnType<typeof db.prepare>
 
@@ -29,6 +30,9 @@ export class SQLiteMemoryRepository implements MemoryRepository {
     )
     this.stmtCheck = db.prepare<{ n: number }, [string]>(
       "SELECT 1 AS n FROM memory WHERE fact_normalized = ?"
+    )
+    this.stmtCheckOther = db.prepare<{ n: number }, [string, number]>(
+      "SELECT 1 AS n FROM memory WHERE fact_normalized = ? AND id != ?"
     )
     this.stmtDelete = db.prepare("DELETE FROM memory WHERE id = ?")
     this.stmtUpdate = db.prepare("UPDATE memory SET fact = ?, fact_normalized = ? WHERE id = ?")
@@ -51,7 +55,7 @@ export class SQLiteMemoryRepository implements MemoryRepository {
 
   update(id: number, fact: string): boolean {
     const normalized = this.normalizeFact(fact)
-    const existing = this.stmtCheck.get(normalized)
+    const existing = this.stmtCheckOther.get(normalized, id)
     if (existing) {
       return false
     }
@@ -76,11 +80,12 @@ export class SQLiteMemoryRepository implements MemoryRepository {
     this.stmtInsert.finalize()
     this.stmtSelectAll.finalize()
     this.stmtCheck.finalize()
+    this.stmtCheckOther.finalize()
     this.stmtDelete.finalize()
     this.stmtUpdate.finalize()
   }
 
   private normalizeFact(fact: string): string {
-    return fact.toLowerCase().replace(/\s+/g, " ").trim()
+    return normalizeMemoryFact(fact)
   }
 }

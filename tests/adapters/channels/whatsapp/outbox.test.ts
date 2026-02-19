@@ -98,13 +98,14 @@ describe("OutboxProcessor", () => {
 
   test("marks retry when send fails and retries remain", async () => {
     const repository = createOutboxRepositoryMock()
+    const sendMessage = vi.fn(async () => {
+      throw new Error("whatsapp socket unavailable")
+    })
     const processor = new OutboxProcessor({
       outboxRepository: repository,
       logger: createLoggerMock(),
       retryBaseDelayMs: 1,
-      sendMessage: async () => {
-        throw new Error("whatsapp socket unavailable")
-      },
+      sendMessage,
     })
 
     await processor.process({
@@ -119,17 +120,19 @@ describe("OutboxProcessor", () => {
 
     expect(repository.markRetry).toHaveBeenCalledTimes(1)
     expect(repository.acknowledge).not.toHaveBeenCalled()
+    expect(sendMessage).toHaveBeenCalledTimes(1)
   })
 
   test("acknowledges when max retries are exceeded", async () => {
     const repository = createOutboxRepositoryMock()
+    const sendMessage = vi.fn(async () => {
+      throw new Error("send failed")
+    })
     const processor = new OutboxProcessor({
       outboxRepository: repository,
       logger: createLoggerMock(),
       retryBaseDelayMs: 1,
-      sendMessage: async () => {
-        throw new Error("send failed")
-      },
+      sendMessage,
     })
 
     await processor.process({
@@ -144,5 +147,6 @@ describe("OutboxProcessor", () => {
 
     expect(repository.acknowledge).toHaveBeenCalledWith(5)
     expect(repository.markRetry).not.toHaveBeenCalled()
+    expect(sendMessage).toHaveBeenCalledTimes(1)
   })
 })
