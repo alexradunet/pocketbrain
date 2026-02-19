@@ -37,14 +37,9 @@ export interface AppConfig {
   whatsAppPairFailureWindowMs: number
   whatsAppPairBlockDurationMs: number
   whatsAppWhitelistNumbers: string[]
-  syncthingEnabled: boolean
-  syncthingBaseUrl: string
-  syncthingApiKey: string | undefined
-  syncthingTimeoutMs: number
-  syncthingVaultFolderId: string | undefined
-  syncthingAutoStart: boolean
-  syncthingMutationToolsEnabled: boolean
-  syncthingAllowedFolderIds: string[]
+  taildriveEnabled: boolean
+  taildriveShareName: string
+  taildriveAutoShare: boolean
   vaultPath: string
   vaultEnabled: boolean
   vaultFolders: VaultFolders
@@ -70,10 +65,7 @@ const DEFAULTS = {
   whatsAppPairMaxFailures: 5,
   whatsAppPairFailureWindowMs: 5 * 60 * 1000,
   whatsAppPairBlockDurationMs: 15 * 60 * 1000,
-  syncthingBaseUrl: "http://127.0.0.1:8384",
-  syncthingTimeoutMs: 5000,
-  syncthingVaultFolderId: "vault",
-  syncthingAutoStart: true,
+  taildriveShareName: "vault",
   pocketBrainVaultHomeRelative: "99-system/99-pocketbrain",
   vaultFolders: {
     inbox: "inbox",
@@ -123,14 +115,9 @@ const AppConfigSchema = z
     whatsAppPairFailureWindowMs: z.number().int().positive(),
     whatsAppPairBlockDurationMs: z.number().int().positive(),
     whatsAppWhitelistNumbers: z.array(z.string().regex(/^\d+$/)),
-    syncthingEnabled: z.boolean(),
-    syncthingBaseUrl: z.string().url("SYNCTHING_BASE_URL must be a valid URL"),
-    syncthingApiKey: z.string().optional(),
-    syncthingTimeoutMs: z.number().int().positive(),
-    syncthingVaultFolderId: z.string().optional(),
-    syncthingAutoStart: z.boolean(),
-    syncthingMutationToolsEnabled: z.boolean(),
-    syncthingAllowedFolderIds: z.array(z.string().min(1)),
+    taildriveEnabled: z.boolean(),
+    taildriveShareName: z.string().min(1),
+    taildriveAutoShare: z.boolean(),
     vaultPath: z.string().min(1),
     vaultEnabled: z.boolean(),
     vaultFolders: z.object({
@@ -160,23 +147,6 @@ const AppConfigSchema = z
       })
     }
 
-    if (cfg.syncthingEnabled) {
-      if (!cfg.syncthingApiKey?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["syncthingApiKey"],
-          message: "SYNCTHING_API_KEY is required when SYNCTHING_ENABLED=true",
-        })
-      }
-
-      if (cfg.syncthingMutationToolsEnabled && cfg.syncthingAllowedFolderIds.length === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["syncthingAllowedFolderIds"],
-          message: "SYNCTHING_ALLOWED_FOLDER_IDS is required when SYNCTHING_MUTATION_TOOLS_ENABLED=true",
-        })
-      }
-    }
   })
 
 function envBool(value: string | undefined, fallback = false): boolean {
@@ -213,16 +183,6 @@ function parsePhoneWhitelist(values: Array<string | undefined>): string[] {
     }
   }
 
-  return [...unique]
-}
-
-function parseCommaSeparatedList(value: string | undefined): string[] {
-  if (!value) return []
-  const unique = new Set<string>()
-  for (const item of value.split(",")) {
-    const normalized = item.trim()
-    if (normalized) unique.add(normalized)
-  }
   return [...unique]
 }
 
@@ -295,16 +255,9 @@ export function loadConfig(): AppConfig {
       Bun.env.WHATSAPP_WHITELIST_NUMBERS,
       Bun.env.WHATSAPP_WHITELIST_NUMBER,
     ]),
-    syncthingEnabled: envBool(Bun.env.SYNCTHING_ENABLED, false),
-    syncthingBaseUrl: envString(Bun.env.SYNCTHING_BASE_URL, DEFAULTS.syncthingBaseUrl),
-    syncthingApiKey: optionalTrimmed(Bun.env.SYNCTHING_API_KEY),
-    syncthingTimeoutMs: envInt(Bun.env.SYNCTHING_TIMEOUT_MS, DEFAULTS.syncthingTimeoutMs),
-    syncthingVaultFolderId:
-      optionalTrimmed(Bun.env.SYNCTHING_VAULT_FOLDER_ID) ||
-      (envBool(Bun.env.SYNCTHING_ENABLED, false) ? DEFAULTS.syncthingVaultFolderId : undefined),
-    syncthingAutoStart: envBool(Bun.env.SYNCTHING_AUTO_START, DEFAULTS.syncthingAutoStart),
-    syncthingMutationToolsEnabled: envBool(Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED, false),
-    syncthingAllowedFolderIds: parseCommaSeparatedList(Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS),
+    taildriveEnabled: envBool(Bun.env.TAILDRIVE_ENABLED, false),
+    taildriveShareName: envString(Bun.env.TAILDRIVE_SHARE_NAME, DEFAULTS.taildriveShareName),
+    taildriveAutoShare: envBool(Bun.env.TAILDRIVE_AUTO_SHARE, true),
     vaultPath: resolvedVaultPath,
     vaultEnabled,
     vaultFolders: resolveVaultFoldersFromEnv(),
@@ -317,8 +270,6 @@ export function loadConfig(): AppConfig {
     opencodeServerUrl: parsed.opencodeServerUrl,
     whitelistPairToken: parsed.whitelistPairToken,
     whatsAppWhitelistNumbers: parsed.whatsAppWhitelistNumbers,
-    syncthingApiKey: parsed.syncthingApiKey,
-    syncthingVaultFolderId: parsed.syncthingVaultFolderId,
   }
 }
 

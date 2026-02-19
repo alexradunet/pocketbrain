@@ -274,79 +274,22 @@ else
   warn "tailscale CLI not found"
 fi
 
-SYNCTHING_ENABLED_VALUE="${SYNCTHING_ENABLED:-false}"
-if [[ "${SYNCTHING_ENABLED_VALUE,,}" == "true" || "$SYNCTHING_ENABLED_VALUE" == "1" ]]; then
-  SYNCTHING_BASE_URL_VALUE="${SYNCTHING_BASE_URL:-http://127.0.0.1:8384}"
-  SYNCTHING_API_KEY_VALUE="${SYNCTHING_API_KEY:-}"
-  SYNCTHING_TIMEOUT_MS_VALUE="${SYNCTHING_TIMEOUT_MS:-5000}"
-  SYNCTHING_VAULT_FOLDER_ID_VALUE="${SYNCTHING_VAULT_FOLDER_ID:-vault}"
-  SYNCTHING_MUTATION_TOOLS_ENABLED_VALUE="${SYNCTHING_MUTATION_TOOLS_ENABLED:-false}"
-  SYNCTHING_ALLOWED_FOLDER_IDS_VALUE="${SYNCTHING_ALLOWED_FOLDER_IDS:-}"
+TAILDRIVE_ENABLED_VALUE="${TAILDRIVE_ENABLED:-false}"
+if [[ "${TAILDRIVE_ENABLED_VALUE,,}" == "true" || "$TAILDRIVE_ENABLED_VALUE" == "1" ]]; then
+  TAILDRIVE_SHARE_NAME_VALUE="${TAILDRIVE_SHARE_NAME:-vault}"
 
-  CURL_TIMEOUT_SEC=6
-  if [[ "$SYNCTHING_TIMEOUT_MS_VALUE" =~ ^[0-9]+$ ]] && [[ "$SYNCTHING_TIMEOUT_MS_VALUE" -gt 0 ]]; then
-    CURL_TIMEOUT_SEC=$((SYNCTHING_TIMEOUT_MS_VALUE / 1000 + 1))
-  else
-    warn "SYNCTHING_TIMEOUT_MS is invalid (${SYNCTHING_TIMEOUT_MS_VALUE}); using 6s for probes"
-  fi
-
-  if [[ -z "$SYNCTHING_API_KEY_VALUE" ]]; then
-    fail "Syncthing enabled but SYNCTHING_API_KEY is missing"
-  else
-    pass "Syncthing API key configured"
-  fi
-
-  if command -v systemctl >/dev/null 2>&1; then
-    if systemctl is-active --quiet syncthing; then
-      pass "Syncthing system service active"
-    elif systemctl --user is-active --quiet syncthing; then
-      pass "Syncthing user service active"
+  if command -v tailscale >/dev/null 2>&1; then
+    DRIVE_LIST="$(tailscale drive list 2>&1 || true)"
+    if printf '%s' "$DRIVE_LIST" | grep -q "^${TAILDRIVE_SHARE_NAME_VALUE}"; then
+      pass "Taildrive share '${TAILDRIVE_SHARE_NAME_VALUE}' exists"
     else
-      warn "Syncthing service is not active (system or user scope)"
-    fi
-  fi
-
-  if [[ "$SYNCTHING_BASE_URL_VALUE" =~ ^https?://(127\.0\.0\.1|localhost)(:[0-9]+)?$ ]]; then
-    pass "Syncthing base URL uses local interface"
-  else
-    warn "Syncthing base URL is non-local (${SYNCTHING_BASE_URL_VALUE})"
-  fi
-
-  if command -v curl >/dev/null 2>&1 && [[ -n "$SYNCTHING_API_KEY_VALUE" ]]; then
-    if curl -fsS -m "$CURL_TIMEOUT_SEC" \
-      -H "X-API-Key: ${SYNCTHING_API_KEY_VALUE}" \
-      "${SYNCTHING_BASE_URL_VALUE}/rest/system/ping" >/dev/null 2>&1; then
-      pass "Syncthing API ping succeeded"
-    else
-      fail "Syncthing API ping failed (check base URL/API key/service)"
-    fi
-
-    if curl -fsS -m "$CURL_TIMEOUT_SEC" \
-      -H "X-API-Key: ${SYNCTHING_API_KEY_VALUE}" \
-      "${SYNCTHING_BASE_URL_VALUE}/rest/db/status?folder=${SYNCTHING_VAULT_FOLDER_ID_VALUE}" >/dev/null 2>&1; then
-      if [[ -n "${SYNCTHING_VAULT_FOLDER_ID:-}" ]]; then
-        pass "Syncthing vault folder ID is valid (${SYNCTHING_VAULT_FOLDER_ID_VALUE})"
-      else
-        pass "Syncthing vault folder ID defaulted to '${SYNCTHING_VAULT_FOLDER_ID_VALUE}' and is valid"
-      fi
-    else
-      warn "Syncthing vault folder ID check failed (${SYNCTHING_VAULT_FOLDER_ID_VALUE})"
+      warn "Taildrive share '${TAILDRIVE_SHARE_NAME_VALUE}' not found in 'tailscale drive list'"
     fi
   else
-    warn "curl missing or Syncthing API key missing; skipping Syncthing API probes"
-  fi
-
-  if [[ "${SYNCTHING_MUTATION_TOOLS_ENABLED_VALUE,,}" == "true" || "$SYNCTHING_MUTATION_TOOLS_ENABLED_VALUE" == "1" ]]; then
-    if [[ -n "$SYNCTHING_ALLOWED_FOLDER_IDS_VALUE" ]]; then
-      pass "Syncthing mutation policy configured with allowed folder IDs"
-    else
-      fail "SYNCTHING_MUTATION_TOOLS_ENABLED=true but SYNCTHING_ALLOWED_FOLDER_IDS is empty"
-    fi
-  else
-    pass "Syncthing mutation tools disabled by policy"
+    warn "tailscale CLI not found; skipping Taildrive share check"
   fi
 else
-  pass "Syncthing integration disabled"
+  pass "Taildrive integration disabled"
 fi
 
 if [[ "$DEEP" == "true" ]]; then

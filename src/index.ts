@@ -30,7 +30,7 @@ import {
 // Channel imports
 import { RateLimiter } from "./adapters/channels/rate-limiter"
 import { WhatsAppAdapter } from "./adapters/channels/whatsapp/adapter"
-import { ensureSyncthingAvailable } from "./adapters/syncthing/bootstrap"
+import { ensureTaildriveShare } from "./adapters/taildrive/bootstrap"
 
 // Scheduler imports
 import { HeartbeatScheduler } from "./scheduler/heartbeat"
@@ -44,7 +44,6 @@ const OPENCODE_PLUGIN_RELATIVE_PATHS = [
   "./src/adapters/plugins/memory.plugin.ts",
   "./src/adapters/plugins/channel-message.plugin.ts",
   "./src/adapters/plugins/vault.plugin.ts",
-  "./src/adapters/plugins/syncthing.plugin.ts",
 ]
 
 async function main(): Promise<void> {
@@ -56,12 +55,11 @@ async function main(): Promise<void> {
 
   const logger = pino({ level: cfg.logLevel })
 
-  await ensureSyncthingAvailable({
-    enabled: cfg.syncthingEnabled,
-    baseUrl: cfg.syncthingBaseUrl,
-    apiKey: cfg.syncthingApiKey,
-    timeoutMs: cfg.syncthingTimeoutMs,
-    autoStart: cfg.syncthingAutoStart,
+  await ensureTaildriveShare({
+    enabled: cfg.taildriveEnabled,
+    shareName: cfg.taildriveShareName,
+    vaultPath: cfg.vaultPath,
+    autoShare: cfg.taildriveAutoShare,
     logger,
   })
 
@@ -129,7 +127,7 @@ async function main(): Promise<void> {
     vaultProfile = formatVaultProfile(vaultConfig)
     logger.info({ obsidianConfigFound: vaultConfig.obsidianConfigFound }, "vault profile detected")
     vaultProvider.setVaultService(vaultService)
-    logger.info("vault initialized (sync via Syncthing)")
+    logger.info("vault initialized (sync via Taildrive)")
   } else {
     logger.info("vault disabled")
   }

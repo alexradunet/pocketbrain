@@ -23,7 +23,7 @@ make doctor ARGS="--deep"
 - UFW baseline (`active`, `deny incoming`, `OpenSSH` allow)
 - SSH hardening (`PasswordAuthentication no`, `PermitRootLogin no`, `KbdInteractiveAuthentication no`)
 - Tailscale login status
-- Syncthing integration checks when enabled (`SYNCTHING_*` policy, API ping, folder ID probe)
+- Taildrive integration checks when enabled (`TAILDRIVE_*` share verification)
 - Deep mode: `bun run typecheck`
 
 ## Repair model

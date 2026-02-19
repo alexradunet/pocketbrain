@@ -4,7 +4,7 @@
  * High-level vault operations for PocketBrain integration.
  * Manages file operations, daily notes.
  * 
- * File synchronization is handled externally by Syncthing.
+ * File synchronization is handled externally by Taildrive.
  * This service only handles file operations, not networking.
  */
 
@@ -470,10 +470,10 @@ export class VaultService {
   }
 
   /**
-   * Cleanup (nothing to do - Syncthing handles sync)
+   * Cleanup (nothing to do - Taildrive handles sync)
    */
   async stop(): Promise<void> {
-    // No-op: Syncthing runs in separate container
+    // No-op: Taildrive handles sync externally
   }
 
   /**

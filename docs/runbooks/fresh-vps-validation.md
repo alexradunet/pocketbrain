@@ -21,7 +21,7 @@ Set at minimum:
 
 - `VAULT_ENABLED=true`
 - `VAULT_PATH=.data/vault` (or your synced mount path)
-- `SYNCTHING_ENABLED=true` and `SYNCTHING_*` values (if using Syncthing)
+- `TAILDRIVE_ENABLED=true` and `TAILDRIVE_*` values (for Taildrive vault sharing)
 - `ENABLE_WHATSAPP=true` (if WhatsApp channel is required)
 
 ## 3) Initialize vault scaffold

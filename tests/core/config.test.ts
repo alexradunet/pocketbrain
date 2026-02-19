@@ -13,14 +13,9 @@ const ENV_KEYS = [
   "WHATSAPP_AUTH_DIR",
   "WHATSAPP_WHITELIST_NUMBERS",
   "WHATSAPP_WHITELIST_NUMBER",
-  "SYNCTHING_ENABLED",
-  "SYNCTHING_BASE_URL",
-  "SYNCTHING_API_KEY",
-  "SYNCTHING_TIMEOUT_MS",
-  "SYNCTHING_VAULT_FOLDER_ID",
-  "SYNCTHING_AUTO_START",
-  "SYNCTHING_MUTATION_TOOLS_ENABLED",
-  "SYNCTHING_ALLOWED_FOLDER_IDS",
+  "TAILDRIVE_ENABLED",
+  "TAILDRIVE_SHARE_NAME",
+  "TAILDRIVE_AUTO_SHARE",
   "WHATSAPP_PAIR_MAX_FAILURES",
   "WHATSAPP_PAIR_FAILURE_WINDOW_MS",
   "WHATSAPP_PAIR_BLOCK_DURATION_MS",
@@ -61,10 +56,9 @@ describe("loadConfig", () => {
 
   beforeEach(() => {
     envSnapshot = captureSnapshot()
-    Bun.env.SYNCTHING_ENABLED = "false"
-    delete Bun.env.SYNCTHING_API_KEY
-    delete Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED
-    delete Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS
+    delete Bun.env.TAILDRIVE_ENABLED
+    delete Bun.env.TAILDRIVE_SHARE_NAME
+    delete Bun.env.TAILDRIVE_AUTO_SHARE
   })
 
   afterEach(() => {
@@ -106,14 +100,9 @@ describe("loadConfig", () => {
     Bun.env.WHATSAPP_PAIR_BLOCK_DURATION_MS = "300000"
     Bun.env.WHATSAPP_WHITELIST_NUMBERS = "15551234567,+44 7700 900123,15551234567"
     Bun.env.WHATSAPP_WHITELIST_NUMBER = "12025550123"
-    Bun.env.SYNCTHING_ENABLED = "true"
-    Bun.env.SYNCTHING_BASE_URL = "http://127.0.0.1:8384"
-    Bun.env.SYNCTHING_API_KEY = "test-api-key"
-    Bun.env.SYNCTHING_TIMEOUT_MS = "7000"
-    Bun.env.SYNCTHING_VAULT_FOLDER_ID = "vault"
-    Bun.env.SYNCTHING_AUTO_START = "true"
-    Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED = "true"
-    Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS = "vault,notes"
+    Bun.env.TAILDRIVE_ENABLED = "true"
+    Bun.env.TAILDRIVE_SHARE_NAME = "vault"
+    Bun.env.TAILDRIVE_AUTO_SHARE = "true"
     Bun.env.VAULT_ENABLED = "true"
     Bun.env.VAULT_PATH = ".data/vault"
     Bun.env.VAULT_FOLDER_INBOX = "00-inbox"
@@ -133,13 +122,9 @@ describe("loadConfig", () => {
     expect(config.whatsAppPairFailureWindowMs).toBe(120000)
     expect(config.whatsAppPairBlockDurationMs).toBe(300000)
     expect(config.whatsAppWhitelistNumbers).toEqual(["15551234567", "447700900123", "12025550123"])
-    expect(config.syncthingEnabled).toBe(true)
-    expect(config.syncthingBaseUrl).toBe("http://127.0.0.1:8384")
-    expect(config.syncthingTimeoutMs).toBe(7000)
-    expect(config.syncthingVaultFolderId).toBe("vault")
-    expect(config.syncthingAutoStart).toBe(true)
-    expect(config.syncthingMutationToolsEnabled).toBe(true)
-    expect(config.syncthingAllowedFolderIds).toEqual(["vault", "notes"])
+    expect(config.taildriveEnabled).toBe(true)
+    expect(config.taildriveShareName).toBe("vault")
+    expect(config.taildriveAutoShare).toBe(true)
     expect(config.vaultFolders.projects).toBe("02-projects")
     expect(config.vaultFolders.daily).toBe("01-daily-journey")
     expect(config.vaultFolders.journal).toBe("01-daily-journey")
@@ -172,29 +157,6 @@ describe("loadConfig", () => {
 
     const config = loadConfig()
     expect(config.opencodeConfigDir).toBe("/tmp/pocketbrain-opencode")
-  })
-
-  test("defaults Syncthing vault folder ID to vault when enabled", () => {
-    Bun.env.SYNCTHING_ENABLED = "true"
-    Bun.env.SYNCTHING_API_KEY = "test-api-key"
-    Bun.env.SYNCTHING_VAULT_FOLDER_ID = ""
-
-    const config = loadConfig()
-    expect(config.syncthingVaultFolderId).toBe("vault")
-  })
-
-  test("throws when Syncthing is enabled without API key", () => {
-    Bun.env.SYNCTHING_ENABLED = "true"
-    Bun.env.SYNCTHING_API_KEY = ""
-    expect(() => loadConfig()).toThrow()
-  })
-
-  test("throws when Syncthing mutation tools enabled without allowlist", () => {
-    Bun.env.SYNCTHING_ENABLED = "true"
-    Bun.env.SYNCTHING_API_KEY = "test-api-key"
-    Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED = "true"
-    Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS = ""
-    expect(() => loadConfig()).toThrow()
   })
 
   test("throws when WHATSAPP_PAIR_MAX_FAILURES is invalid", () => {
