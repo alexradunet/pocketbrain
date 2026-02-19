@@ -60,6 +60,27 @@ async function main(): Promise<void> {
   const outboxRepository = new SQLiteOutboxRepository(cfg.outboxMaxRetries)
   const heartbeatRepository = new SQLiteHeartbeatRepository()
 
+  if (cfg.whatsAppWhitelistNumbers.length > 0) {
+    let addedCount = 0
+    for (const phoneNumber of cfg.whatsAppWhitelistNumbers) {
+      const directJid = `${phoneNumber}@s.whatsapp.net`
+      const lidJid = `${phoneNumber}@lid`
+      if (whitelistRepository.addToWhitelist("whatsapp", directJid)) {
+        addedCount += 1
+      }
+      if (whitelistRepository.addToWhitelist("whatsapp", lidJid)) {
+        addedCount += 1
+      }
+    }
+    logger.info(
+      {
+        configuredCount: cfg.whatsAppWhitelistNumbers.length,
+        addedCount,
+      },
+      "applied WhatsApp whitelist from environment",
+    )
+  }
+
   // Create runtime provider
   const runtimeProvider = new RuntimeProvider({
     model: cfg.opencodeModel,

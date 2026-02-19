@@ -10,6 +10,8 @@ const ENV_KEYS = [
   "OPENCODE_MODEL",
   "ENABLE_WHATSAPP",
   "WHATSAPP_AUTH_DIR",
+  "WHATSAPP_WHITELIST_NUMBERS",
+  "WHATSAPP_WHITELIST_NUMBER",
   "VAULT_ENABLED",
   "VAULT_PATH",
 ] as const
@@ -76,6 +78,8 @@ describe("loadConfig", () => {
     Bun.env.DATA_DIR = ".data"
     Bun.env.ENABLE_WHATSAPP = "true"
     Bun.env.WHATSAPP_AUTH_DIR = ".data/whatsapp-auth"
+    Bun.env.WHATSAPP_WHITELIST_NUMBERS = "15551234567,+44 7700 900123,15551234567"
+    Bun.env.WHATSAPP_WHITELIST_NUMBER = "12025550123"
     Bun.env.VAULT_ENABLED = "true"
     Bun.env.VAULT_PATH = ".data/vault"
 
@@ -84,5 +88,6 @@ describe("loadConfig", () => {
     expect(config.opencodePort).toBe(4096)
     expect(config.opencodeServerUrl).toBe("http://127.0.0.1:4096")
     expect(config.opencodeModel).toBe("openai/gpt-5")
+    expect(config.whatsAppWhitelistNumbers).toEqual(["15551234567", "447700900123", "12025550123"])
   })
 })

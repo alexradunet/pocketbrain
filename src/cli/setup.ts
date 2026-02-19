@@ -12,6 +12,7 @@ import { join, resolve } from "node:path"
 import { SQLiteChannelRepository } from "../adapters/persistence/repositories"
 
 type EnvMap = Record<string, string>
+type OpenCodeProfileMode = "isolated" | "system"
 
 const REPO_ROOT = resolve(import.meta.dir, "..", "..")
 const ENV_FILE = join(REPO_ROOT, ".env")
@@ -69,9 +70,53 @@ async function saveEnvFile(lines: string[]): Promise<void> {
   await Bun.write(ENV_FILE, lines.join("\n").trimEnd() + "\n")
 }
 
-async function findRecentModel(): Promise<string | null> {
+type OpenCodeEnv = {
+  OPENCODE_MODEL?: string
+  OPENCODE_CONFIG_DIR?: string
+  XDG_STATE_HOME?: string
+  XDG_DATA_HOME?: string
+  XDG_CONFIG_HOME?: string
+}
+
+function buildOpencodeEnv(overrides: OpenCodeEnv): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    ...overrides,
+  }
+}
+
+function resolveOpencodeEnv(current: EnvMap, mode: OpenCodeProfileMode): OpenCodeEnv {
+  if (mode === "system") {
+    return {
+      OPENCODE_MODEL: current.OPENCODE_MODEL || Bun.env.OPENCODE_MODEL,
+    }
+  }
+
+  const dataDir = current.DATA_DIR || Bun.env.DATA_DIR || ".data"
+  const xdgStateHome = current.XDG_STATE_HOME || `${dataDir}/opencode-state`
+  const xdgDataHome = current.XDG_DATA_HOME || `${dataDir}/opencode-data`
+  const xdgConfigHome = current.XDG_CONFIG_HOME || `${dataDir}/opencode-config-home`
+  const opencodeConfigDir = current.OPENCODE_CONFIG_DIR || `${dataDir}/opencode-config`
+
+  return {
+    OPENCODE_MODEL: current.OPENCODE_MODEL || Bun.env.OPENCODE_MODEL,
+    OPENCODE_CONFIG_DIR: resolve(process.cwd(), opencodeConfigDir),
+    XDG_STATE_HOME: resolve(process.cwd(), xdgStateHome),
+    XDG_DATA_HOME: resolve(process.cwd(), xdgDataHome),
+    XDG_CONFIG_HOME: resolve(process.cwd(), xdgConfigHome),
+  }
+}
+
+function ensureOpencodeDirs(opencodeEnv: OpenCodeEnv): void {
+  if (opencodeEnv.OPENCODE_CONFIG_DIR) mkdirSync(opencodeEnv.OPENCODE_CONFIG_DIR, { recursive: true })
+  if (opencodeEnv.XDG_STATE_HOME) mkdirSync(opencodeEnv.XDG_STATE_HOME, { recursive: true })
+  if (opencodeEnv.XDG_DATA_HOME) mkdirSync(opencodeEnv.XDG_DATA_HOME, { recursive: true })
+  if (opencodeEnv.XDG_CONFIG_HOME) mkdirSync(opencodeEnv.XDG_CONFIG_HOME, { recursive: true })
+}
+
+async function findRecentModel(env: OpenCodeEnv): Promise<string | null> {
   const home = Bun.env.HOME ?? ""
-  const stateHome = Bun.env.XDG_STATE_HOME ?? join(home, ".local", "state")
+  const stateHome = env.XDG_STATE_HOME ?? Bun.env.XDG_STATE_HOME ?? join(home, ".local", "state")
   const modelFile = join(stateHome, "opencode", "model.json")
   try {
     const parsed = (await Bun.file(modelFile).json()) as {
@@ -88,26 +133,36 @@ async function findRecentModel(): Promise<string | null> {
   return null
 }
 
-async function resolveModel(): Promise<string> {
-  const modelFromEnv = Bun.env.OPENCODE_MODEL?.trim()
+async function resolveModel(env: OpenCodeEnv): Promise<string> {
+  const modelFromEnv = env.OPENCODE_MODEL?.trim() || Bun.env.OPENCODE_MODEL?.trim()
   if (modelFromEnv) return modelFromEnv
-  return (await findRecentModel()) ?? ""
+  return (await findRecentModel(env)) ?? ""
 }
 
-async function ensureOpencodeAuth(): Promise<void> {
-  const model = await resolveModel()
-  if (model) return
+async function runOpencodeSetupWizard(opencodeEnv: OpenCodeEnv): Promise<void> {
+  const before = await resolveModel(opencodeEnv)
+  if (before) {
+    console.log(`Current OpenCode model: ${before}`)
+  } else {
+    console.log("No OpenCode model configured yet for PocketBrain.")
+  }
 
-  console.log("OpenCode model not found. Launching 'opencode' for setup...")
-  const proc = Bun.spawn(["opencode", "auth", "login"], { stdin: "inherit", stdout: "inherit", stderr: "inherit" })
+  const isolated = !!opencodeEnv.XDG_STATE_HOME
+  console.log(`Launching ${isolated ? "isolated" : "system"} OpenCode setup for PocketBrain...`)
+  console.log("In OpenCode, run /providers then /models, then quit to continue setup.")
+
+  const env = buildOpencodeEnv(opencodeEnv)
+  const proc = Bun.spawn(["opencode"], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+    env,
+  })
   await proc.exited
 
-  const next = await resolveModel()
-  if (!next) {
-    console.log("Model not found. Use '/models' inside the OpenCode TUI to pick a model.")
-    await Bun.sleep(3_000)
-    const tui = Bun.spawn(["opencode"], { stdin: "inherit", stdout: "inherit", stderr: "inherit" })
-    await tui.exited
+  const after = await resolveModel(opencodeEnv)
+  if (!after) {
+    console.log("Model still not selected. You can rerun: bun run setup")
   }
 }
 
@@ -188,6 +243,17 @@ async function main(): Promise<void> {
   const current = parseEnv(lines)
   const updates: EnvMap = {}
 
+  const profileModeInput = ask("OpenCode profile mode: isolated for PocketBrain or system shared? (I/s): ")
+  const profileMode: OpenCodeProfileMode = profileModeInput.toLowerCase().startsWith("s") ? "system" : "isolated"
+  const opencodeEnv = resolveOpencodeEnv(current, profileMode)
+  ensureOpencodeDirs(opencodeEnv)
+
+  updates.OPENCODE_PROFILE = profileMode
+  updates.OPENCODE_CONFIG_DIR = opencodeEnv.OPENCODE_CONFIG_DIR ?? current.OPENCODE_CONFIG_DIR ?? "."
+  updates.XDG_STATE_HOME = opencodeEnv.XDG_STATE_HOME ?? ""
+  updates.XDG_DATA_HOME = opencodeEnv.XDG_DATA_HOME ?? ""
+  updates.XDG_CONFIG_HOME = opencodeEnv.XDG_CONFIG_HOME ?? ""
+
   const enableWhatsApp = ask("Enable WhatsApp? (y/N): ")
   if (enableWhatsApp.toLowerCase().startsWith("y")) {
     updates.ENABLE_WHATSAPP = "true"
@@ -219,7 +285,7 @@ async function main(): Promise<void> {
   const merged = updateEnvLines(lines, updates)
   await saveEnvFile(merged)
 
-  await ensureOpencodeAuth()
+  await runOpencodeSetupWizard(opencodeEnv)
 
   console.log("Setup complete. Run: bun run dev")
   process.exit(0)

@@ -19,7 +19,7 @@
     "test:opencode:e2e": "bun test tests/opencode.e2e.ts"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.1.53",
+    "@opencode-ai/plugin": "1.2.6",
     "@opencode-ai/sdk": "1.1.53",
     "@whiskeysockets/baileys": "7.0.0-rc.9",
     "opencode-ai": "^1.2.6",

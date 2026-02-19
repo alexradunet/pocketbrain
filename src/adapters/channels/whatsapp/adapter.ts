@@ -37,17 +37,19 @@ export interface WhatsAppAdapterOptions {
 
 // WhatsApp JID validation patterns
 const DIRECT_JID_PATTERN = /^\d+@s\.whatsapp\.net$/
+const DIRECT_LID_PATTERN = /^\d+@lid$/
 const GROUP_JID_PATTERN = /^[\d-]+@g\.us$/
 const BROADCAST_JID_PATTERN = /^\d+@broadcast$/
 
 function isValidJid(jid: string): boolean {
-  return DIRECT_JID_PATTERN.test(jid) || 
+  return DIRECT_JID_PATTERN.test(jid) ||
+         DIRECT_LID_PATTERN.test(jid) ||
          GROUP_JID_PATTERN.test(jid) || 
          BROADCAST_JID_PATTERN.test(jid)
 }
 
 function isDirectJid(jid: string): boolean {
-  return DIRECT_JID_PATTERN.test(jid)
+  return DIRECT_JID_PATTERN.test(jid) || DIRECT_LID_PATTERN.test(jid)
 }
 
 function extractText(message: unknown): string {
@@ -87,9 +89,35 @@ function normalizeJid(jid: string): string {
 interface IncomingMessage {
   message?: unknown
   key?: {
+    id?: string
     fromMe?: boolean
     remoteJid?: string
+    remoteJidAlt?: string
+    participant?: string
+    participantPn?: string
+    senderPn?: string
   }
+}
+
+function collectCandidateUserIDs(msg: IncomingMessage): string[] {
+  const candidates = [
+    msg.key?.remoteJid,
+    msg.key?.remoteJidAlt,
+    msg.key?.participant,
+    msg.key?.participantPn,
+    msg.key?.senderPn,
+  ]
+
+  const unique = new Set<string>()
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    const normalized = normalizeJid(candidate)
+    if (!normalized) continue
+    if (!isDirectJid(normalized)) continue
+    unique.add(normalized)
+  }
+
+  return [...unique]
 }
 
 export class WhatsAppAdapter implements ChannelAdapter {
@@ -212,7 +240,20 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
     this.options.logger.info({ jid, textLength: text.length }, "whatsapp message received")
 
-    const isWhitelisted = this.options.whitelistRepository.isWhitelisted("whatsapp", jid)
+    const candidateUserIDs = collectCandidateUserIDs(msg)
+    const isWhitelisted = candidateUserIDs.some((candidateID) =>
+      this.options.whitelistRepository.isWhitelisted("whatsapp", candidateID),
+    )
+    if (!isWhitelisted) {
+      this.options.logger.warn(
+        {
+          jid,
+          messageKey: msg.key,
+          suggestedWhitelistIDs: candidateUserIDs,
+        },
+        "whatsapp sender not whitelisted",
+      )
+    }
     const commandResult = this.commandHandler.handle({ jid, text, isWhitelisted })
 
     if (commandResult.handled) {

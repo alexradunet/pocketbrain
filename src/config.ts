@@ -31,6 +31,7 @@ export interface AppConfig {
   connectionTimeoutMs: number
   connectionReconnectDelayMs: number
   whitelistPairToken: string | undefined
+  whatsAppWhitelistNumbers: string[]
   vaultPath: string
   vaultEnabled: boolean
 }
@@ -86,6 +87,7 @@ const AppConfigSchema = z
     connectionTimeoutMs: z.number().positive(),
     connectionReconnectDelayMs: z.number().nonnegative(),
     whitelistPairToken: z.string().optional(),
+    whatsAppWhitelistNumbers: z.array(z.string().regex(/^\d+$/)),
     vaultPath: z.string().min(1),
     vaultEnabled: z.boolean(),
   })
@@ -128,6 +130,22 @@ function optionalTrimmed(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
+function parsePhoneWhitelist(values: Array<string | undefined>): string[] {
+  const unique = new Set<string>()
+
+  for (const value of values) {
+    if (!value) continue
+    for (const item of value.split(",")) {
+      const normalized = item.replace(/\D/g, "").trim()
+      if (normalized) {
+        unique.add(normalized)
+      }
+    }
+  }
+
+  return [...unique]
+}
+
 function resolvePath(cwd: string, value: string): string {
   return isAbsolute(value) ? value : join(cwd, value)
 }
@@ -161,6 +179,10 @@ export function loadConfig(): AppConfig {
     connectionTimeoutMs: DEFAULTS.connectionTimeoutMs,
     connectionReconnectDelayMs: DEFAULTS.connectionReconnectDelayMs,
     whitelistPairToken: optionalTrimmed(Bun.env.WHITELIST_PAIR_TOKEN),
+    whatsAppWhitelistNumbers: parsePhoneWhitelist([
+      Bun.env.WHATSAPP_WHITELIST_NUMBERS,
+      Bun.env.WHATSAPP_WHITELIST_NUMBER,
+    ]),
     vaultPath: vaultPath ? resolvePath(cwd, vaultPath) : join(dataDir, "vault"),
     vaultEnabled: envBool(Bun.env.VAULT_ENABLED, true),
   }
@@ -171,6 +193,7 @@ export function loadConfig(): AppConfig {
     opencodeModel: parsed.opencodeModel,
     opencodeServerUrl: parsed.opencodeServerUrl,
     whitelistPairToken: parsed.whitelistPairToken,
+    whatsAppWhitelistNumbers: parsed.whatsAppWhitelistNumbers,
   }
 }
 
