@@ -37,6 +37,7 @@ export interface AppConfig {
   syncthingApiKey: string | undefined
   syncthingTimeoutMs: number
   syncthingVaultFolderId: string | undefined
+  syncthingAutoStart: boolean
   syncthingMutationToolsEnabled: boolean
   syncthingAllowedFolderIds: string[]
   vaultPath: string
@@ -62,6 +63,8 @@ const DEFAULTS = {
   connectionReconnectDelayMs: 3000,
   syncthingBaseUrl: "http://127.0.0.1:8384",
   syncthingTimeoutMs: 5000,
+  syncthingVaultFolderId: "vault",
+  syncthingAutoStart: true,
 } as const
 
 const modelRefPattern = /^[^/]+\/.+$/
@@ -102,6 +105,7 @@ const AppConfigSchema = z
     syncthingApiKey: z.string().optional(),
     syncthingTimeoutMs: z.number().int().positive(),
     syncthingVaultFolderId: z.string().optional(),
+    syncthingAutoStart: z.boolean(),
     syncthingMutationToolsEnabled: z.boolean(),
     syncthingAllowedFolderIds: z.array(z.string().min(1)),
     vaultPath: z.string().min(1),
@@ -231,7 +235,10 @@ export function loadConfig(): AppConfig {
     syncthingBaseUrl: envString(Bun.env.SYNCTHING_BASE_URL, DEFAULTS.syncthingBaseUrl),
     syncthingApiKey: optionalTrimmed(Bun.env.SYNCTHING_API_KEY),
     syncthingTimeoutMs: envInt(Bun.env.SYNCTHING_TIMEOUT_MS, DEFAULTS.syncthingTimeoutMs),
-    syncthingVaultFolderId: optionalTrimmed(Bun.env.SYNCTHING_VAULT_FOLDER_ID),
+    syncthingVaultFolderId:
+      optionalTrimmed(Bun.env.SYNCTHING_VAULT_FOLDER_ID) ||
+      (envBool(Bun.env.SYNCTHING_ENABLED, false) ? DEFAULTS.syncthingVaultFolderId : undefined),
+    syncthingAutoStart: envBool(Bun.env.SYNCTHING_AUTO_START, DEFAULTS.syncthingAutoStart),
     syncthingMutationToolsEnabled: envBool(Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED, false),
     syncthingAllowedFolderIds: parseCommaSeparatedList(Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS),
     vaultPath: vaultPath ? resolvePath(cwd, vaultPath) : join(dataDir, "vault"),

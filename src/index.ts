@@ -28,6 +28,7 @@ import {
 // Channel imports
 import { RateLimiter } from "./adapters/channels/rate-limiter"
 import { WhatsAppAdapter } from "./adapters/channels/whatsapp/adapter"
+import { ensureSyncthingAvailable } from "./adapters/syncthing/bootstrap"
 
 // Scheduler imports
 import { HeartbeatScheduler } from "./scheduler/heartbeat"
@@ -43,6 +44,15 @@ async function main(): Promise<void> {
   // Load configuration
   const cfg = loadConfig()
   const logger = pino({ level: cfg.logLevel })
+
+  await ensureSyncthingAvailable({
+    enabled: cfg.syncthingEnabled,
+    baseUrl: cfg.syncthingBaseUrl,
+    apiKey: cfg.syncthingApiKey,
+    timeoutMs: cfg.syncthingTimeoutMs,
+    autoStart: cfg.syncthingAutoStart,
+    logger,
+  })
 
   logger.info(
     {

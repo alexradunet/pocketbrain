@@ -17,6 +17,7 @@ const ENV_KEYS = [
   "SYNCTHING_API_KEY",
   "SYNCTHING_TIMEOUT_MS",
   "SYNCTHING_VAULT_FOLDER_ID",
+  "SYNCTHING_AUTO_START",
   "SYNCTHING_MUTATION_TOOLS_ENABLED",
   "SYNCTHING_ALLOWED_FOLDER_IDS",
   "VAULT_ENABLED",
@@ -96,6 +97,7 @@ describe("loadConfig", () => {
     Bun.env.SYNCTHING_API_KEY = "test-api-key"
     Bun.env.SYNCTHING_TIMEOUT_MS = "7000"
     Bun.env.SYNCTHING_VAULT_FOLDER_ID = "vault"
+    Bun.env.SYNCTHING_AUTO_START = "true"
     Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED = "true"
     Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS = "vault,notes"
     Bun.env.VAULT_ENABLED = "true"
@@ -111,8 +113,18 @@ describe("loadConfig", () => {
     expect(config.syncthingBaseUrl).toBe("http://127.0.0.1:8384")
     expect(config.syncthingTimeoutMs).toBe(7000)
     expect(config.syncthingVaultFolderId).toBe("vault")
+    expect(config.syncthingAutoStart).toBe(true)
     expect(config.syncthingMutationToolsEnabled).toBe(true)
     expect(config.syncthingAllowedFolderIds).toEqual(["vault", "notes"])
+  })
+
+  test("defaults Syncthing vault folder ID to vault when enabled", () => {
+    Bun.env.SYNCTHING_ENABLED = "true"
+    Bun.env.SYNCTHING_API_KEY = "test-api-key"
+    Bun.env.SYNCTHING_VAULT_FOLDER_ID = ""
+
+    const config = loadConfig()
+    expect(config.syncthingVaultFolderId).toBe("vault")
   })
 
   test("throws when Syncthing is enabled without API key", () => {

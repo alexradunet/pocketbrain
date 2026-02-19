@@ -40,7 +40,7 @@ export default async function createSyncthingPlugin() {
   const baseUrl = Bun.env.SYNCTHING_BASE_URL?.trim() || "http://127.0.0.1:8384"
   const apiKey = Bun.env.SYNCTHING_API_KEY?.trim()
   const timeoutMs = Number.parseInt(Bun.env.SYNCTHING_TIMEOUT_MS?.trim() || "5000", 10)
-  const defaultFolderID = Bun.env.SYNCTHING_VAULT_FOLDER_ID?.trim()
+  const defaultFolderID = Bun.env.SYNCTHING_VAULT_FOLDER_ID?.trim() || "vault"
   const mutationEnabled = envBool(Bun.env.SYNCTHING_MUTATION_TOOLS_ENABLED, false)
   const allowedFolderIDs = parseAllowedFolderIDs(Bun.env.SYNCTHING_ALLOWED_FOLDER_IDS)
 

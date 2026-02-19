@@ -270,9 +270,16 @@ if [[ "${SYNCTHING_ENABLED_VALUE,,}" == "true" || "$SYNCTHING_ENABLED_VALUE" == 
   SYNCTHING_BASE_URL_VALUE="${SYNCTHING_BASE_URL:-http://127.0.0.1:8384}"
   SYNCTHING_API_KEY_VALUE="${SYNCTHING_API_KEY:-}"
   SYNCTHING_TIMEOUT_MS_VALUE="${SYNCTHING_TIMEOUT_MS:-5000}"
-  SYNCTHING_VAULT_FOLDER_ID_VALUE="${SYNCTHING_VAULT_FOLDER_ID:-}"
+  SYNCTHING_VAULT_FOLDER_ID_VALUE="${SYNCTHING_VAULT_FOLDER_ID:-vault}"
   SYNCTHING_MUTATION_TOOLS_ENABLED_VALUE="${SYNCTHING_MUTATION_TOOLS_ENABLED:-false}"
   SYNCTHING_ALLOWED_FOLDER_IDS_VALUE="${SYNCTHING_ALLOWED_FOLDER_IDS:-}"
+
+  CURL_TIMEOUT_SEC=6
+  if [[ "$SYNCTHING_TIMEOUT_MS_VALUE" =~ ^[0-9]+$ ]] && [[ "$SYNCTHING_TIMEOUT_MS_VALUE" -gt 0 ]]; then
+    CURL_TIMEOUT_SEC=$((SYNCTHING_TIMEOUT_MS_VALUE / 1000 + 1))
+  else
+    warn "SYNCTHING_TIMEOUT_MS is invalid (${SYNCTHING_TIMEOUT_MS_VALUE}); using 6s for probes"
+  fi
 
   if [[ -z "$SYNCTHING_API_KEY_VALUE" ]]; then
     fail "Syncthing enabled but SYNCTHING_API_KEY is missing"
@@ -305,16 +312,16 @@ if [[ "${SYNCTHING_ENABLED_VALUE,,}" == "true" || "$SYNCTHING_ENABLED_VALUE" == 
       fail "Syncthing API ping failed (check base URL/API key/service)"
     fi
 
-    if [[ -n "$SYNCTHING_VAULT_FOLDER_ID_VALUE" ]]; then
-      if curl -fsS -m "$CURL_TIMEOUT_SEC" \
-        -H "X-API-Key: ${SYNCTHING_API_KEY_VALUE}" \
-        "${SYNCTHING_BASE_URL_VALUE}/rest/db/status?folder=${SYNCTHING_VAULT_FOLDER_ID_VALUE}" >/dev/null 2>&1; then
+    if curl -fsS -m "$CURL_TIMEOUT_SEC" \
+      -H "X-API-Key: ${SYNCTHING_API_KEY_VALUE}" \
+      "${SYNCTHING_BASE_URL_VALUE}/rest/db/status?folder=${SYNCTHING_VAULT_FOLDER_ID_VALUE}" >/dev/null 2>&1; then
+      if [[ -n "${SYNCTHING_VAULT_FOLDER_ID:-}" ]]; then
         pass "Syncthing vault folder ID is valid (${SYNCTHING_VAULT_FOLDER_ID_VALUE})"
       else
-        warn "Syncthing vault folder ID check failed (${SYNCTHING_VAULT_FOLDER_ID_VALUE})"
+        pass "Syncthing vault folder ID defaulted to '${SYNCTHING_VAULT_FOLDER_ID_VALUE}' and is valid"
       fi
     else
-      warn "SYNCTHING_VAULT_FOLDER_ID is not set"
+      warn "Syncthing vault folder ID check failed (${SYNCTHING_VAULT_FOLDER_ID_VALUE})"
     fi
   else
     warn "curl missing or Syncthing API key missing; skipping Syncthing API probes"
@@ -351,9 +358,3 @@ if [[ "$FAIL_COUNT" -gt 0 ]]; then
   exit 2
 fi
 exit 0
-  CURL_TIMEOUT_SEC=6
-  if [[ "$SYNCTHING_TIMEOUT_MS_VALUE" =~ ^[0-9]+$ ]] && [[ "$SYNCTHING_TIMEOUT_MS_VALUE" -gt 0 ]]; then
-    CURL_TIMEOUT_SEC=$((SYNCTHING_TIMEOUT_MS_VALUE / 1000 + 1))
-  else
-    warn "SYNCTHING_TIMEOUT_MS is invalid (${SYNCTHING_TIMEOUT_MS_VALUE}); using 6s for probes"
-  fi
