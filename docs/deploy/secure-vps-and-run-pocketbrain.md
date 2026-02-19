@@ -136,17 +136,12 @@ sudo systemctl restart pocketbrain
 
 ## 10) Backup and restore drill
 
-Create backup:
+Use your VPS/provider snapshot backup workflow for this drill:
 
-```bash
-make backup
-```
+1. Capture a snapshot/backup that includes PocketBrain data directories.
+2. Restore to a test instance or rollback target.
+3. Restart PocketBrain service and verify:
+   - `sudo systemctl status pocketbrain`
+   - `make logs`
 
-Restore from backup:
-
-```bash
-make restore FILE=backups/<backup-file>.tar.gz
-sudo systemctl restart pocketbrain
-```
-
-Run this drill regularly and store backups off-host.
+Run this drill regularly and keep off-host backup retention enabled.

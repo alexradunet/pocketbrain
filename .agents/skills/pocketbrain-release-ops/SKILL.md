@@ -26,7 +26,6 @@ bun run typecheck
 bun run test:processes
 bun run test
 bun run build
-make backup
 ```
 
 2. Deploy release:

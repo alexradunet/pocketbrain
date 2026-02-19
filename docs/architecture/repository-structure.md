@@ -30,7 +30,7 @@ Automated tests for the application.
 Executable scripts grouped by purpose:
 - `setup/` machine/bootstrap setup
 - `runtime/` runtime/container boot scripts
-- `ops/` release/backup/operational helpers
+- `ops/` release/runtime operational helpers
 
 ### `docs/`
 

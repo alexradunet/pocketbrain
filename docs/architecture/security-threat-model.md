@@ -5,7 +5,7 @@
 - Runtime application in `src/`
 - Runtime data in `data/` (`DATA_DIR`)
 - Runtime process managed by Bun/service manager
-- Operational scripts in `scripts/ops/`
+- Operational scripts in `scripts/ops/` and provider snapshot tooling
 
 ## Assets
 
@@ -18,7 +18,7 @@
 
 1. External network -> WhatsApp/Tailscale edge.
 2. Runtime process -> host filesystem (`data/`).
-3. Operator shell -> scripts that control release/backup/restore.
+3. Operator shell -> scripts that control release/runtime + VPS/provider backup tooling.
 4. OpenCode runtime -> model provider endpoints.
 
 ## Primary Threats and Controls
@@ -38,9 +38,9 @@
 - Threat: accidental deletion/corruption of `/data` or rollback to stale state.
 - Current controls:
   - Canonical data path config and persistent volume usage.
-  - Backup/restore scripts in `scripts/ops/`.
+  - VPS/provider snapshot and backup capabilities.
 - Required controls:
-  - Weekly backup/restore drill with documented evidence.
+  - Weekly backup/restore drill via VPS/provider workflow with documented evidence.
   - Immutable backup storage copy outside runtime host.
 
 ### 3) Secret leakage

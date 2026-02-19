@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: setup-dev setup-runtime setup dev start test typecheck build logs release backup restore shell
+.PHONY: setup-dev setup-runtime setup dev start test typecheck build logs release shell
 
 setup-dev:
 	./scripts/setup/install-debian-dev.sh
@@ -31,13 +31,6 @@ logs:
 
 release:
 	./scripts/ops/release.sh $(TAG)
-
-backup:
-	./scripts/ops/backup.sh
-
-restore:
-	@if [ -z "$(FILE)" ]; then echo "Usage: make restore FILE=<backup-tar.gz>"; exit 1; fi
-	./scripts/ops/restore.sh "$(FILE)"
 
 shell:
 	./scripts/ops/runtime-shell.sh $(ARGS)

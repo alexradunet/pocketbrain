@@ -11,7 +11,5 @@ Operational and setup scripts for PocketBrain.
   - `runtime-logs.sh`
   - `runtime-shell.sh`
   - `release.sh`
-  - `backup.sh`
-  - `restore.sh`
 
 Use `make` targets at repository root as the primary command interface.

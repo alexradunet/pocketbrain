@@ -41,8 +41,8 @@ make logs
 - verify `tailscale status` on host
 
 ### SQLite/state corruption
-- backup current `data/`
-- restore known-good backup via `make restore FILE=<backup-file>`
+- preserve current `.data/` snapshot for forensics
+- restore known-good state via VPS/provider backup workflow
 - verify recovery health and behavior
 
 ### WhatsApp reconnect loop

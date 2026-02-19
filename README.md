@@ -33,7 +33,7 @@ PocketBrain includes:
 - WhatsApp channel adapter (optional)
 - SQLite-backed state and memory
 - Syncthing-backed vault synchronization
-- Operational scripts for deploy, release, backup, and restore
+- Operational scripts for setup, runtime, and release
 
 Core runtime process:
 - `pocketbrain`: assistant process
@@ -117,8 +117,6 @@ make build
 make start
 make logs
 make release TAG=$(git rev-parse --short HEAD)
-make backup
-make restore FILE=backups/<backup.tar.gz>
 ```
 
 ## Skills-First Operations

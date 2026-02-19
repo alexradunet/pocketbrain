@@ -12,7 +12,6 @@ PocketBrain externalizes repeatable operational workflows as skills so OpenCode 
 - `pocketbrain-runtime-deploy` - runtime deployment and health verification
 - `pocketbrain-dev-setup` - contributor machine setup and dev validation
 - `pocketbrain-release-ops` - release checklist and managed deployment
-- `pocketbrain-backup-restore` - backup and restore drills
 - `pocketbrain-incident-response` - first-response triage and recovery
 - `pocketbrain-security-ops` - secret rotation, dependency hygiene, and residual risk process
 - `pocketbrain-ci-e2e` - CI E2E secret setup and validation behavior
