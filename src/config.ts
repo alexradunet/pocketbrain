@@ -187,10 +187,7 @@ export async function findRecentModel(): Promise<string | null> {
     if (first?.providerID && first?.modelID) {
       return `${first.providerID}/${first.modelID}`
     }
-  } catch (error) {
-    if (Bun.env.DEBUG) {
-      console.debug("[config] Could not load recent model:", error)
-    }
+  } catch {
   }
   return null
 }

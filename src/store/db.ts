@@ -66,11 +66,7 @@ try {
   if (!existingNormalized) {
     db.run("UPDATE memory SET fact_normalized = LOWER(REPLACE(fact, ' ', ''))")
   }
-} catch (error) {
-  // Ignore migration errors but log in debug mode
-  if (Bun.env.DEBUG) {
-    console.debug("[db] Migration check failed (non-critical):", error)
-  }
+} catch {
 }
 
 db.run(`

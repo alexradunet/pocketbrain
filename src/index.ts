@@ -101,7 +101,7 @@ async function main(): Promise<void> {
   
   if (cfg.vaultEnabled) {
     logger.info({ vaultPath: cfg.vaultPath }, "initializing vault")
-    vaultService = createVaultService(cfg.vaultPath)
+    vaultService = createVaultService(cfg.vaultPath, logger)
     await vaultService.initialize()
     vaultProvider.setVaultService(vaultService)
     logger.info("vault initialized (sync via Syncthing)")
@@ -228,6 +228,6 @@ async function main(): Promise<void> {
 
 // Run main
 void main().catch((error) => {
-  console.error("Fatal error:", error)
+  pino({ level: "error" }).fatal({ error }, "fatal startup error")
   process.exit(1)
 })

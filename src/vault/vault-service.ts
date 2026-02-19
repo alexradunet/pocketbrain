@@ -10,6 +10,7 @@
 
 import { join, dirname, resolve, relative, sep } from "node:path"
 import { mkdir, readdir, stat, rename } from "node:fs/promises"
+import type { Logger } from "pino"
 import { normalizeWikiLinkTarget, parseWikiLinks } from "../lib/markdown-links"
 import { extractMarkdownTags } from "../lib/markdown-tags"
 
@@ -24,6 +25,7 @@ export interface VaultFile {
 export interface VaultOptions {
   vaultPath: string
   dailyNoteFormat: string
+  logger?: Logger
   folders: {
     inbox: string
     daily: string
@@ -63,7 +65,7 @@ export class VaultService {
       await mkdir(folderPath, { recursive: true })
     }
 
-    console.log("[Vault] Directory structure initialized")
+    this.options.logger?.info("vault directory structure initialized")
   }
 
   /**
@@ -91,7 +93,7 @@ export class VaultService {
       await Bun.write(filePath, content)
       return true
     } catch (error) {
-      console.error("[Vault] Write error:", error)
+      this.options.logger?.error({ error }, "vault write failed")
       return false
     }
   }
@@ -112,7 +114,7 @@ export class VaultService {
 
       return true
     } catch (error) {
-      console.error("[Vault] Append error:", error)
+      this.options.logger?.error({ error }, "vault append failed")
       return false
     }
   }
@@ -278,7 +280,7 @@ export class VaultService {
 
       return true
     } catch (error) {
-      console.error("[Vault] Move error:", error)
+      this.options.logger?.error({ error }, "vault move failed")
       return false
     }
   }
@@ -367,10 +369,11 @@ function normalizeTag(tag: string): string {
 /**
  * Create vault service with default configuration
  */
-export function createVaultService(vaultPath: string): VaultService {
+export function createVaultService(vaultPath: string, logger?: Logger): VaultService {
   return new VaultService({
     vaultPath,
     dailyNoteFormat: "YYYY-MM-DD",
+    logger,
     folders: {
       inbox: "inbox",
       daily: "daily",
