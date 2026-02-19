@@ -49,7 +49,7 @@ make logs
 
 ## 5) Always-on behavior
 
-- Configure a systemd unit for `bun run start`.
+- Use `docs/deploy/systemd/pocketbrain.service` as your systemd unit template for `bun run start`.
 - Enable the service on boot.
 
 ## 6) Update

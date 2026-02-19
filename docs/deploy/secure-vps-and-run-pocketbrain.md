@@ -96,27 +96,19 @@ For ongoing operation, run under systemd.
 
 ## 8) Run as a systemd service
 
-Create `/etc/systemd/system/pocketbrain.service`:
+Use the template shipped in the repository:
 
-```ini
-[Unit]
-Description=PocketBrain Runtime
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=debian
-WorkingDirectory=/home/debian/pocketbrain
-Environment=HOME=/home/debian
-Environment=PATH=/home/debian/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/home/debian/.bun/bin/bun run start
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
+```bash
+sudo cp docs/deploy/systemd/pocketbrain.service /etc/systemd/system/pocketbrain.service
 ```
+
+If your server user or install path differs, edit these fields in `/etc/systemd/system/pocketbrain.service`:
+
+- `User`
+- `WorkingDirectory`
+- `Environment=HOME`
+- `Environment=PATH`
+- `ExecStart`
 
 Enable and start:
 

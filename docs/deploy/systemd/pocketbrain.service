@@ -1,0 +1,17 @@
+[Unit]
+Description=PocketBrain Runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=debian
+WorkingDirectory=/home/debian/pocketbrain
+Environment=HOME=/home/debian
+Environment=PATH=/home/debian/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/debian/.bun/bin/bun run start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
