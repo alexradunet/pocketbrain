@@ -181,6 +181,20 @@ Developer:
 - `bun run typecheck` — TypeScript check
 - `bun test` — run tests
 
+## Doctor Coverage Policy
+
+When introducing new runtime behavior, config keys, services, channels, security controls, storage paths, or operational scripts, always evaluate whether PocketBrain doctor checks should be updated.
+
+Rule:
+- If a new feature can fail at runtime or degrade security/operations silently, add or update a doctor check and corresponding repair guidance.
+
+Examples that should trigger doctor review:
+- New `.env` keys or config defaults
+- New system/service dependencies (systemd units, tailscale, firewall requirements)
+- New persistent state locations (DB tables, directories, auth files)
+- New channel/provider prerequisites (auth/model/profile requirements)
+- New deploy/runtime scripts that operators rely on
+
 ## Testing Requirements
 
 Every adapter and core component **MUST** have comprehensive unit tests. This ensures reliability and makes refactoring safe.
