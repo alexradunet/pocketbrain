@@ -3,14 +3,14 @@ node_modules
 .env.*
 !.env.example
 .data
+data/
+backups/
 .tmp
 *.db
 *.db-wal
 *.db-shm
 
 # Runtime-generated secrets/state
-data/tailscale/
-data/syncthing-config/config/
 
 # Common secret material
 *.pem
