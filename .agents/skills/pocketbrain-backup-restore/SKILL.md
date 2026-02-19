@@ -36,7 +36,7 @@ make restore FILE=<backup-file>
 4. Verify health:
 
 ```bash
-docker compose -p pocketbrain-runtime -f docker-compose.yml ps
+make logs
 ```
 
 5. Verify function:

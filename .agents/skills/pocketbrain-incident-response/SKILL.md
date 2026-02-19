@@ -19,13 +19,11 @@ Use this during runtime outages, degraded behavior, or suspected data integrity 
 
 ## First 10 minutes
 
-1. Confirm impacted services (`pocketbrain`, `syncthing`).
+1. Confirm impacted runtime process (`pocketbrain`).
 2. Capture state:
 
 ```bash
-docker compose -p pocketbrain-runtime -f docker-compose.yml ps
-docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=200 pocketbrain
-docker compose -p pocketbrain-runtime -f docker-compose.yml exec pocketbrain tailscale status
+make logs
 ```
 
 3. Freeze risky manual changes until root cause is identified.
@@ -39,8 +37,8 @@ docker compose -p pocketbrain-runtime -f docker-compose.yml exec pocketbrain tai
 
 ### Tailscale disconnected
 - validate `TS_AUTHKEY`
-- restart stack with corrected key
-- verify `tailscale status` in container
+- restart runtime with corrected key
+- verify `tailscale status` on host
 
 ### SQLite/state corruption
 - backup current `data/`

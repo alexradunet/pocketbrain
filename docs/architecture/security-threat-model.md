@@ -4,7 +4,7 @@
 
 - Runtime application in `src/`
 - Runtime data in `data/` (`DATA_DIR`)
-- Container runtime in `docker-compose.yml`
+- Runtime process managed by Bun/service manager
 - Operational scripts in `scripts/ops/`
 
 ## Assets
@@ -17,7 +17,7 @@
 ## Trust Boundaries
 
 1. External network -> WhatsApp/Tailscale edge.
-2. Container runtime -> host filesystem mounts (`/data`).
+2. Runtime process -> host filesystem (`data/`).
 3. Operator shell -> scripts that control release/backup/restore.
 4. OpenCode runtime -> model provider endpoints.
 
@@ -47,7 +47,7 @@
 
 - Threat: secrets committed or exposed in logs/process output.
 - Current controls:
-  - `.env` excluded from container image.
+  - `.env` is never bundled with application code.
   - Structured logging for app flow.
 - Required controls:
   - Never commit `.env` or raw credentials.
@@ -55,10 +55,10 @@
 
 ### 4) Supply chain drift
 
-- Threat: unpinned dependencies/images introduce unreviewed changes.
+- Threat: unpinned dependencies introduce unreviewed changes.
 - Current controls:
   - App dependencies pinned in `package.json` and `bun.lock`.
-  - Syncthing image pin via `SYNCTHING_IMAGE`.
+  - Runtime dependency versions pinned in lockfiles where applicable.
 - Required controls:
   - Monthly dependency refresh window and regression run.
   - Critical CVE response within 48h.
@@ -67,7 +67,7 @@
 
 - Threat: system reports healthy while key dependencies are broken.
 - Current controls:
-  - Strict health checks in Dockerfile/compose.
+  - Runtime startup checks and structured logs.
   - Release script waits for healthy services.
 - Required controls:
   - Keep health checks strict and review when startup logic changes.

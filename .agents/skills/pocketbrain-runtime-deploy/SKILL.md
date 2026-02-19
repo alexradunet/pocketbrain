@@ -1,6 +1,6 @@
 ---
 name: pocketbrain-runtime-deploy
-description: Deploy PocketBrain runtime on Debian with Docker Compose and verify healthy always-on services.
+description: Deploy PocketBrain runtime on Debian with Bun and verify healthy always-on services.
 compatibility: opencode
 metadata:
   audience: operators
@@ -47,19 +47,16 @@ make up
 4. Verify health:
 
 ```bash
-make ps
-docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=120 pocketbrain
-docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=120 syncthing
+make logs
 ```
 
 5. Confirm always-on behavior:
-- Docker service enabled on boot
-- Compose services use `restart: unless-stopped`
+- Runtime service enabled on boot
+- Runtime process restarts on failure
 
 ## Operational handoff
 
 ```bash
-make ps
 make logs
-git pull && make up
+git pull && bun install && bun run start
 ```

@@ -1,6 +1,6 @@
 # PocketBrain
 
-PocketBrain is a personal assistant runtime built on Bun + OpenCode, with persistent local state and Docker-first deployment.
+PocketBrain is a personal assistant runtime built on Bun + OpenCode, with persistent local state.
 
 ## 30-Second Quickstart
 
@@ -8,12 +8,12 @@ PocketBrain is a personal assistant runtime built on Bun + OpenCode, with persis
 
 ```bash
 cp .env.example .env
-# set TS_AUTHKEY in .env
-make up
-make ps
+# set runtime values in .env
+bun install
+bun run start
 ```
 
-Requires Docker + Compose on the host. Use `make setup-runtime` if needed.
+Requires Bun 1.3.x+.
 
 ### Developers
 
@@ -35,10 +35,8 @@ PocketBrain includes:
 - Syncthing-backed vault synchronization
 - Operational scripts for deploy, release, backup, and restore
 
-Core runtime services:
-- `tailscale`: networking sidecar for tailnet connectivity
+Core runtime process:
 - `pocketbrain`: assistant process
-- `syncthing`: file sync service for `data/vault`
 
 ## Architecture at a Glance 🗺️
 
@@ -49,7 +47,7 @@ flowchart LR
   Core --> OpenCode[OpenCode Runtime]
   Core --> DB[(SQLite state.db)]
   Core --> Vault[(data/vault Markdown)]
-  Syncthing[Syncthing 🔄] <--> Vault
+  Vault --> Filesystem[(Local Filesystem)]
 ```
 
 - Full walkthrough: `docs/architecture/system-overview.md`
@@ -63,12 +61,9 @@ Default runtime data is stored in `data/`:
 - `data/state.db` SQLite state (sessions, memory, whitelist, outbox)
 - `data/vault/` synced markdown vault
 - `data/whatsapp-auth/` WhatsApp auth state
-- `data/tailscale/` Tailscale state
-- `data/syncthing-config/` Syncthing config
 
 Environment/config:
 - `.env.example` -> copy to `.env`
-- required for runtime: `TS_AUTHKEY`
 
 ## Repository Layout
 
@@ -87,9 +82,9 @@ For full host bootstrap + runtime flow:
 ```bash
 make setup-runtime
 cp .env.example .env
-# set TS_AUTHKEY in .env
-make up
-make ps
+# set runtime values in .env
+bun install
+bun run start
 make logs
 ```
 
@@ -97,7 +92,8 @@ Update runtime:
 
 ```bash
 git pull
-make up
+bun install
+bun run start
 ```
 
 ## Quick Launch (Developers)
@@ -118,9 +114,7 @@ make dev
 ```bash
 make test
 make build
-make up
-make down
-make ps
+make start
 make logs
 make release TAG=$(git rev-parse --short HEAD)
 make backup
@@ -137,4 +131,5 @@ Skill catalog:
 
 - Developer setup: `docs/setup/developer-onboarding.md`
 - Runtime deploy: `docs/deploy/debian-runtime-zero-to-deploy.md`
+- VPS hardening + run guide: `docs/deploy/secure-vps-and-run-pocketbrain.md`
 - Runbooks index: `docs/runbooks/README.md`

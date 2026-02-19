@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: setup-dev setup-runtime dev test build up down ps logs release backup restore shell
+.PHONY: setup-dev setup-runtime setup dev start test typecheck build logs release backup restore shell
 
 setup-dev:
 	./scripts/setup/install-debian-dev.sh
@@ -8,26 +8,26 @@ setup-dev:
 setup-runtime:
 	./scripts/setup/install-debian-runtime.sh
 
+setup:
+	bun run setup
+
 dev:
 	bun run dev
+
+start:
+	bun run start
 
 test:
 	bun run test
 
+typecheck:
+	bun run typecheck
+
 build:
 	bun run build
 
-up:
-	docker compose -p pocketbrain-runtime -f docker-compose.yml up -d --build
-
-down:
-	docker compose -p pocketbrain-runtime -f docker-compose.yml down
-
-ps:
-	docker compose -p pocketbrain-runtime -f docker-compose.yml ps
-
 logs:
-	./scripts/ops/docker-logs.sh $(ARGS)
+	./scripts/ops/runtime-logs.sh $(ARGS)
 
 release:
 	./scripts/ops/release.sh $(TAG)
@@ -40,4 +40,4 @@ restore:
 	./scripts/ops/restore.sh "$(FILE)"
 
 shell:
-	./scripts/ops/docker-shell.sh $(ARGS)
+	./scripts/ops/runtime-shell.sh $(ARGS)

@@ -13,10 +13,10 @@ Use this for end-to-end first install on a Debian host.
 
 ## Required outcomes
 
-1. Docker Engine + Compose plugin installed
+1. Bun runtime installed
 2. `.env` created with required runtime values
 3. Runtime stack starts successfully
-4. `pocketbrain` and `syncthing` become healthy
+4. `pocketbrain` starts cleanly
 5. Operator receives handoff commands for logs and updates
 
 ## Canonical workflow
@@ -48,15 +48,12 @@ make up
 4. Verify:
 
 ```bash
-make ps
-docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=120 pocketbrain
-docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=120 syncthing
+make logs
 ```
 
 ## Operational handoff
 
 ```bash
-make ps
 make logs
-git pull && make up
+git pull && bun install && bun run start
 ```

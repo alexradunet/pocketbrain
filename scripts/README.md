@@ -6,10 +6,10 @@ Operational and setup scripts for PocketBrain.
 
 - `setup/` machine/bootstrap scripts
   - `install-debian-dev.sh` developer machine setup
-  - `install-debian-runtime.sh` runtime host prerequisites (Docker + Compose)
+  - `install-debian-runtime.sh` runtime host prerequisites
 - `ops/` operator scripts
-  - `docker-logs.sh`
-  - `docker-shell.sh`
+  - `runtime-logs.sh`
+  - `runtime-shell.sh`
   - `release.sh`
   - `backup.sh`
   - `restore.sh`

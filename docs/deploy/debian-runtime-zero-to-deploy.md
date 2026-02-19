@@ -2,7 +2,9 @@
 
 OpenCode skill equivalent: `pocketbrain-runtime-deploy`.
 
-Deploy PocketBrain on a Debian host as an always-on Docker runtime.
+Deploy PocketBrain on a Debian host as an always-on Bun runtime.
+
+For host hardening and production setup, see `docs/deploy/secure-vps-and-run-pocketbrain.md`.
 
 ## 1) Install prerequisites
 
@@ -19,7 +21,7 @@ cp .env.example .env
 Set at minimum:
 
 ```dotenv
-TS_AUTHKEY=tskey-auth-...
+ENABLE_WHATSAPP=true
 ```
 
 Optional:
@@ -28,33 +30,34 @@ Optional:
 ENABLE_WHATSAPP=true
 WHITELIST_PAIR_TOKEN=your-secure-token
 OPENCODE_MODEL=provider/model
-DATA_PATH=./data
+DATA_DIR=.data
+WHATSAPP_AUTH_DIR=.data/whatsapp-auth
 ```
 
 ## 3) Start runtime stack
 
 ```bash
-make up
+bun install
+bun run start
 ```
 
 ## 4) Verify health
 
 ```bash
-make ps
-docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=120 pocketbrain
-docker compose -p pocketbrain-runtime -f docker-compose.yml logs --tail=120 syncthing
+make logs
 ```
 
 ## 5) Always-on behavior
 
-- Docker daemon is enabled on boot by setup script.
-- Services use `restart: unless-stopped`.
+- Configure a systemd unit for `bun run start`.
+- Enable the service on boot.
 
 ## 6) Update
 
 ```bash
 git pull
-make up
+bun install
+bun run start
 ```
 
 ## 7) Managed release
