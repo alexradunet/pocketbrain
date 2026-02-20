@@ -28,8 +28,9 @@
 - Threat: untrusted user interacts with assistant channel.
 - Current controls:
   - Whitelist gate in `whitelist` table.
-  - Phone-number-based auto-whitelisting via `WHATSAPP_WHITELIST_NUMBERS`.
-  - `/pair` command for self-service whitelisting.
+  - Operator-managed phone-number whitelist via `WHATSAPP_WHITELIST_NUMBERS`.
+  - Unknown users are rejected until explicitly whitelisted.
+  - `/pair` self-service onboarding is disabled.
 - Required controls:
   - Audit `whitelist` entries weekly.
 

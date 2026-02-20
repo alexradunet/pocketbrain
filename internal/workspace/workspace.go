@@ -82,73 +82,88 @@ func (w *Workspace) RootPath() string { return w.rootPath }
 func (w *Workspace) ReadFile(relativePath string) (string, bool) {
 	filePath, ok := w.resolveExistingPath(relativePath, false)
 	if !ok {
+		w.log().Debug("workspace read denied", "op", "workspace.read", "path", relativePath, "reason", "resolve_failed")
 		return "", false
 	}
 	data, err := os.ReadFile(filePath)
 	if err != nil {
+		w.log().Debug("workspace read error", "op", "workspace.read", "path", relativePath, "error", err)
 		return "", false
 	}
+	w.log().Debug("workspace read success", "op", "workspace.read", "path", relativePath, "contentLen", len(data))
 	return string(data), true
 }
 
 // WriteFile writes content to a workspace-relative path, creating parent
 // directories as needed. Returns false on any security or I/O failure.
 func (w *Workspace) WriteFile(relativePath, content string) bool {
+	w.log().Info("workspace write started", "op", "workspace.write", "path", relativePath, "contentLen", len(content))
+
 	filePath, ok := w.resolveWritablePath(relativePath)
 	if !ok {
+		w.log().Warn("workspace write denied", "op", "workspace.write", "path", relativePath, "result", "denied", "reason", "resolve_failed")
 		return false
 	}
 
 	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-		w.log().Error("workspace write: mkdir failed", "error", err)
+		w.log().Error("workspace write: mkdir failed", "op", "workspace.write", "path", relativePath, "error", err)
 		return false
 	}
 
 	if !w.isWritablePathSafe(filePath) {
+		w.log().Warn("workspace write denied", "op", "workspace.write", "path", relativePath, "result", "denied", "reason", "post_mkdir_safety_check")
 		return false
 	}
 
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
-		w.log().Error("workspace write failed", "error", err)
+		w.log().Error("workspace write failed", "op", "workspace.write", "path", relativePath, "error", err)
 		return false
 	}
+	w.log().Info("workspace write success", "op", "workspace.write", "path", relativePath, "result", "success", "resolvedPath", filePath)
 	return true
 }
 
 // AppendToFile appends content to a workspace-relative file. If the file does
 // not exist it is created. Returns false on failure.
 func (w *Workspace) AppendToFile(relativePath, content string) bool {
+	w.log().Info("workspace append started", "op", "workspace.append", "path", relativePath, "contentLen", len(content))
+
 	filePath, ok := w.resolveWritablePath(relativePath)
 	if !ok {
+		w.log().Warn("workspace append denied", "op", "workspace.append", "path", relativePath, "result", "denied", "reason", "resolve_failed")
 		return false
 	}
 
 	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-		w.log().Error("workspace append: mkdir failed", "error", err)
+		w.log().Error("workspace append: mkdir failed", "op", "workspace.append", "path", relativePath, "error", err)
 		return false
 	}
 
 	if !w.isWritablePathSafe(filePath) {
+		w.log().Warn("workspace append denied", "op", "workspace.append", "path", relativePath, "result", "denied", "reason", "post_mkdir_safety_check")
 		return false
 	}
 
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		w.log().Error("workspace append: open failed", "error", err)
+		w.log().Error("workspace append: open failed", "op", "workspace.append", "path", relativePath, "error", err)
 		return false
 	}
 	defer f.Close()
 
 	if _, err := f.WriteString(content); err != nil {
-		w.log().Error("workspace append failed", "error", err)
+		w.log().Error("workspace append failed", "op", "workspace.append", "path", relativePath, "error", err)
 		return false
 	}
+	w.log().Info("workspace append success", "op", "workspace.append", "path", relativePath, "result", "success")
 	return true
 }
 
 // ListFiles lists the direct children of a workspace-relative folder. Pass an
 // empty string for the workspace root. Hidden entries and symlinks are skipped.
 func (w *Workspace) ListFiles(folderPath string) ([]WorkspaceFile, error) {
+	w.log().Debug("workspace list started", "op", "workspace.list", "path", folderPath)
+
 	fullPath, ok := w.resolveExistingPath(folderPath, true)
 	if !ok {
 		return nil, nil
@@ -190,11 +205,14 @@ func (w *Workspace) ListFiles(folderPath string) ([]WorkspaceFile, error) {
 		return files[i].Name < files[j].Name
 	})
 
+	w.log().Debug("workspace list complete", "op", "workspace.list", "path", folderPath, "fileCount", len(files))
 	return files, nil
 }
 
 // SearchFiles searches for files whose name and/or content matches query.
 func (w *Workspace) SearchFiles(query, folder string, mode SearchMode) ([]WorkspaceFile, error) {
+	w.log().Debug("workspace search started", "op", "workspace.search", "query", query, "folder", folder, "mode", string(mode))
+
 	allFiles, err := w.listFilesRecursive(folder)
 	if err != nil {
 		return nil, err
@@ -210,6 +228,7 @@ func (w *Workspace) SearchFiles(query, folder string, mode SearchMode) ([]Worksp
 				out = append(out, f)
 			}
 		}
+		w.log().Debug("workspace search complete", "op", "workspace.search", "query", query, "mode", string(mode), "matchCount", len(out))
 		return out, nil
 	}
 
@@ -231,34 +250,41 @@ func (w *Workspace) SearchFiles(query, folder string, mode SearchMode) ([]Worksp
 		}
 	}
 
+	w.log().Debug("workspace search complete", "op", "workspace.search", "query", query, "mode", string(mode), "matchCount", len(matched))
 	return matched, nil
 }
 
 // MoveFile moves a file from fromPath to toPath (both workspace-relative).
 func (w *Workspace) MoveFile(fromPath, toPath string) bool {
+	w.log().Info("workspace move started", "op", "workspace.move", "from", fromPath, "to", toPath)
+
 	source, ok := w.resolveExistingPath(fromPath, false)
 	if !ok {
+		w.log().Warn("workspace move denied", "op", "workspace.move", "from", fromPath, "result", "denied", "reason", "source_resolve_failed")
 		return false
 	}
 
 	dest, ok := w.resolveWritablePath(toPath)
 	if !ok {
+		w.log().Warn("workspace move denied", "op", "workspace.move", "to", toPath, "result", "denied", "reason", "dest_resolve_failed")
 		return false
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		w.log().Error("workspace move: mkdir failed", "error", err)
+		w.log().Error("workspace move: mkdir failed", "op", "workspace.move", "from", fromPath, "to", toPath, "error", err)
 		return false
 	}
 
 	if !w.isWritablePathSafe(dest) {
+		w.log().Warn("workspace move denied", "op", "workspace.move", "to", toPath, "result", "denied", "reason", "post_mkdir_safety_check")
 		return false
 	}
 
 	if err := os.Rename(source, dest); err != nil {
-		w.log().Error("workspace move failed", "error", err)
+		w.log().Error("workspace move failed", "op", "workspace.move", "from", fromPath, "to", toPath, "error", err)
 		return false
 	}
+	w.log().Info("workspace move success", "op", "workspace.move", "from", fromPath, "to", toPath, "result", "success")
 	return true
 }
 
@@ -352,16 +378,19 @@ func (w *Workspace) walkFiles(folder string) ([]WorkspaceFile, error) {
 func (w *Workspace) resolvePath(inputPath string, allowRoot bool) (string, bool) {
 	trimmed := strings.TrimSpace(inputPath)
 	if !allowRoot && trimmed == "" {
+		w.log().Debug("security: rejected empty path", "op", "security.resolvePath", "path", inputPath)
 		return "", false
 	}
 
 	resolved := filepath.Join(w.rootPath, trimmed)
 	rel, err := filepath.Rel(w.rootPath, resolved)
 	if err != nil {
+		w.log().Debug("security: filepath.Rel failed", "op", "security.resolvePath", "path", inputPath, "error", err)
 		return "", false
 	}
 
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		w.log().Debug("security: path traversal detected", "op", "security.resolvePath", "path", inputPath, "rel", rel)
 		return "", false
 	}
 
@@ -374,6 +403,7 @@ func (w *Workspace) resolveExistingPath(inputPath string, allowRoot bool) (strin
 		return "", false
 	}
 	if !w.isExistingPathSafe(resolved) {
+		w.log().Debug("security: existing path not safe", "op", "security.resolveExistingPath", "path", inputPath)
 		return "", false
 	}
 	return resolved, true
@@ -385,6 +415,7 @@ func (w *Workspace) resolveWritablePath(inputPath string) (string, bool) {
 		return "", false
 	}
 	if !w.isWritablePathSafe(resolved) {
+		w.log().Debug("security: writable path not safe", "op", "security.resolveWritablePath", "path", inputPath)
 		return "", false
 	}
 	return resolved, true
@@ -392,54 +423,72 @@ func (w *Workspace) resolveWritablePath(inputPath string) (string, bool) {
 
 func (w *Workspace) isExistingPathSafe(targetPath string) bool {
 	if !w.hasNoSymlinkSegments(targetPath) {
+		w.log().Debug("security: symlink segment found", "op", "security.isExistingPathSafe", "path", targetPath)
 		return false
 	}
 
 	rootReal, err := filepath.EvalSymlinks(w.rootPath)
 	if err != nil {
+		w.log().Debug("security: EvalSymlinks failed on root", "op", "security.isExistingPathSafe", "error", err)
 		return false
 	}
 	targetReal, err := filepath.EvalSymlinks(targetPath)
 	if err != nil {
+		w.log().Debug("security: EvalSymlinks failed on target", "op", "security.isExistingPathSafe", "path", targetPath, "error", err)
 		return false
 	}
-	return isWithinRoot(rootReal, targetReal)
+	if !isWithinRoot(rootReal, targetReal) {
+		w.log().Debug("security: target not within root", "op", "security.isExistingPathSafe", "path", targetPath, "rootReal", rootReal, "targetReal", targetReal)
+		return false
+	}
+	return true
 }
 
 func (w *Workspace) isWritablePathSafe(targetPath string) bool {
 	if !w.hasNoSymlinkSegments(targetPath) {
+		w.log().Debug("security: symlink segment found", "op", "security.isWritablePathSafe", "path", targetPath)
 		return false
 	}
 
 	ancestor, ok := w.findNearestExistingAncestor(targetPath)
 	if !ok {
+		w.log().Debug("security: no existing ancestor", "op", "security.isWritablePathSafe", "path", targetPath)
 		return false
 	}
 
 	rootReal, err := filepath.EvalSymlinks(w.rootPath)
 	if err != nil {
+		w.log().Debug("security: EvalSymlinks failed on root", "op", "security.isWritablePathSafe", "error", err)
 		return false
 	}
 
 	ancestorReal, err := filepath.EvalSymlinks(ancestor)
 	if err != nil {
+		w.log().Debug("security: EvalSymlinks failed on ancestor", "op", "security.isWritablePathSafe", "ancestor", ancestor, "error", err)
 		return false
 	}
 
 	if !isWithinRoot(rootReal, ancestorReal) {
+		w.log().Debug("security: ancestor not within root", "op", "security.isWritablePathSafe", "path", targetPath, "ancestorReal", ancestorReal)
 		return false
 	}
 
 	info, err := os.Lstat(targetPath)
 	if err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
+			w.log().Debug("security: target is symlink", "op", "security.isWritablePathSafe", "path", targetPath)
 			return false
 		}
 		targetReal, err := filepath.EvalSymlinks(targetPath)
 		if err != nil {
+			w.log().Debug("security: EvalSymlinks failed on target", "op", "security.isWritablePathSafe", "path", targetPath, "error", err)
 			return false
 		}
-		return isWithinRoot(rootReal, targetReal)
+		if !isWithinRoot(rootReal, targetReal) {
+			w.log().Debug("security: target not within root", "op", "security.isWritablePathSafe", "path", targetPath, "targetReal", targetReal)
+			return false
+		}
+		return true
 	}
 
 	return true
@@ -471,6 +520,7 @@ func (w *Workspace) hasNoSymlinkSegments(targetPath string) bool {
 			return false
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
+			w.log().Debug("security: symlink detected in segment", "op", "security.hasNoSymlinkSegments", "segment", seg, "segmentPath", current)
 			return false
 		}
 	}

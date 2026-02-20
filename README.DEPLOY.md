@@ -96,5 +96,9 @@ Primary keys used by runtime/setup:
 - `TAILSCALE_ENABLED`, `TS_AUTHKEY`, `TS_HOSTNAME`, `TS_STATE_DIR`
 - `TAILDRIVE_ENABLED`, `TAILDRIVE_SHARE_NAME`, `TAILDRIVE_AUTO_SHARE`
 
+WhatsApp onboarding policy:
+- Access is whitelist-only via `WHATSAPP_WHITELIST_NUMBERS` (or DB-managed whitelist entries).
+- `/pair` self-service onboarding is disabled.
+
 Reference template:
 - `.env.example`

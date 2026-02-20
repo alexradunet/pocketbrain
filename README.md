@@ -52,6 +52,12 @@ go run . setup               # interactive setup wizard
 - Workspace: `.data/workspace/`
 - WhatsApp auth: `.data/whatsapp-auth/`
 
+## WhatsApp Access Control
+
+- Access is whitelist-only.
+- Configure allowed numbers with `WHATSAPP_WHITELIST_NUMBERS`.
+- `/pair` self-service onboarding is disabled.
+
 ## Repository Layout
 
 ```
