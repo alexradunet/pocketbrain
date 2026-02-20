@@ -1,152 +1,155 @@
 package ai
 
 import (
+	"context"
 	"fmt"
+
+	"charm.land/fantasy"
 
 	"github.com/pocketbrain/pocketbrain/internal/workspace"
 )
 
-// RegisterWorkspaceTools adds the 7 workspace tools to the registry.
-func RegisterWorkspaceTools(reg *Registry, ws *workspace.Workspace) {
-	reg.Register(&Tool{
-		Name:        "workspace_read",
-		Description: "Read the contents of a file from the workspace. Path is relative to workspace root.",
-		Parameters: []ToolParam{
-			{Name: "path", Type: "string", Description: "Path to the file, relative to workspace root", Required: true},
-		},
-		Execute: func(args map[string]any) (string, error) {
-			path := argString(args, "path")
-			content, ok := ws.ReadFile(path)
-			if !ok {
-				return fmt.Sprintf("Error: File not found: %s", path), nil
-			}
-			return content, nil
-		},
-	})
+// Workspace tool input types.
 
-	reg.Register(&Tool{
-		Name:        "workspace_write",
-		Description: "Write content to a file in the workspace. Creates the file if it doesn't exist, overwrites if it does.",
-		Parameters: []ToolParam{
-			{Name: "path", Type: "string", Description: "Path to the file, relative to workspace root", Required: true},
-			{Name: "content", Type: "string", Description: "Content to write to the file", Required: true},
-		},
-		Execute: func(args map[string]any) (string, error) {
-			path := argString(args, "path")
-			content := argString(args, "content")
-			if ws.WriteFile(path, content) {
-				return fmt.Sprintf("Successfully wrote to %s", path), nil
-			}
-			return fmt.Sprintf("Error: Failed to write to %s", path), nil
-		},
-	})
+type workspaceReadInput struct {
+	Path string `json:"path" description:"Path to the file, relative to workspace root"`
+}
 
-	reg.Register(&Tool{
-		Name:        "workspace_append",
-		Description: "Append content to a file in the workspace. Creates the file if it doesn't exist.",
-		Parameters: []ToolParam{
-			{Name: "path", Type: "string", Description: "Path to the file, relative to workspace root", Required: true},
-			{Name: "content", Type: "string", Description: "Content to append to the file", Required: true},
-		},
-		Execute: func(args map[string]any) (string, error) {
-			path := argString(args, "path")
-			content := argString(args, "content")
-			if ws.AppendToFile(path, content) {
-				return fmt.Sprintf("Successfully appended to %s", path), nil
-			}
-			return fmt.Sprintf("Error: Failed to append to %s", path), nil
-		},
-	})
+type workspaceWriteInput struct {
+	Path    string `json:"path" description:"Path to the file, relative to workspace root"`
+	Content string `json:"content" description:"Content to write to the file"`
+}
 
-	reg.Register(&Tool{
-		Name:        "workspace_list",
-		Description: "List files and folders in a workspace directory.",
-		Parameters: []ToolParam{
-			{Name: "folder", Type: "string", Description: "Folder path relative to workspace root (default: root)", Required: false},
-		},
-		Execute: func(args map[string]any) (string, error) {
-			folder := argString(args, "folder")
-			files, _ := ws.ListFiles(folder)
-			if len(files) == 0 {
-				if folder == "" {
-					return "Folder is empty: root", nil
+type workspaceAppendInput struct {
+	Path    string `json:"path" description:"Path to the file, relative to workspace root"`
+	Content string `json:"content" description:"Content to append to the file"`
+}
+
+type workspaceListInput struct {
+	Folder string `json:"folder" description:"Folder path relative to workspace root (default: root)"`
+}
+
+type workspaceSearchInput struct {
+	Query  string `json:"query" description:"Search query"`
+	Folder string `json:"folder" description:"Folder to search in (default: entire workspace)"`
+	Mode   string `json:"mode" description:"Search mode: name | content | both (default: name)"`
+}
+
+type workspaceMoveInput struct {
+	From string `json:"from" description:"Source path relative to workspace root"`
+	To   string `json:"to" description:"Destination path relative to workspace root"`
+}
+
+type workspaceStatsInput struct{}
+
+// WorkspaceTools returns the 7 workspace tools as Fantasy AgentTools.
+func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
+	return []fantasy.AgentTool{
+		fantasy.NewAgentTool(
+			"workspace_read",
+			"Read the contents of a file from the workspace. Path is relative to workspace root.",
+			func(_ context.Context, input workspaceReadInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				content, ok := ws.ReadFile(input.Path)
+				if !ok {
+					return fantasy.NewTextResponse(fmt.Sprintf("Error: File not found: %s", input.Path)), nil
 				}
-				return fmt.Sprintf("Folder is empty: %s", folder), nil
-			}
-			result := fmt.Sprintf("Contents of %s:\n", displayFolder(folder))
-			for _, f := range files {
-				if f.IsDirectory {
-					result += fmt.Sprintf("DIR  %s\n", f.Name)
-				} else {
-					result += fmt.Sprintf("FILE %s (%s)\n", f.Name, formatBytes(f.Size))
+				return fantasy.NewTextResponse(content), nil
+			},
+		),
+
+		fantasy.NewAgentTool(
+			"workspace_write",
+			"Write content to a file in the workspace. Creates the file if it doesn't exist, overwrites if it does.",
+			func(_ context.Context, input workspaceWriteInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				if ws.WriteFile(input.Path, input.Content) {
+					return fantasy.NewTextResponse(fmt.Sprintf("Successfully wrote to %s", input.Path)), nil
 				}
-			}
-			return result, nil
-		},
-	})
+				return fantasy.NewTextResponse(fmt.Sprintf("Error: Failed to write to %s", input.Path)), nil
+			},
+		),
 
-	reg.Register(&Tool{
-		Name:        "workspace_search",
-		Description: "Search for files in the workspace by name, content, or both.",
-		Parameters: []ToolParam{
-			{Name: "query", Type: "string", Description: "Search query", Required: true},
-			{Name: "folder", Type: "string", Description: "Folder to search in (default: entire workspace)", Required: false},
-			{Name: "mode", Type: "string", Description: "Search mode: name | content | both (default: name)", Required: false},
-		},
-		Execute: func(args map[string]any) (string, error) {
-			query := argString(args, "query")
-			folder := argString(args, "folder")
-			mode := argString(args, "mode")
-			if mode == "" {
-				mode = "name"
-			}
-			if mode != "name" && mode != "content" && mode != "both" {
-				return "Error: Invalid search mode. Use one of: name, content, both", nil
-			}
-			files, _ := ws.SearchFiles(query, folder, workspace.SearchMode(mode))
-			if len(files) == 0 {
-				return fmt.Sprintf("No files found matching %q in %s mode", query, mode), nil
-			}
-			result := fmt.Sprintf("Found %d file(s) matching %q in %s mode:\n", len(files), query, mode)
-			for _, f := range files {
-				result += fmt.Sprintf("- %s\n", f.Path)
-			}
-			return result, nil
-		},
-	})
+		fantasy.NewAgentTool(
+			"workspace_append",
+			"Append content to a file in the workspace. Creates the file if it doesn't exist.",
+			func(_ context.Context, input workspaceAppendInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				if ws.AppendToFile(input.Path, input.Content) {
+					return fantasy.NewTextResponse(fmt.Sprintf("Successfully appended to %s", input.Path)), nil
+				}
+				return fantasy.NewTextResponse(fmt.Sprintf("Error: Failed to append to %s", input.Path)), nil
+			},
+		),
 
-	reg.Register(&Tool{
-		Name:        "workspace_move",
-		Description: "Move or rename a file in the workspace.",
-		Parameters: []ToolParam{
-			{Name: "from", Type: "string", Description: "Source path relative to workspace root", Required: true},
-			{Name: "to", Type: "string", Description: "Destination path relative to workspace root", Required: true},
-		},
-		Execute: func(args map[string]any) (string, error) {
-			from := argString(args, "from")
-			to := argString(args, "to")
-			if ws.MoveFile(from, to) {
-				return fmt.Sprintf("Successfully moved %s to %s", from, to), nil
-			}
-			return fmt.Sprintf("Error: Failed to move %s", from), nil
-		},
-	})
+		fantasy.NewAgentTool(
+			"workspace_list",
+			"List files and folders in a workspace directory.",
+			func(_ context.Context, input workspaceListInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				files, _ := ws.ListFiles(input.Folder)
+				if len(files) == 0 {
+					return fantasy.NewTextResponse(fmt.Sprintf("Folder is empty: %s", displayFolder(input.Folder))), nil
+				}
+				result := fmt.Sprintf("Contents of %s:\n", displayFolder(input.Folder))
+				for _, f := range files {
+					if f.IsDirectory {
+						result += fmt.Sprintf("DIR  %s\n", f.Name)
+					} else {
+						result += fmt.Sprintf("FILE %s (%s)\n", f.Name, formatBytes(f.Size))
+					}
+				}
+				return fantasy.NewTextResponse(result), nil
+			},
+		),
 
-	reg.Register(&Tool{
-		Name:        "workspace_stats",
-		Description: "Get statistics about the workspace: total files, total size, last modified date.",
-		Parameters:  []ToolParam{},
-		Execute: func(args map[string]any) (string, error) {
-			stats, err := ws.GetStats()
-			if err != nil {
-				return fmt.Sprintf("Error getting workspace stats: %v", err), nil
-			}
-			lastMod := "N/A"
-			if stats.LastModified != nil && !stats.LastModified.IsZero() {
-				lastMod = stats.LastModified.Format("2006-01-02T15:04:05Z")
-			}
-			return fmt.Sprintf("Workspace Statistics:\n- Total files: %d\n- Total size: %s\n- Last modified: %s",
-				stats.TotalFiles, formatBytes(stats.TotalSize), lastMod), nil
-		},
-	})
+		fantasy.NewAgentTool(
+			"workspace_search",
+			"Search for files in the workspace by name, content, or both.",
+			func(_ context.Context, input workspaceSearchInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				mode := input.Mode
+				if mode == "" {
+					mode = "name"
+				}
+				if mode != "name" && mode != "content" && mode != "both" {
+					return fantasy.NewTextResponse("Error: Invalid search mode. Use one of: name, content, both"), nil
+				}
+				files, _ := ws.SearchFiles(input.Query, input.Folder, workspace.SearchMode(mode))
+				if len(files) == 0 {
+					return fantasy.NewTextResponse(fmt.Sprintf("No files found matching %q in %s mode", input.Query, mode)), nil
+				}
+				result := fmt.Sprintf("Found %d file(s) matching %q in %s mode:\n", len(files), input.Query, mode)
+				for _, f := range files {
+					result += fmt.Sprintf("- %s\n", f.Path)
+				}
+				return fantasy.NewTextResponse(result), nil
+			},
+		),
+
+		fantasy.NewAgentTool(
+			"workspace_move",
+			"Move or rename a file in the workspace.",
+			func(_ context.Context, input workspaceMoveInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				if ws.MoveFile(input.From, input.To) {
+					return fantasy.NewTextResponse(fmt.Sprintf("Successfully moved %s to %s", input.From, input.To)), nil
+				}
+				return fantasy.NewTextResponse(fmt.Sprintf("Error: Failed to move %s", input.From)), nil
+			},
+		),
+
+		fantasy.NewAgentTool(
+			"workspace_stats",
+			"Get statistics about the workspace: total files, total size, last modified date.",
+			func(_ context.Context, _ workspaceStatsInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				stats, err := ws.GetStats()
+				if err != nil {
+					return fantasy.NewTextResponse(fmt.Sprintf("Error getting workspace stats: %v", err)), nil
+				}
+				lastMod := "N/A"
+				if stats.LastModified != nil && !stats.LastModified.IsZero() {
+					lastMod = stats.LastModified.Format("2006-01-02T15:04:05Z")
+				}
+				return fantasy.NewTextResponse(fmt.Sprintf(
+					"Workspace Statistics:\n- Total files: %d\n- Total size: %s\n- Last modified: %s",
+					stats.TotalFiles, formatBytes(stats.TotalSize), lastMod,
+				)), nil
+			},
+		),
+	}
 }

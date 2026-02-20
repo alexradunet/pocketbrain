@@ -5,29 +5,6 @@ import (
 	"math"
 )
 
-// argString extracts a string argument from the tool args map.
-func argString(args map[string]any, key string) string {
-	v, ok := args[key]
-	if !ok {
-		return ""
-	}
-	s, ok := v.(string)
-	if !ok {
-		return fmt.Sprintf("%v", v)
-	}
-	return s
-}
-
-// argBool extracts a boolean argument from the tool args map.
-func argBool(args map[string]any, key string) bool {
-	v, ok := args[key]
-	if !ok {
-		return false
-	}
-	b, ok := v.(bool)
-	return ok && b
-}
-
 // displayFolder returns a human-friendly folder label.
 func displayFolder(folder string) string {
 	if folder == "" {

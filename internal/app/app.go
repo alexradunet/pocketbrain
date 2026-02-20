@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 
+	"charm.land/fantasy"
+
 	"github.com/pocketbrain/pocketbrain/internal/ai"
 	"github.com/pocketbrain/pocketbrain/internal/channel"
 	"github.com/pocketbrain/pocketbrain/internal/channel/whatsapp"
@@ -18,18 +20,6 @@ import (
 	"github.com/pocketbrain/pocketbrain/internal/tui"
 	"github.com/pocketbrain/pocketbrain/internal/workspace"
 )
-
-// providerBaseURL returns the API base URL for the given provider name.
-func providerBaseURL(provider string) string {
-	switch provider {
-	case "anthropic":
-		return "https://api.anthropic.com"
-	case "google":
-		return "https://generativelanguage.googleapis.com"
-	default: // "openai" or empty
-		return "https://api.openai.com"
-	}
-}
 
 // Run is the composition root. It wires all dependencies and starts the app.
 func Run(headless bool) error {
@@ -125,7 +115,7 @@ func Run(headless bool) error {
 		logger.Warn("no heartbeat tasks configured; add tasks via SQL: INSERT INTO heartbeat_tasks (task) VALUES ('your task')")
 	}
 
-	// --- Phase 2: Workspace + AI + Assistant ---
+	// --- Workspace + AI + Assistant ---
 
 	// Initialize workspace service.
 	var workspaceService *workspace.Workspace
@@ -137,41 +127,46 @@ func Run(headless bool) error {
 		logger.Info("workspace initialized", "path", cfg.WorkspacePath)
 	}
 
-	// Register tool registry.
-	toolRegistry := ai.NewRegistry()
+	// Build Fantasy agent tools.
+	var tools []fantasy.AgentTool
 	if workspaceService != nil {
-		ai.RegisterWorkspaceTools(toolRegistry, workspaceService)
+		tools = append(tools, ai.WorkspaceTools(workspaceService)...)
 
-		// Register skills tools (skills live inside workspace).
+		// Skills tools (skills live inside workspace).
 		skillsService := skills.New(workspaceService, logger)
-		ai.RegisterSkillsTools(toolRegistry, skillsService)
+		tools = append(tools, ai.SkillsTools(skillsService)...)
 	}
-	ai.RegisterMemoryTools(toolRegistry, memoryRepo)
-	ai.RegisterChannelTools(toolRegistry, channelRepo, outboxRepo)
-	logger.Info("tool registry ready", "toolCount", len(toolRegistry.Names()))
+	tools = append(tools, ai.MemoryTools(memoryRepo)...)
+	tools = append(tools, ai.ChannelTools(channelRepo, outboxRepo)...)
+	logger.Info("tools ready", "toolCount", len(tools))
 
 	// Create AI provider based on configuration.
+	ctx, cancel := context.WithCancel(context.Background())
+	shutdown := newShutdown(logger, cancel, db)
+
 	var provider core.Provider
 	switch {
 	case cfg.APIKey == "":
 		provider = ai.NewStubProvider(logger)
 		logger.Warn("no API_KEY configured; using stub provider")
-	case cfg.Provider == "anthropic":
-		provider = ai.NewAnthropicProvider(ai.AnthropicConfig{
-			APIKey:   cfg.APIKey,
-			Model:    cfg.Model,
-			Registry: toolRegistry,
-		})
-		logger.Info("AI provider ready", "provider", "anthropic", "model", cfg.Model)
 	default:
-		// OpenAI, Google, or any OpenAI-compatible endpoint.
-		provider = ai.NewFantasyProvider(ai.FantasyConfig{
-			BaseURL:  providerBaseURL(cfg.Provider),
-			APIKey:   cfg.APIKey,
-			Model:    cfg.Model,
-			Registry: toolRegistry,
+		providerName := cfg.Provider
+		if providerName == "" {
+			providerName = "openai"
+		}
+		fp, err := ai.NewFantasyProvider(ctx, ai.FantasyProviderConfig{
+			ProviderName: providerName,
+			APIKey:       cfg.APIKey,
+			Model:        cfg.Model,
+			Tools:        tools,
+			Logger:       logger,
 		})
-		logger.Info("AI provider ready", "provider", cfg.Provider, "model", cfg.Model)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("ai provider: %w", err)
+		}
+		provider = fp
+		logger.Info("AI provider ready", "provider", providerName, "model", cfg.Model)
 	}
 
 	// Create session manager.
@@ -197,15 +192,11 @@ func Run(headless bool) error {
 	// Create channel manager.
 	channelMgr := channel.NewManager(logger)
 
-	// Setup graceful shutdown.
-	ctx, cancel := context.WithCancel(context.Background())
-	shutdown := newShutdown(logger, cancel, db)
-
 	if workspaceService != nil {
 		shutdown.addCloser(func() { _ = workspaceService.Stop() })
 	}
 
-	// --- Phase 5: Taildrive file server ---
+	// --- Taildrive file server ---
 	if cfg.TaildriveEnabled && workspaceService != nil {
 		tdSvc, err := taildrive.New(taildrive.Config{
 			Enabled:   true,

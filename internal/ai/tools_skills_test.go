@@ -7,11 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/fantasy"
+
 	"github.com/pocketbrain/pocketbrain/internal/skills"
 	"github.com/pocketbrain/pocketbrain/internal/workspace"
 )
 
-func newTestSkillsRegistry(t *testing.T) (*Registry, string) {
+func newTestSkillsTools(t *testing.T) ([]fantasy.AgentTool, string) {
 	t.Helper()
 	root := t.TempDir()
 	ws := workspace.New(root, slog.Default())
@@ -19,9 +21,7 @@ func newTestSkillsRegistry(t *testing.T) (*Registry, string) {
 		t.Fatal(err)
 	}
 	svc := skills.New(ws, slog.Default())
-	reg := NewRegistry()
-	RegisterSkillsTools(reg, svc)
-	return reg, root
+	return SkillsTools(svc), root
 }
 
 func seedSkillFile(t *testing.T, root, name, content string) {
@@ -40,10 +40,13 @@ func seedSkillFile(t *testing.T, root, name, content string) {
 // ---------------------------------------------------------------------------
 
 func TestSkillsTools_RegistrationCount(t *testing.T) {
-	reg, _ := newTestSkillsRegistry(t)
-	names := reg.Names()
-	if len(names) != 4 {
-		t.Fatalf("expected 4 skills tools, got %d: %v", len(names), names)
+	tools, _ := newTestSkillsTools(t)
+	if len(tools) != 4 {
+		names := make([]string, len(tools))
+		for i, tool := range tools {
+			names[i] = tool.Info().Name
+		}
+		t.Fatalf("expected 4 skills tools, got %d: %v", len(tools), names)
 	}
 }
 
@@ -52,26 +55,18 @@ func TestSkillsTools_RegistrationCount(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSkillsTool_List_Empty(t *testing.T) {
-	reg, _ := newTestSkillsRegistry(t)
-	tool, _ := reg.Get("skill_list")
-	result, err := tool.Execute(map[string]any{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tools, _ := newTestSkillsTools(t)
+	result := runTool(t, findTool(tools, "skill_list"), skillListInput{})
 	if !strings.Contains(result, "No skills found") {
 		t.Fatalf("expected no-skills message, got: %q", result)
 	}
 }
 
 func TestSkillsTool_List_WithSkills(t *testing.T) {
-	reg, root := newTestSkillsRegistry(t)
+	tools, root := newTestSkillsTools(t)
 	seedSkillFile(t, root, "greeting.md", "---\nname: greeting\ndescription: Greets people\n---\nHello!")
 
-	tool, _ := reg.Get("skill_list")
-	result, err := tool.Execute(map[string]any{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	result := runTool(t, findTool(tools, "skill_list"), skillListInput{})
 	if !strings.Contains(result, "greeting") {
 		t.Fatalf("expected skill listing, got: %q", result)
 	}
@@ -85,38 +80,26 @@ func TestSkillsTool_List_WithSkills(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSkillsTool_Load_Success(t *testing.T) {
-	reg, root := newTestSkillsRegistry(t)
+	tools, root := newTestSkillsTools(t)
 	seedSkillFile(t, root, "deploy.md", "---\nname: deploy\n---\nDeploy steps here.")
 
-	tool, _ := reg.Get("skill_load")
-	result, err := tool.Execute(map[string]any{"name": "deploy"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	result := runTool(t, findTool(tools, "skill_load"), skillLoadInput{Name: "deploy"})
 	if !strings.Contains(result, "Deploy steps here") {
 		t.Fatalf("expected skill content, got: %q", result)
 	}
 }
 
 func TestSkillsTool_Load_NotFound(t *testing.T) {
-	reg, _ := newTestSkillsRegistry(t)
-	tool, _ := reg.Get("skill_load")
-	result, err := tool.Execute(map[string]any{"name": "nonexistent"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tools, _ := newTestSkillsTools(t)
+	result := runTool(t, findTool(tools, "skill_load"), skillLoadInput{Name: "nonexistent"})
 	if !strings.Contains(result, "Error") {
 		t.Fatalf("expected error message, got: %q", result)
 	}
 }
 
 func TestSkillsTool_Load_EmptyName(t *testing.T) {
-	reg, _ := newTestSkillsRegistry(t)
-	tool, _ := reg.Get("skill_load")
-	result, err := tool.Execute(map[string]any{"name": ""})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tools, _ := newTestSkillsTools(t)
+	result := runTool(t, findTool(tools, "skill_load"), skillLoadInput{Name: ""})
 	if !strings.Contains(result, "Error") {
 		t.Fatalf("expected error message, got: %q", result)
 	}
@@ -127,15 +110,11 @@ func TestSkillsTool_Load_EmptyName(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSkillsTool_Create_Success(t *testing.T) {
-	reg, root := newTestSkillsRegistry(t)
-	tool, _ := reg.Get("skill_create")
-	result, err := tool.Execute(map[string]any{
-		"name":    "my-skill",
-		"content": "---\nname: my-skill\n---\nContent here.",
+	tools, root := newTestSkillsTools(t)
+	result := runTool(t, findTool(tools, "skill_create"), skillCreateInput{
+		Name:    "my-skill",
+		Content: "---\nname: my-skill\n---\nContent here.",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if !strings.Contains(result, "created successfully") {
 		t.Fatalf("expected success message, got: %q", result)
 	}
@@ -151,30 +130,22 @@ func TestSkillsTool_Create_Success(t *testing.T) {
 }
 
 func TestSkillsTool_Create_InvalidName(t *testing.T) {
-	reg, _ := newTestSkillsRegistry(t)
-	tool, _ := reg.Get("skill_create")
-	result, err := tool.Execute(map[string]any{
-		"name":    "../bad-name",
-		"content": "content",
+	tools, _ := newTestSkillsTools(t)
+	result := runTool(t, findTool(tools, "skill_create"), skillCreateInput{
+		Name:    "../bad-name",
+		Content: "content",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if !strings.Contains(result, "Error") {
 		t.Fatalf("expected error for invalid name, got: %q", result)
 	}
 }
 
 func TestSkillsTool_Create_EmptyContent(t *testing.T) {
-	reg, _ := newTestSkillsRegistry(t)
-	tool, _ := reg.Get("skill_create")
-	result, err := tool.Execute(map[string]any{
-		"name":    "test",
-		"content": "",
+	tools, _ := newTestSkillsTools(t)
+	result := runTool(t, findTool(tools, "skill_create"), skillCreateInput{
+		Name:    "test",
+		Content: "",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if !strings.Contains(result, "Error") {
 		t.Fatalf("expected error for empty content, got: %q", result)
 	}
@@ -185,24 +156,16 @@ func TestSkillsTool_Create_EmptyContent(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSkillsTool_Install_InvalidURL(t *testing.T) {
-	reg, _ := newTestSkillsRegistry(t)
-	tool, _ := reg.Get("install_skill")
-	result, err := tool.Execute(map[string]any{"url": "not-a-url"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tools, _ := newTestSkillsTools(t)
+	result := runTool(t, findTool(tools, "install_skill"), installSkillInput{URL: "not-a-url"})
 	if !strings.Contains(result, "Error") {
 		t.Fatalf("expected error for invalid URL, got: %q", result)
 	}
 }
 
 func TestSkillsTool_Install_EmptyURL(t *testing.T) {
-	reg, _ := newTestSkillsRegistry(t)
-	tool, _ := reg.Get("install_skill")
-	result, err := tool.Execute(map[string]any{"url": ""})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tools, _ := newTestSkillsTools(t)
+	result := runTool(t, findTool(tools, "install_skill"), installSkillInput{URL: ""})
 	if !strings.Contains(result, "Error") {
 		t.Fatalf("expected error for empty URL, got: %q", result)
 	}

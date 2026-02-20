@@ -1,67 +1,61 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"strings"
+
+	"charm.land/fantasy"
 
 	"github.com/pocketbrain/pocketbrain/internal/core"
 )
 
-// RegisterMemoryTools adds save_memory and delete_memory tools.
-func RegisterMemoryTools(reg *Registry, repo core.MemoryRepository) {
-	reg.Register(&Tool{
-		Name:        "save_memory",
-		Description: "Append one durable user fact to memory.",
-		Parameters: []ToolParam{
-			{Name: "fact", Type: "string", Description: "A short, stable user fact worth remembering", Required: true},
-		},
-		Execute: func(args map[string]any) (string, error) {
-			fact := strings.TrimSpace(argString(args, "fact"))
-			if fact == "" {
-				return "Skipped: empty memory fact.", nil
-			}
-			inserted, err := repo.Append(fact, nil)
-			if err != nil {
-				return fmt.Sprintf("Error saving memory: %v", err), nil
-			}
-			if inserted {
-				return "Saved durable memory.", nil
-			}
-			return "Skipped: similar fact already exists.", nil
-		},
-	})
+// Memory tool input types.
 
-	reg.Register(&Tool{
-		Name:        "delete_memory",
-		Description: "Delete a memory fact by ID.",
-		Parameters: []ToolParam{
-			{Name: "id", Type: "number", Description: "The memory ID to delete", Required: true},
-		},
-		Execute: func(args map[string]any) (string, error) {
-			idRaw, ok := args["id"]
-			if !ok {
-				return "Error: missing id parameter", nil
-			}
-			var id int64
-			switch v := idRaw.(type) {
-			case float64:
-				id = int64(v)
-			case int64:
-				id = v
-			case int:
-				id = int64(v)
-			default:
-				return "Error: invalid id parameter type", nil
-			}
+type saveMemoryInput struct {
+	Fact string `json:"fact" description:"A short, stable user fact worth remembering"`
+}
 
-			deleted, err := repo.Delete(id)
-			if err != nil {
-				return fmt.Sprintf("Error deleting memory: %v", err), nil
-			}
-			if deleted {
-				return fmt.Sprintf("Memory %d deleted.", id), nil
-			}
-			return fmt.Sprintf("Memory %d not found.", id), nil
-		},
-	})
+type deleteMemoryInput struct {
+	ID float64 `json:"id" description:"The memory ID to delete"`
+}
+
+// MemoryTools returns save_memory and delete_memory as Fantasy AgentTools.
+func MemoryTools(repo core.MemoryRepository) []fantasy.AgentTool {
+	return []fantasy.AgentTool{
+		fantasy.NewAgentTool(
+			"save_memory",
+			"Append one durable user fact to memory.",
+			func(_ context.Context, input saveMemoryInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				fact := strings.TrimSpace(input.Fact)
+				if fact == "" {
+					return fantasy.NewTextResponse("Skipped: empty memory fact."), nil
+				}
+				inserted, err := repo.Append(fact, nil)
+				if err != nil {
+					return fantasy.NewTextResponse(fmt.Sprintf("Error saving memory: %v", err)), nil
+				}
+				if inserted {
+					return fantasy.NewTextResponse("Saved durable memory."), nil
+				}
+				return fantasy.NewTextResponse("Skipped: similar fact already exists."), nil
+			},
+		),
+
+		fantasy.NewAgentTool(
+			"delete_memory",
+			"Delete a memory fact by ID.",
+			func(_ context.Context, input deleteMemoryInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				id := int64(input.ID)
+				deleted, err := repo.Delete(id)
+				if err != nil {
+					return fantasy.NewTextResponse(fmt.Sprintf("Error deleting memory: %v", err)), nil
+				}
+				if deleted {
+					return fantasy.NewTextResponse(fmt.Sprintf("Memory %d deleted.", id)), nil
+				}
+				return fantasy.NewTextResponse(fmt.Sprintf("Memory %d not found.", id)), nil
+			},
+		),
+	}
 }
