@@ -51,6 +51,7 @@ type SessionChangedEvent struct {
 	Channel string
 	UserID  string
 	Reason  string
+	Version int64
 }
 
 // StatusEvent carries connection status.

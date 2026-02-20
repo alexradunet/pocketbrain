@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strconv"
 	"testing"
 )
 
@@ -178,5 +179,52 @@ func TestSessionManager_GetOrCreateMainSession_SaveError(t *testing.T) {
 	_, err := mgr.GetOrCreateMainSession(context.Background(), createFn)
 	if err == nil {
 		t.Fatal("expected error from save, got nil")
+	}
+}
+
+func TestSessionManager_GetOrCreateMainSession_InitializesVersion(t *testing.T) {
+	repo := newMockSessionRepo()
+	mgr := NewSessionManager(repo, testLogger())
+
+	createFn := func(_ context.Context, title string) (string, error) {
+		return "session-abc", nil
+	}
+
+	if _, err := mgr.GetOrCreateMainSession(context.Background(), createFn); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	v, ok := repo.sessions["session:main:version"]
+	if !ok {
+		t.Fatal("expected session:main:version to be stored")
+	}
+	if v != "1" {
+		t.Fatalf("version = %q, want 1", v)
+	}
+}
+
+func TestSessionManager_StartNewMainSession_BumpsVersion(t *testing.T) {
+	repo := newMockSessionRepo()
+	repo.sessions["session:main"] = "old-session"
+	repo.sessions["session:main:version"] = "7"
+	mgr := NewSessionManager(repo, testLogger())
+
+	createFn := func(_ context.Context, title string) (string, error) {
+		return "new-session", nil
+	}
+
+	if _, err := mgr.StartNewMainSession(context.Background(), "test", createFn); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := mgr.GetMainSessionVersion()
+	if err != nil {
+		t.Fatalf("GetMainSessionVersion error: %v", err)
+	}
+	if got != 8 {
+		t.Fatalf("version = %d, want 8", got)
+	}
+	if raw := repo.sessions["session:main:version"]; raw != strconv.FormatInt(got, 10) {
+		t.Fatalf("stored version = %q, want %d", raw, got)
 	}
 }

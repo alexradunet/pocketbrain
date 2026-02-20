@@ -117,6 +117,9 @@ var (
 	setupProgressSep = lipgloss.NewStyle().
 				Foreground(colorBorder)
 
+	setupLogLineStyle = lipgloss.NewStyle().
+				Foreground(colorMuted)
+
 	// Suppress unused warnings
 	_ = colorWarning
 	_ = msgBot

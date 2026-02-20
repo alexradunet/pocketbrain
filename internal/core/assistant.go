@@ -227,6 +227,11 @@ func (a *AssistantCore) StartNewMainSession(ctx context.Context, reason string) 
 	return a.sessionMgr.StartNewMainSession(ctx, reason, a.provider.CreateSession)
 }
 
+// MainSessionVersion returns the persisted version counter for the active main session.
+func (a *AssistantCore) MainSessionVersion() (int64, error) {
+	return a.sessionMgr.GetMainSessionVersion()
+}
+
 // operationID generates a short unique identifier for log correlation.
 func operationID(prefix string) string {
 	return prefix + "-" + newUUID()

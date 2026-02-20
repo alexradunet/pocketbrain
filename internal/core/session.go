@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log/slog"
+	"strconv"
 )
 
 // SessionManager manages named OpenCode sessions stored in a SessionRepository.
@@ -13,6 +14,11 @@ type SessionManager struct {
 	repo   SessionRepository
 	logger *slog.Logger
 }
+
+const (
+	mainSessionKey        = "session:main"
+	mainSessionVersionKey = "session:main:version"
+)
 
 // NewSessionManager creates a SessionManager backed by the given repository.
 func NewSessionManager(repo SessionRepository, logger *slog.Logger) *SessionManager {
@@ -43,12 +49,35 @@ func (m *SessionManager) StartNewMainSession(ctx context.Context, reason string,
 		return "", err
 	}
 
-	if err := m.repo.SaveSessionID("session:main", sessionID); err != nil {
+	if err := m.repo.SaveSessionID(mainSessionKey, sessionID); err != nil {
 		return "", fmt.Errorf("save new main session: %w", err)
 	}
 
-	m.logger.InfoContext(ctx, "created new main session", "sessionID", sessionID, "reason", reason)
+	version, err := m.bumpMainSessionVersion()
+	if err != nil {
+		return "", fmt.Errorf("bump main session version: %w", err)
+	}
+
+	m.logger.InfoContext(ctx, "created new main session", "sessionID", sessionID, "reason", reason, "version", version)
 	return sessionID, nil
+}
+
+// GetMainSessionVersion returns the persisted main-session version counter.
+// Returns 0 when no version has been recorded yet.
+func (m *SessionManager) GetMainSessionVersion() (int64, error) {
+	raw, ok, err := m.repo.GetSessionID(mainSessionVersionKey)
+	if err != nil {
+		return 0, fmt.Errorf("get main session version: %w", err)
+	}
+	if !ok {
+		return 0, nil
+	}
+
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse main session version: %w", err)
+	}
+	return n, nil
 }
 
 // getOrCreate returns the stored session ID for key, or creates a new one.
@@ -70,6 +99,11 @@ func (m *SessionManager) getOrCreate(ctx context.Context, key string, createFn f
 
 	if err := m.repo.SaveSessionID(storeKey, sessionID); err != nil {
 		return "", fmt.Errorf("save session %q: %w", key, err)
+	}
+	if key == "main" {
+		if err := m.ensureMainSessionVersionInitialized(); err != nil {
+			return "", fmt.Errorf("init main session version: %w", err)
+		}
 	}
 
 	return sessionID, nil
@@ -107,4 +141,30 @@ func newUUID() string {
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant 10
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16])
+}
+
+func (m *SessionManager) ensureMainSessionVersionInitialized() error {
+	raw, ok, err := m.repo.GetSessionID(mainSessionVersionKey)
+	if err != nil {
+		return err
+	}
+	if ok && raw != "" {
+		return nil
+	}
+	return m.repo.SaveSessionID(mainSessionVersionKey, "1")
+}
+
+func (m *SessionManager) bumpMainSessionVersion() (int64, error) {
+	current, err := m.GetMainSessionVersion()
+	if err != nil {
+		return 0, err
+	}
+	next := current + 1
+	if next <= 0 {
+		next = 1
+	}
+	if err := m.repo.SaveSessionID(mainSessionVersionKey, strconv.FormatInt(next, 10)); err != nil {
+		return 0, err
+	}
+	return next, nil
 }

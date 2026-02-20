@@ -42,6 +42,7 @@ func TestModel_HandleSessionChangedEvent_AddsMessage(t *testing.T) {
 			Channel: "whatsapp",
 			UserID:  "user@s.whatsapp.net",
 			Reason:  "whatsapp /new command",
+			Version: 2,
 		},
 	}
 
@@ -53,5 +54,8 @@ func TestModel_HandleSessionChangedEvent_AddsMessage(t *testing.T) {
 	got := m.messages.messages[0].Text
 	if !strings.Contains(got, "Context changed") {
 		t.Fatalf("message text = %q, expected context changed notice", got)
+	}
+	if !strings.Contains(got, "[v2]") {
+		t.Fatalf("message text = %q, expected session version marker", got)
 	}
 }

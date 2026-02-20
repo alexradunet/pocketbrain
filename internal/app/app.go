@@ -383,6 +383,11 @@ func (s *sessionStarterAdapter) StartNewSession(userID, reason string) error {
 		return err
 	}
 
+	version, err := s.a.MainSessionVersion()
+	if err != nil {
+		version = 0
+	}
+
 	if s.channelRepo != nil {
 		_ = s.channelRepo.SaveLastChannel("whatsapp", userID)
 	}
@@ -394,6 +399,7 @@ func (s *sessionStarterAdapter) StartNewSession(userID, reason string) error {
 				Channel: "whatsapp",
 				UserID:  userID,
 				Reason:  reason,
+				Version: version,
 			},
 			Timestamp: time.Now(),
 		})

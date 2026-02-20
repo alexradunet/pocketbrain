@@ -110,8 +110,12 @@ func (m *Model) handleEvent(e Event) {
 						m.qr.setQR(qrText)
 					}
 				}
-			case "whatsapp pairing successful", "whatsapp QR code timed out", "whatsapp pairing error":
-				m.qr.clear()
+			case "whatsapp pairing successful":
+				m.qr.setPaired()
+			case "whatsapp QR code timed out":
+				m.qr.setTimedOut()
+			case "whatsapp pairing error":
+				m.qr.setTimedOut()
 			}
 		}
 	case EventMessageIn:
@@ -128,9 +132,13 @@ func (m *Model) handleEvent(e Event) {
 			if reason == "" {
 				reason = "session changed"
 			}
+			versionText := ""
+			if se.Version > 0 {
+				versionText = fmt.Sprintf(" [v%d]", se.Version)
+			}
 			m.messages.addMessage(MessageEvent{
 				UserID:    se.UserID,
-				Text:      fmt.Sprintf("Context changed (%s) on %s.", reason, se.Channel),
+				Text:      fmt.Sprintf("Context changed%s (%s) on %s.", versionText, reason, se.Channel),
 				Outgoing:  true,
 				Timestamp: e.Timestamp,
 			})
@@ -190,12 +198,24 @@ func (m Model) View() string {
 	m.messages.width = leftW - 4
 	m.messages.height = msgH - 2
 
-	// Right panel: pairing QR or status.
+	// Right panel: status info, with QR overlay when active.
 	var statusPanel string
 	if m.qr.active() {
-		m.qr.width = rightW - 2
-		m.qr.height = msgH - 2
-		statusPanel = m.qr.View()
+		// Split right panel: QR on top, status on bottom.
+		qrH := msgH * 2 / 3
+		if qrH < 8 {
+			qrH = 8
+		}
+		statusH := msgH - qrH
+		if statusH < 3 {
+			statusH = 3
+		}
+
+		qrView := m.qr.CompactView(rightW-2, qrH-2)
+		statusContent := m.renderStatusPanel(rightW-6, statusH-2)
+		statusView := panelStyle.Width(rightW - 2).Height(statusH - 2).Render(statusContent)
+
+		statusPanel = lipgloss.JoinVertical(lipgloss.Left, qrView, statusView)
 	} else {
 		statusContent := m.renderStatusPanel(rightW-6, msgH-2)
 		statusPanel = panelStyle.Width(rightW - 2).Height(msgH - 2).Render(statusContent)

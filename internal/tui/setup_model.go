@@ -2,9 +2,9 @@ package tui
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -24,6 +24,10 @@ type kronkModelResolvedMsg struct {
 	err      error
 }
 
+type downloadProgressMsg struct {
+	line string
+}
+
 type downloadCompleteMsg struct {
 	err error
 }
@@ -34,6 +38,22 @@ type saveEnvMsg struct {
 
 // setupCompleteMsg signals the AppModel that setup finished successfully.
 type setupCompleteMsg struct{}
+
+// progressWriter sends each Write call as a line through a channel.
+type progressWriter struct {
+	ch chan<- string
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	text := strings.TrimRight(string(p), "\n\r")
+	if text != "" {
+		select {
+		case pw.ch <- text:
+		default:
+		}
+	}
+	return len(p), nil
+}
 
 // SetupModel is the Bubble Tea model for the interactive setup wizard.
 type SetupModel struct {
@@ -48,17 +68,26 @@ type SetupModel struct {
 	// Input components
 	textInput textinput.Model
 	choice    choiceModel
+	spinner   spinner.Model
 
 	// Kronk catalog state
-	catalogEntries  []string
-	selectedModels  []string
-	downloadLog     strings.Builder
+	catalogEntries []string
+	selectedModels []string
+
+	// Download progress
+	progressCh   <-chan string
+	doneCh       <-chan downloadCompleteMsg
+	downloadLines []string
 }
 
 // NewSetupModel creates a new setup wizard model.
 func NewSetupModel(envPath string) SetupModel {
 	ti := textinput.New()
 	ti.Focus()
+
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(colorPrimary)
 
 	return SetupModel{
 		step:    stepProvider,
@@ -67,6 +96,7 @@ func NewSetupModel(envPath string) SetupModel {
 		choice: newChoiceModel("LLM Provider",
 			[]string{"kronk", "anthropic", "openai", "google", "custom"}, false),
 		textInput: ti,
+		spinner:   sp,
 	}
 }
 
@@ -80,6 +110,11 @@ func (m SetupModel) Update(msg tea.Msg) (SetupModel, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case catalogFetchedMsg:
 		if msg.err != nil || len(msg.entries) == 0 {
@@ -97,12 +132,21 @@ func (m SetupModel) Update(msg tea.Msg) (SetupModel, tea.Cmd) {
 		if msg.err == nil && strings.TrimSpace(msg.modelURL) != "" {
 			m.values["MODEL"] = msg.modelURL
 		}
-		// proceed to download confirm or next
 		m.step = stepKronkDownloadConfirm
 		m.choice = newChoiceModel("Download selected model(s) now?", []string{"Yes", "No"}, false)
 		return m, nil
 
+	case downloadProgressMsg:
+		m.downloadLines = append(m.downloadLines, msg.line)
+		// Keep only the last 12 lines to avoid unbounded growth
+		if len(m.downloadLines) > 12 {
+			m.downloadLines = m.downloadLines[len(m.downloadLines)-12:]
+		}
+		return m, listenForDownloadProgress(m.progressCh, m.doneCh)
+
 	case downloadCompleteMsg:
+		m.progressCh = nil
+		m.doneCh = nil
 		if msg.err != nil {
 			m.statusText = fmt.Sprintf("Warning: download failed: %v", msg.err)
 		} else {
@@ -149,7 +193,7 @@ func (m SetupModel) handleKeyInput(msg tea.KeyMsg) (SetupModel, tea.Cmd) {
 			m.step = next
 			if next == stepKronkCatalog {
 				m.statusText = "Fetching Kronk catalog..."
-				return m, fetchCatalogCmd
+				return m, tea.Batch(m.spinner.Tick, fetchCatalogCmd)
 			}
 			m.initStepInput()
 		}
@@ -161,10 +205,9 @@ func (m SetupModel) handleKeyInput(msg tea.KeyMsg) (SetupModel, tea.Cmd) {
 		if m.choice.done {
 			m.selectedModels = m.choice.Values()
 			if len(m.selectedModels) > 0 {
-				// Use first selected as MODEL, try to resolve URL
 				m.values["MODEL"] = m.selectedModels[0]
 				m.statusText = "Resolving model URL..."
-				return m, resolveKronkModelCmd(m.selectedModels[0])
+				return m, tea.Batch(m.spinner.Tick, resolveKronkModelCmd(m.selectedModels[0]))
 			}
 			m.step = stepKronkDownloadConfirm
 			m.choice = newChoiceModel("Download selected model(s) now?", []string{"Yes", "No"}, false)
@@ -178,8 +221,9 @@ func (m SetupModel) handleKeyInput(msg tea.KeyMsg) (SetupModel, tea.Cmd) {
 			if m.choice.Value() == "Yes" {
 				m.values["_download_now"] = "true"
 				m.step = stepKronkDownload
-				m.statusText = "Downloading model(s)..."
-				return m, downloadModelsCmd(m.selectedModels)
+				m.statusText = ""
+				m.downloadLines = nil
+				return m, tea.Batch(m.spinner.Tick, m.startDownloadCmd())
 			}
 			m.values["_download_now"] = "false"
 			m.step = stepWhatsAppEnable
@@ -205,7 +249,7 @@ func (m SetupModel) handleKeyInput(msg tea.KeyMsg) (SetupModel, tea.Cmd) {
 			next := nextStep(m.step, m.values)
 			m.step = next
 			if next == stepSaving {
-				return m, m.saveCmd()
+				return m, tea.Batch(m.spinner.Tick, m.saveCmd())
 			}
 			m.initStepInput()
 		}
@@ -220,7 +264,7 @@ func (m SetupModel) handleKeyInput(msg tea.KeyMsg) (SetupModel, tea.Cmd) {
 				next := nextStep(m.step, m.values)
 				m.step = next
 				if next == stepSaving {
-					return m, m.saveCmd()
+					return m, tea.Batch(m.spinner.Tick, m.saveCmd())
 				}
 				m.initStepInput()
 				return m, nil
@@ -315,12 +359,20 @@ func (m SetupModel) isTextStep() bool {
 	return false
 }
 
+func (m SetupModel) isAsyncStep() bool {
+	switch m.step {
+	case stepKronkCatalog, stepKronkDownload, stepSaving:
+		return true
+	}
+	return false
+}
+
 func (m SetupModel) saveCmd() tea.Cmd {
 	values := map[string]string{
-		"PROVIDER":         m.values["PROVIDER"],
-		"API_KEY":          m.values["API_KEY"],
-		"MODEL":            m.values["MODEL"],
-		"ENABLE_WHATSAPP":  m.values["ENABLE_WHATSAPP"],
+		"PROVIDER":        m.values["PROVIDER"],
+		"API_KEY":         m.values["API_KEY"],
+		"MODEL":           m.values["MODEL"],
+		"ENABLE_WHATSAPP": m.values["ENABLE_WHATSAPP"],
 		"WHATSAPP_AUTH_DIR": func() string {
 			if v, ok := m.values["WHATSAPP_AUTH_DIR"]; ok {
 				return v
@@ -352,6 +404,32 @@ func (m SetupModel) saveCmd() tea.Cmd {
 	}
 }
 
+// startDownloadCmd launches the download in a goroutine and returns a cmd
+// that starts listening for progress. Progress flows via channels.
+func (m *SetupModel) startDownloadCmd() tea.Cmd {
+	progressCh := make(chan string, 64)
+	doneCh := make(chan downloadCompleteMsg, 1)
+	models := m.selectedModels
+
+	go func() {
+		defer close(progressCh)
+		pw := &progressWriter{ch: progressCh}
+		for _, model := range models {
+			progressCh <- fmt.Sprintf("Starting download: %s", model)
+			if err := setup.DownloadKronkModelWithSDK(pw, model); err != nil {
+				doneCh <- downloadCompleteMsg{err: fmt.Errorf("download %s: %w", model, err)}
+				return
+			}
+		}
+		doneCh <- downloadCompleteMsg{}
+	}()
+
+	m.progressCh = progressCh
+	m.doneCh = doneCh
+
+	return listenForDownloadProgress(progressCh, doneCh)
+}
+
 func (m SetupModel) View() string {
 	var b strings.Builder
 
@@ -374,8 +452,12 @@ func (m SetupModel) View() string {
 	progress := m.renderProgress()
 	b.WriteString(progress + "\n\n")
 
-	// Step title
-	b.WriteString(setupStepTitleStyle.Render(stepTitle(m.step)) + "\n\n")
+	// Step title with spinner for async steps
+	if m.isAsyncStep() {
+		b.WriteString(m.spinner.View() + " " + setupStepTitleStyle.Render(stepTitle(m.step)) + "\n\n")
+	} else {
+		b.WriteString(setupStepTitleStyle.Render(stepTitle(m.step)) + "\n\n")
+	}
 
 	// Error
 	if m.err != nil {
@@ -393,14 +475,41 @@ func (m SetupModel) View() string {
 		stepWhatsAppEnable, stepWebDAVEnable:
 		b.WriteString(m.choice.View())
 
-	case stepKronkCatalog, stepKronkDownload, stepSaving:
-		b.WriteString(setupSpinnerStyle.Render("Please wait...") + "\n")
-		if m.downloadLog.Len() > 0 {
-			b.WriteString("\n" + m.downloadLog.String())
+	case stepKronkCatalog, stepSaving:
+		// spinner is shown in the step title above
+
+	case stepKronkDownload:
+		// Show download log with scrolling
+		if len(m.downloadLines) > 0 {
+			maxLines := 10
+			if m.height > 0 {
+				maxLines = m.height/2 - 8
+				if maxLines < 4 {
+					maxLines = 4
+				}
+			}
+			lines := m.downloadLines
+			if len(lines) > maxLines {
+				lines = lines[len(lines)-maxLines:]
+			}
+			logW := m.width - 10
+			if logW < 30 {
+				logW = 50
+			} else if logW > 70 {
+				logW = 70
+			}
+			for _, line := range lines {
+				// Truncate long lines to fit panel
+				display := line
+				if len(display) > logW {
+					display = display[:logW-3] + "..."
+				}
+				b.WriteString(setupLogLineStyle.Render(display) + "\n")
+			}
 		}
 
 	case stepDone:
-		b.WriteString(setupSuccessStyle.Render("Configuration saved to " + m.envPath) + "\n\n")
+		b.WriteString(setupSuccessStyle.Render("Configuration saved to "+m.envPath) + "\n\n")
 		if m.values["ENABLE_WHATSAPP"] == "true" {
 			b.WriteString("Next: start PocketBrain and scan the QR code.\n")
 		}
@@ -458,13 +567,19 @@ func resolveKronkModelCmd(modelID string) tea.Cmd {
 	}
 }
 
-func downloadModelsCmd(models []string) tea.Cmd {
+// listenForDownloadProgress reads one message from the progress or done channel.
+// When it receives progress, the model re-subscribes; on done, the loop ends.
+func listenForDownloadProgress(progressCh <-chan string, doneCh <-chan downloadCompleteMsg) tea.Cmd {
 	return func() tea.Msg {
-		for _, m := range models {
-			if err := setup.DownloadKronkModelWithSDK(io.Discard, m); err != nil {
-				return downloadCompleteMsg{err: fmt.Errorf("download %s: %w", m, err)}
+		select {
+		case line, ok := <-progressCh:
+			if !ok {
+				// Progress channel closed, wait for completion signal
+				return <-doneCh
 			}
+			return downloadProgressMsg{line: line}
+		case done := <-doneCh:
+			return done
 		}
-		return downloadCompleteMsg{}
 	}
 }
