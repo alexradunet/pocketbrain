@@ -11,9 +11,9 @@ import (
 var headless bool
 
 var serveCmd = &cobra.Command{
-	Use:   "serve",
+	Use:     "serve",
 	Aliases: []string{"start"},
-	Short: "Start PocketBrain (TUI mode by default, --headless for daemon)",
+	Short:   "Start PocketBrain (TUI mode by default, --headless for daemon)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := runSetupPreflight(headless); err != nil {
 			return err

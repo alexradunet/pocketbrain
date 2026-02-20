@@ -14,4 +14,3 @@ func TestServeCommandHasStartAlias(t *testing.T) {
 		t.Fatal("expected serve command to include start alias")
 	}
 }
-
