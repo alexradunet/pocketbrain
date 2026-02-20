@@ -61,6 +61,7 @@ func (w *Wizard) Run(envPath string) error {
 				return err
 			}
 		} else {
+			entries = FilterChatModels(entries)
 			fmt.Fprintln(w.out, "\nKronk catalog models:")
 			selected, err := w.askMultiChoice(r, "Choose model(s) to download", entries, 0)
 			if err != nil {
@@ -270,6 +271,24 @@ func (w *Wizard) askSecret(r *bufio.Reader, label string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(line), nil
+}
+
+// FilterChatModels removes model IDs that are not suitable for text-generation
+// chat (vision-language models, embedding models, rerankers). These model types
+// require special handling not yet supported by PocketBrain.
+func FilterChatModels(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		lower := strings.ToLower(id)
+		if strings.Contains(lower, "reranker") ||
+			strings.Contains(lower, "embedding") ||
+			strings.Contains(lower, "-vl-") ||
+			strings.HasPrefix(lower, "vl-") {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
 }
 
 func FetchKronkCatalogModels() ([]string, error) {

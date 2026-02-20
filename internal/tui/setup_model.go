@@ -123,7 +123,7 @@ func (m SetupModel) Update(msg tea.Msg) (SetupModel, tea.Cmd) {
 			m.initStepInput()
 			return m, nil
 		}
-		m.catalogEntries = msg.entries
+		m.catalogEntries = setup.FilterChatModels(msg.entries)
 		m.step = stepKronkModelSelect
 		m.choice = newChoiceModel("Select Kronk model(s) to download", msg.entries, true)
 		return m, nil

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -61,6 +62,9 @@ func buildProvider(ctx context.Context, cfg *config.Config, tools []fantasy.Agen
 		Logger:       logger,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "unable to create inference model") {
+			return nil, "", fmt.Errorf("%w\n\nhint: vision-language (VL) models and embedding models are not supported for text chat; re-run setup and choose a different model", err)
+		}
 		return nil, "", err
 	}
 	return fp, providerName, nil
