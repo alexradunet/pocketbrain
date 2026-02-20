@@ -1,0 +1,10 @@
+{
+  "session_id": "911d094f-3f73-4532-b931-85863e8d7870",
+  "ended_at": "2026-02-20T09:51:50.817Z",
+  "reason": "prompt_input_exit",
+  "agents_spawned": 1,
+  "agents_completed": 1,
+  "modes_used": [
+    "ultrapilot"
+  ]
+}

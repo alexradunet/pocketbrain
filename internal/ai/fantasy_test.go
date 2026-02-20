@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -355,6 +356,67 @@ func TestFantasyProvider_SendMessageNoReply_StoresMessage(t *testing.T) {
 	// user message + assistant ack = 2
 	if histLen != 2 {
 		t.Errorf("history length = %d; want 2", histLen)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SessionHistory – capped at max
+// ---------------------------------------------------------------------------
+
+func TestFantasyProvider_SessionHistory_CappedAtMax(t *testing.T) {
+	p := NewFantasyProvider(FantasyConfig{
+		BaseURL: "http://unused",
+		APIKey:  "test-key",
+		Model:   "test-model",
+	})
+
+	sid, _ := p.CreateSession(context.Background(), "test")
+
+	for i := 0; i < maxSessionHistory+10; i++ {
+		p.appendMessage(sid, chatMessage{
+			Role:    "user",
+			Content: fmt.Sprintf("msg-%d", i),
+		})
+	}
+
+	p.mu.Lock()
+	histLen := len(p.sessions[sid])
+	p.mu.Unlock()
+
+	if histLen > maxSessionHistory {
+		t.Errorf("session history length = %d; want <= %d", histLen, maxSessionHistory)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SendMessage – limits response body size
+// ---------------------------------------------------------------------------
+
+func TestFantasyProvider_SendMessage_LimitsResponseBody(t *testing.T) {
+	srv := newTestServerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		huge := make([]byte, 12*1024*1024)
+		for i := range huge {
+			huge[i] = 'x'
+		}
+		w.Write(huge)
+	})
+	defer srv.Close()
+
+	p := NewFantasyProvider(FantasyConfig{
+		BaseURL: srv.URL,
+		APIKey:  "test-key",
+		Model:   "test-model",
+	})
+
+	sid, _ := p.CreateSession(context.Background(), "test")
+	_, err := p.SendMessage(context.Background(), sid, "", "hi")
+	if err == nil {
+		t.Fatal("expected error for oversized response body, got nil")
+	}
+	if !strings.Contains(err.Error(), "response too large") {
+		t.Errorf("error should mention 'response too large', got: %v", err)
 	}
 }
 

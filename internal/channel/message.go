@@ -135,17 +135,23 @@ func NewRateLimiter(minIntervalMs int) *RateLimiter {
 // Throttle blocks until the minimum interval has passed since the last send for this user.
 func (r *RateLimiter) Throttle(userID string) {
 	r.mu.Lock()
-	last, ok := r.lastSend[userID]
-	r.mu.Unlock()
+	now := time.Now()
+	var sleepDur time.Duration
 
-	if ok {
-		elapsed := time.Since(last)
-		if elapsed < r.minInterval {
-			time.Sleep(r.minInterval - elapsed)
+	if last, ok := r.lastSend[userID]; ok {
+		nextAllowed := last.Add(r.minInterval)
+		if now.Before(nextAllowed) {
+			sleepDur = nextAllowed.Sub(now)
+			r.lastSend[userID] = nextAllowed
+		} else {
+			r.lastSend[userID] = now
 		}
+	} else {
+		r.lastSend[userID] = now
 	}
-
-	r.mu.Lock()
-	r.lastSend[userID] = time.Now()
 	r.mu.Unlock()
+
+	if sleepDur > 0 {
+		time.Sleep(sleepDur)
+	}
 }

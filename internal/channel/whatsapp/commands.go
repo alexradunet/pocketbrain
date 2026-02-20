@@ -1,12 +1,19 @@
 package whatsapp
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/pocketbrain/pocketbrain/internal/core"
 )
+
+// constantTimeTokenCompare compares two tokens in constant time to prevent
+// timing side-channel attacks.
+func constantTimeTokenCompare(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
 
 // CommandRouter handles slash-commands from WhatsApp users.
 type CommandRouter struct {
@@ -78,7 +85,7 @@ func (r *CommandRouter) handlePair(userID, token string) string {
 		return "Pairing is not configured on this server."
 	}
 
-	if token != r.pairToken {
+	if !constantTimeTokenCompare(token, r.pairToken) {
 		r.guard.RecordFailure(userID)
 		r.logger.Warn("invalid pair token", "userID", userID)
 		return "Invalid pairing token."

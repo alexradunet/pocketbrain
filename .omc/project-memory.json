@@ -139,8 +139,8 @@
   "hotPaths": [
     {
       "path": "",
-      "accessCount": 4,
-      "lastAccessed": 1771579056265,
+      "accessCount": 10,
+      "lastAccessed": 1771580040350,
       "type": "directory"
     },
     {
@@ -273,6 +273,12 @@
       "path": "docs/architecture/repository-structure.md",
       "accessCount": 2,
       "lastAccessed": 1771579116996,
+      "type": "file"
+    },
+    {
+      "path": "Makefile",
+      "accessCount": 2,
+      "lastAccessed": 1771579874594,
       "type": "file"
     },
     {
@@ -423,12 +429,6 @@
       "path": "go/internal/channel/manager.go",
       "accessCount": 1,
       "lastAccessed": 1771576392686,
-      "type": "file"
-    },
-    {
-      "path": "Makefile",
-      "accessCount": 1,
-      "lastAccessed": 1771578559434,
       "type": "file"
     },
     {

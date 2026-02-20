@@ -176,6 +176,9 @@ func (db *DB) migrateMemoryNormalized() error {
 }
 
 func (db *DB) hasColumn(table, column string) (bool, error) {
+	if !isValidIdentifier(table) {
+		return false, fmt.Errorf("invalid table name: %q", table)
+	}
 	stmt, _, err := db.conn.Prepare(fmt.Sprintf("PRAGMA table_info(%s)", table))
 	if err != nil {
 		return false, err
@@ -189,6 +192,20 @@ func (db *DB) hasColumn(table, column string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// isValidIdentifier returns true if s is a safe SQL identifier
+// (alphanumeric + underscore, non-empty).
+func isValidIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // NormalizeMemoryFact lowercases and collapses whitespace.

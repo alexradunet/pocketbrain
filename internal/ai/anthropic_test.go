@@ -460,6 +460,74 @@ func TestAnthropicProvider_RecentContext_EmptySession(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// TestAnthropicProvider_SessionHistory_CappedAtMax
+// ---------------------------------------------------------------------------
+
+func TestAnthropicProvider_SessionHistory_CappedAtMax(t *testing.T) {
+	srv := newAnthropicTestServer(anthropicTextResponse("ok"))
+	defer srv.Close()
+
+	p := NewAnthropicProvider(AnthropicConfig{
+		BaseURL: srv.URL,
+		APIKey:  "test-key",
+		Model:   "test-model",
+	})
+
+	sid, _ := p.CreateSession(context.Background(), "test")
+
+	// Send more messages than maxSessionHistory (each SendMessage adds user+assistant = 2).
+	// We need > maxSessionHistory/2 round trips.
+	for i := 0; i < maxSessionHistory+10; i++ {
+		p.appendMessage(sid, anthropicMessage{
+			Role:    "user",
+			Content: []anthropicContentBlock{{Type: "text", Text: fmt.Sprintf("msg-%d", i)}},
+		})
+	}
+
+	p.mu.Lock()
+	histLen := len(p.sessions[sid])
+	p.mu.Unlock()
+
+	if histLen > maxSessionHistory {
+		t.Errorf("session history length = %d; want <= %d", histLen, maxSessionHistory)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestAnthropicProvider_SendMessage_LimitsResponseBody
+// ---------------------------------------------------------------------------
+
+func TestAnthropicProvider_SendMessage_LimitsResponseBody(t *testing.T) {
+	// Serve a response body larger than maxResponseBodySize.
+	// The provider should return a "response too large" error.
+	srv := newAnthropicTestServerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		huge := make([]byte, 12*1024*1024)
+		for i := range huge {
+			huge[i] = 'x'
+		}
+		w.Write(huge)
+	})
+	defer srv.Close()
+
+	p := NewAnthropicProvider(AnthropicConfig{
+		BaseURL: srv.URL,
+		APIKey:  "test-key",
+		Model:   "test-model",
+	})
+
+	sid, _ := p.CreateSession(context.Background(), "test")
+	_, err := p.SendMessage(context.Background(), sid, "", "hi")
+	if err == nil {
+		t.Fatal("expected error for oversized response body, got nil")
+	}
+	if !strings.Contains(err.Error(), "response too large") {
+		t.Errorf("error should mention 'response too large', got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // TestAnthropicProvider_SendMessage_APIError
 // ---------------------------------------------------------------------------
 

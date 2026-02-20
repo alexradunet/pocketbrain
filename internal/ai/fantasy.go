@@ -233,9 +233,12 @@ func (p *FantasyProvider) chatCompletion(ctx context.Context, msgs []chatMessage
 	}
 	defer httpResp.Body.Close()
 
-	respBody, err := io.ReadAll(httpResp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, maxResponseBodySize+1))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if len(respBody) > maxResponseBodySize {
+		return nil, fmt.Errorf("response too large (exceeds %d bytes)", maxResponseBodySize)
 	}
 
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
@@ -258,12 +261,18 @@ func (p *FantasyProvider) appendMessage(sessionID string, msg chatMessage) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.sessions[sessionID] = append(p.sessions[sessionID], msg)
+	if len(p.sessions[sessionID]) > maxSessionHistory {
+		p.sessions[sessionID] = p.sessions[sessionID][len(p.sessions[sessionID])-maxSessionHistory:]
+	}
 }
 
 func (p *FantasyProvider) appendMessages(sessionID string, msgs []chatMessage) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.sessions[sessionID] = append(p.sessions[sessionID], msgs...)
+	if len(p.sessions[sessionID]) > maxSessionHistory {
+		p.sessions[sessionID] = p.sessions[sessionID][len(p.sessions[sessionID])-maxSessionHistory:]
+	}
 }
 
 func (p *FantasyProvider) getHistory(sessionID string) []chatMessage {

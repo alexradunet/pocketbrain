@@ -156,6 +156,45 @@ func TestThrottle_DifferentUsersIndependent(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// RateLimiter.Throttle – concurrent safety (race detector)
+// ---------------------------------------------------------------------------
+
+func TestThrottle_ConcurrentSameUser_RespectedInterval(t *testing.T) {
+	// If the TOCTOU bug exists, multiple goroutines will read the same
+	// stale timestamp and all pass through without sleeping, completing
+	// much faster than expected. With a correct implementation, N
+	// concurrent calls for the same user should take at least
+	// (N-1)*interval total time.
+	const interval = 50 // ms
+	const goroutines = 5
+
+	rl := NewRateLimiter(interval)
+
+	// Prime the rate limiter so all goroutines hit the throttle path.
+	rl.Throttle("user1")
+
+	start := time.Now()
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rl.Throttle("user1")
+		}()
+	}
+	wg.Wait()
+	elapsed := time.Since(start)
+
+	// With correct locking, each goroutine must wait for the previous
+	// one's timestamp. Total should be >= (goroutines-1) * interval.
+	// We use a generous lower bound of goroutines * interval * 0.5.
+	minExpected := time.Duration(goroutines) * time.Duration(interval) * time.Millisecond / 2
+	if elapsed < minExpected {
+		t.Errorf("concurrent Throttle completed in %v; expected >= %v (rate limit bypassed)", elapsed, minExpected)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // MessageSender.Send
 // ---------------------------------------------------------------------------
 

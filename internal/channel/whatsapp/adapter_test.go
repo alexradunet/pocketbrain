@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -562,6 +563,34 @@ func TestOutboxProcessor_RetriesOnFailure(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Constant-time token comparison tests
+// ---------------------------------------------------------------------------
+
+func TestConstantTimeTokenCompare_Equal(t *testing.T) {
+	if !constantTimeTokenCompare("secret123", "secret123") {
+		t.Error("identical tokens should match")
+	}
+}
+
+func TestConstantTimeTokenCompare_NotEqual(t *testing.T) {
+	if constantTimeTokenCompare("secret123", "wrong") {
+		t.Error("different tokens should not match")
+	}
+}
+
+func TestConstantTimeTokenCompare_EmptyBoth(t *testing.T) {
+	if !constantTimeTokenCompare("", "") {
+		t.Error("two empty strings should match")
+	}
+}
+
+func TestConstantTimeTokenCompare_OneEmpty(t *testing.T) {
+	if constantTimeTokenCompare("secret", "") {
+		t.Error("empty vs non-empty should not match")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // BruteForceGuard tests
 // ---------------------------------------------------------------------------
 
@@ -579,6 +608,38 @@ func TestBruteForceGuard_BlocksAfterMaxFailures(t *testing.T) {
 	// 4th attempt should be blocked.
 	if guard.Check("user1") {
 		t.Error("user should be blocked after max failures")
+	}
+}
+
+func TestBruteForceGuard_CleansUpExpiredEntries(t *testing.T) {
+	// Use tiny windows so entries expire immediately.
+	guard := NewBruteForceGuard(3, 1, 1) // 3 failures, 1ms window, 1ms block
+
+	// Generate failures from many unique users.
+	for i := 0; i < 100; i++ {
+		userID := fmt.Sprintf("user-%d", i)
+		guard.RecordFailure(userID)
+	}
+
+	// Wait for all windows and blocks to expire.
+	time.Sleep(10 * time.Millisecond)
+
+	// Trigger cleanup by calling Check on any user.
+	guard.Check("trigger-cleanup")
+
+	// After cleanup, expired entries should be removed.
+	guard.mu.Lock()
+	attemptsLen := len(guard.attempts)
+	blocksLen := len(guard.blocks)
+	guard.mu.Unlock()
+
+	// Should have cleaned up the 100 expired user entries.
+	// Allow some slack — the "trigger-cleanup" user may be present.
+	if attemptsLen > 5 {
+		t.Errorf("attempts map has %d entries; expected most expired entries to be cleaned up", attemptsLen)
+	}
+	if blocksLen > 5 {
+		t.Errorf("blocks map has %d entries; expected most expired entries to be cleaned up", blocksLen)
 	}
 }
 

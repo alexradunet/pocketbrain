@@ -23,6 +23,8 @@ const anthropicAPIBase = "https://api.anthropic.com"
 const anthropicVersion = "2023-06-01"
 const anthropicMaxTokens = 4096
 const anthropicMaxToolIterations = 10
+const maxResponseBodySize = 10 * 1024 * 1024 // 10 MB
+const maxSessionHistory = 200
 
 // AnthropicConfig holds settings for the Anthropic provider.
 type AnthropicConfig struct {
@@ -249,9 +251,12 @@ func (p *AnthropicProvider) sendMessages(
 	}
 	defer httpResp.Body.Close()
 
-	respBody, err := io.ReadAll(httpResp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, maxResponseBodySize+1))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if len(respBody) > maxResponseBodySize {
+		return nil, fmt.Errorf("response too large (exceeds %d bytes)", maxResponseBodySize)
 	}
 
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
@@ -274,6 +279,9 @@ func (p *AnthropicProvider) appendMessage(sessionID string, msg anthropicMessage
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.sessions[sessionID] = append(p.sessions[sessionID], msg)
+	if len(p.sessions[sessionID]) > maxSessionHistory {
+		p.sessions[sessionID] = p.sessions[sessionID][len(p.sessions[sessionID])-maxSessionHistory:]
+	}
 }
 
 func (p *AnthropicProvider) getHistory(sessionID string) []anthropicMessage {

@@ -368,6 +368,49 @@ func TestChannelSaveAndGet(t *testing.T) {
 	}
 }
 
+// --- hasColumn validation ---
+
+func TestHasColumn_RejectsInvalidTableName(t *testing.T) {
+	db := testDB(t)
+
+	// SQL injection attempt: should return error, not execute.
+	invalidNames := []string{
+		"memory; DROP TABLE memory--",
+		"memory); DROP TABLE memory--",
+		"table name with spaces",
+		"robert');DROP TABLE students;--",
+		"",
+	}
+
+	for _, name := range invalidNames {
+		_, err := db.hasColumn(name, "fact")
+		if err == nil {
+			t.Errorf("hasColumn(%q, \"fact\") should return error for invalid table name", name)
+		}
+	}
+}
+
+func TestHasColumn_AcceptsValidTableName(t *testing.T) {
+	db := testDB(t)
+
+	// Valid table name should work normally.
+	has, err := db.hasColumn("memory", "fact")
+	if err != nil {
+		t.Fatalf("hasColumn(\"memory\", \"fact\") error: %v", err)
+	}
+	if !has {
+		t.Error("memory table should have 'fact' column")
+	}
+
+	has, err = db.hasColumn("memory", "nonexistent_col")
+	if err != nil {
+		t.Fatalf("hasColumn(\"memory\", \"nonexistent_col\") error: %v", err)
+	}
+	if has {
+		t.Error("memory table should not have 'nonexistent_col' column")
+	}
+}
+
 // --- Normalize ---
 
 func TestNormalizeMemoryFact(t *testing.T) {
