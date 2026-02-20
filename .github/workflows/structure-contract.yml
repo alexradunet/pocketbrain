@@ -9,9 +9,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Validate repository structure contract
+
+      - name: Validate Go project structure
         run: |
-          chmod +x development/ci/validate-structure.sh
-          development/ci/validate-structure.sh "origin/${{ github.base_ref }}"
+          set -e
+          # Required files
+          for f in main.go go.mod go.sum Makefile README.md; do
+            [ -f "$f" ] || { echo "FAIL: missing $f"; exit 1; }
+          done
+          # Required directories
+          for d in cmd internal docs; do
+            [ -d "$d" ] || { echo "FAIL: missing $d/"; exit 1; }
+          done
+          # No leftover TS artifacts
+          for f in package.json tsconfig.json bun.lock; do
+            [ ! -f "$f" ] || { echo "FAIL: stale TS artifact $f"; exit 1; }
+          done
+          [ ! -d "node_modules" ] || { echo "FAIL: stale node_modules/"; exit 1; }
+          [ ! -d "src" ] || { echo "FAIL: stale src/"; exit 1; }
+          echo "Structure contract OK"

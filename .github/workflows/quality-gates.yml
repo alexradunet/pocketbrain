@@ -9,30 +9,18 @@ on:
 jobs:
   quality-gates:
     runs-on: ubuntu-latest
-    env:
-      OPENCODE_MODEL: ${{ secrets.OPENCODE_MODEL }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-go@v5
         with:
-          bun-version: 1.3.9
+          go-version-file: go.mod
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Build
+        run: go build ./...
 
-      - name: Run typecheck
-        run: bun run typecheck
+      - name: Test
+        run: go test ./... -count=1 -race
 
-      - name: Run process test matrix
-        run: bun run test:processes
-
-      - name: Run full test sweep
-        run: bun run test
-
-      - name: Run build smoke
-        run: bun run build
-
-      - name: Run OpenCode E2E test (optional)
-        if: ${{ env.OPENCODE_MODEL != '' }}
-        run: bun run test:opencode:e2e
+      - name: Vet
+        run: go vet ./...
