@@ -43,3 +43,20 @@ func TestRunSetupPreflightNoopWhenEnvComplete(t *testing.T) {
 		t.Fatalf("runSetupPreflight: %v", err)
 	}
 }
+
+func TestReloadEnvFromFileLoadsValues(t *testing.T) {
+	tmp := t.TempDir()
+	envPath := filepath.Join(tmp, ".env")
+	if err := os.WriteFile(envPath, []byte("MODEL=from-dotenv\n"), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	os.Unsetenv("MODEL")
+	t.Cleanup(func() { os.Unsetenv("MODEL") })
+
+	if err := reloadEnvFromFile(envPath); err != nil {
+		t.Fatalf("reloadEnvFromFile: %v", err)
+	}
+	if got := os.Getenv("MODEL"); got != "from-dotenv" {
+		t.Fatalf("MODEL = %q; want from-dotenv", got)
+	}
+}
