@@ -20,10 +20,10 @@ sudo systemctl status pocketbrain
 - `.env` presence and required variables set
 - Data directories exist and are writable (`.data/`, `.data/workspace/`, `.data/whatsapp-auth/`)
 - SQLite state DB presence (`.data/state.db`)
-- Service health (`pocketbrain`, `tailscaled` when applicable)
+- Service health (`pocketbrain`)
 - UFW baseline (`active`, `deny incoming`, `OpenSSH` allow)
 - SSH hardening (`PasswordAuthentication no`, `PermitRootLogin no`)
-- Tailscale login status (if using Taildrive)
+- WebDAV server status (if `WEBDAV_ENABLED=true`)
 
 ## Deep validation
 

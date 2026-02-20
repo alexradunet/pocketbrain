@@ -1,6 +1,6 @@
 // Package workspace provides simple file operations within a root directory.
 //
-// File synchronisation is handled externally by Taildrive.
+// File synchronisation is handled externally by WebDAV.
 // This package only handles local file operations with path security.
 package workspace
 
@@ -71,7 +71,7 @@ func (w *Workspace) Initialize() error {
 	return nil
 }
 
-// Stop is a no-op. Taildrive handles sync externally.
+// Stop is a no-op. WebDAV handles sync externally.
 func (w *Workspace) Stop() error { return nil }
 
 // RootPath returns the absolute root path of the workspace.

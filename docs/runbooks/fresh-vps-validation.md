@@ -7,7 +7,7 @@ Use this checklist after reinstalling PocketBrain on a fresh VPS to verify setup
 ```bash
 git clone https://github.com/alexradunet/pocketbrain.git
 cd pocketbrain
-go build -o pocketbrain .
+go build .
 ```
 
 ## 2) Configure environment
@@ -20,8 +20,7 @@ Set at minimum:
 
 - `PROVIDER` and API key for your chosen provider
 - `WORKSPACE_PATH=.data/workspace`
-- `TAILSCALE_ENABLED=true` and `TS_AUTHKEY=...` (for embedded tailnet connectivity)
-- `TAILDRIVE_ENABLED=true` and `TAILDRIVE_*` values (for Taildrive workspace sharing)
+- `WEBDAV_ENABLED=true` and `WEBDAV_ADDR` (for WebDAV workspace file sharing)
 - `ENABLE_WHATSAPP=true` (if WhatsApp channel is required)
 
 Alternative (manual): create `.env` from `.env.example` and fill values directly.

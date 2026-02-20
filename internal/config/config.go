@@ -34,25 +34,14 @@ type Config struct {
 	OutboxIntervalMs int
 	OutboxMaxRetries int
 
-	// WhatsApp pairing security
-	WhitelistPairToken          string
-	WhatsAppPairMaxFailures     int
-	WhatsAppPairFailureWindowMs int
-	WhatsAppPairBlockDurationMs int
-	WhatsAppWhitelistNumbers    []string
+	// WhatsApp whitelist
+	WhatsAppWhitelistNumbers []string
 
-	// Taildrive
-	TaildriveEnabled   bool
-	TaildriveShareName string
-	TaildriveAutoShare bool
+	// WebDAV (workspace file sharing)
+	WebDAVEnabled bool
+	WebDAVAddr    string
 
-	// Embedded Tailscale (tsnet)
-	TailscaleEnabled  bool
-	TailscaleAuthKey  string
-	TailscaleHost     string
-	TailscaleStateDir string
-
-	// Workspace (files exposed via Taildrive)
+	// Workspace (files exposed via WebDAV)
 	WorkspacePath    string
 	WorkspaceEnabled bool
 
@@ -112,19 +101,10 @@ func Load() (*Config, error) {
 		OutboxIntervalMs: 60_000,
 		OutboxMaxRetries: 3,
 
-		WhitelistPairToken:          strings.TrimSpace(os.Getenv("WHITELIST_PAIR_TOKEN")),
-		WhatsAppPairMaxFailures:     envInt("WHATSAPP_PAIR_MAX_FAILURES", 5),
-		WhatsAppPairFailureWindowMs: envInt("WHATSAPP_PAIR_FAILURE_WINDOW_MS", 5*60*1000),
-		WhatsAppPairBlockDurationMs: envInt("WHATSAPP_PAIR_BLOCK_DURATION_MS", 15*60*1000),
-		WhatsAppWhitelistNumbers:    parsePhoneWhitelist(os.Getenv("WHATSAPP_WHITELIST_NUMBERS"), os.Getenv("WHATSAPP_WHITELIST_NUMBER")),
+		WhatsAppWhitelistNumbers: parsePhoneWhitelist(os.Getenv("WHATSAPP_WHITELIST_NUMBERS"), os.Getenv("WHATSAPP_WHITELIST_NUMBER")),
 
-		TaildriveEnabled:   envBool("TAILDRIVE_ENABLED", false),
-		TaildriveShareName: envStr("TAILDRIVE_SHARE_NAME", "workspace"),
-		TaildriveAutoShare: envBool("TAILDRIVE_AUTO_SHARE", true),
-		TailscaleEnabled:   envBool("TAILSCALE_ENABLED", false),
-		TailscaleAuthKey:   strings.TrimSpace(os.Getenv("TS_AUTHKEY")),
-		TailscaleHost:      envStr("TS_HOSTNAME", "pocketbrain"),
-		TailscaleStateDir:  resolvePath(cwd, envStr("TS_STATE_DIR", filepath.Join(dataDir, "tsnet"))),
+		WebDAVEnabled: envBool("WEBDAV_ENABLED", false),
+		WebDAVAddr:    envStr("WEBDAV_ADDR", "0.0.0.0:6060"),
 
 		WorkspacePath:    workspacePath,
 		WorkspaceEnabled: workspaceEnabled,
@@ -144,9 +124,6 @@ func (c *Config) validate() error {
 	}
 	if c.WorkspaceEnabled && c.WorkspacePath == "" {
 		return fmt.Errorf("WORKSPACE_PATH cannot be empty when WORKSPACE_ENABLED=true")
-	}
-	if c.TailscaleEnabled && c.TailscaleAuthKey == "" {
-		return fmt.Errorf("TS_AUTHKEY cannot be empty when TAILSCALE_ENABLED=true")
 	}
 	if c.HeartbeatIntervalMinutes < 1 {
 		return fmt.Errorf("HEARTBEAT_INTERVAL_MINUTES must be >= 1")

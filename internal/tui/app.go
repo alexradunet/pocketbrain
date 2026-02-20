@@ -119,9 +119,9 @@ func (m *Model) handleEvent(e Event) {
 		if se, ok := e.Data.(StatusEvent); ok {
 			m.header.whatsAppConn = se.Connected
 		}
-	case EventTailscaleStatus:
+	case EventWebDAVStatus:
 		if se, ok := e.Data.(StatusEvent); ok {
-			m.header.tailscaleConn = se.Connected
+			m.header.webdavConn = se.Connected
 		}
 	case EventHeartbeatStatus:
 		if se, ok := e.Data.(StatusEvent); ok {

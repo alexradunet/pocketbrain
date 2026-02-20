@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io"
 	"net/http"
@@ -102,27 +101,19 @@ func (w *Wizard) Run(envPath string) error {
 		return err
 	}
 	waAuthDir := ".data/whatsapp-auth"
-	pairToken := ""
+	whitelistNumber := ""
 	if enableWhatsApp {
 		waAuthDir, err = w.askText(r, "WhatsApp auth dir", waAuthDir)
 		if err != nil {
 			return err
 		}
-		generateToken, err := w.askYesNo(r, "Generate WhatsApp pair token automatically?", true)
+
+		whitelistNumber, err = w.askText(r, "WhatsApp allowed number (e.g. +5511987654321)", "")
 		if err != nil {
 			return err
 		}
-		if generateToken {
-			pairToken, err = generateSecureToken(24)
-			if err != nil {
-				return fmt.Errorf("generate pair token: %w", err)
-			}
-			fmt.Fprintf(w.out, "Generated WhatsApp pair token: %s\n", pairToken)
-		} else {
-			pairToken, err = w.askSecret(r, "WhatsApp pair token")
-			if err != nil {
-				return err
-			}
+		if whitelistNumber != "" && !strings.HasPrefix(whitelistNumber, "+") {
+			return fmt.Errorf("phone number must start with + (international format)")
 		}
 	}
 
@@ -131,47 +122,13 @@ func (w *Wizard) Run(envPath string) error {
 		return err
 	}
 
-	enableTailscale, err := w.askYesNo(r, "Enable embedded Tailscale (tsnet)?", true)
+	enableWebDAV, err := w.askYesNo(r, "Enable WebDAV workspace server?", true)
 	if err != nil {
 		return err
 	}
-	tsAuthKey := ""
-	tsHost := "pocketbrain"
-	tsStateDir := ".data/tsnet"
-	if enableTailscale {
-		tsAuthKey, err = w.askSecret(r, "Tailscale auth key (TS_AUTHKEY)")
-		if err != nil {
-			return err
-		}
-		tsHost, err = w.askText(r, "Tailscale hostname", tsHost)
-		if err != nil {
-			return err
-		}
-		tsStateDir, err = w.askText(r, "Tailscale state dir", tsStateDir)
-		if err != nil {
-			return err
-		}
-	}
-
-	enableTaildrive, err := w.askYesNo(r, "Enable Taildrive workspace share?", true)
-	if err != nil {
-		return err
-	}
-	shareName := "workspace"
-	autoShare := true
-	if enableTaildrive {
-		shareName, err = w.askText(r, "Taildrive share name", shareName)
-		if err != nil {
-			return err
-		}
-		autoShare, err = w.askYesNo(r, "Auto-create/share on startup?", true)
-		if err != nil {
-			return err
-		}
-	}
-	if enableTailscale {
-		w.printTailscaleACLGuidance()
-		_, err = w.askYesNo(r, "Have you applied the Taildrive ACL policy above?", false)
+	webdavAddr := "0.0.0.0:6060"
+	if enableWebDAV {
+		webdavAddr, err = w.askText(r, "WebDAV listen address", webdavAddr)
 		if err != nil {
 			return err
 		}
@@ -181,20 +138,18 @@ func (w *Wizard) Run(envPath string) error {
 		"PROVIDER":             provider,
 		"API_KEY":              apiKey,
 		"MODEL":                model,
-		"ENABLE_WHATSAPP":      fmt.Sprintf("%t", enableWhatsApp),
-		"WHATSAPP_AUTH_DIR":    waAuthDir,
-		"WHITELIST_PAIR_TOKEN": pairToken,
-		"WORKSPACE_ENABLED":    "true",
+		"ENABLE_WHATSAPP":   fmt.Sprintf("%t", enableWhatsApp),
+		"WHATSAPP_AUTH_DIR": waAuthDir,
+		"WORKSPACE_ENABLED": "true",
 		"WORKSPACE_PATH":       workspacePath,
-		"TAILSCALE_ENABLED":    fmt.Sprintf("%t", enableTailscale),
-		"TS_AUTHKEY":           tsAuthKey,
-		"TS_HOSTNAME":          tsHost,
-		"TS_STATE_DIR":         tsStateDir,
-		"TAILDRIVE_ENABLED":    fmt.Sprintf("%t", enableTaildrive),
-		"TAILDRIVE_SHARE_NAME": shareName,
-		"TAILDRIVE_AUTO_SHARE": fmt.Sprintf("%t", autoShare),
+		"WEBDAV_ENABLED": fmt.Sprintf("%t", enableWebDAV),
+		"WEBDAV_ADDR":    webdavAddr,
 		"DATA_DIR":             ".data",
 		"LOG_LEVEL":            "info",
+	}
+
+	if whitelistNumber != "" {
+		values["WHATSAPP_WHITELIST_NUMBERS"] = whitelistNumber
 	}
 
 	if err := PatchEnvFile(envPath, values); err != nil {
@@ -203,25 +158,9 @@ func (w *Wizard) Run(envPath string) error {
 
 	fmt.Fprintln(w.out, "\nSetup complete.")
 	if enableWhatsApp {
-		fmt.Fprintln(w.out, "Next steps: start PocketBrain, then use /pair <token> and scan QR code in logs/TUI.")
+		fmt.Fprintln(w.out, "Next steps: start PocketBrain and scan the QR code in logs/TUI.")
 	}
 	return nil
-}
-
-func (w *Wizard) printTailscaleACLGuidance() {
-	fmt.Fprintln(w.out, "\nTailscale ACL setup reminder:")
-	fmt.Fprintln(w.out, "1) Open https://login.tailscale.com/admin/acls")
-	fmt.Fprintln(w.out, "2) Add nodeAttrs + grants for Taildrive permissions.")
-	fmt.Fprintln(w.out, "3) Ensure this node is targeted by tag or email.")
-	fmt.Fprintln(w.out, "\nPolicy template:")
-	fmt.Fprintln(w.out, `"nodeAttrs": [`)
-	fmt.Fprintln(w.out, `  {"target": ["tag:pocketbrain-go"], "attr": ["drive:share", "drive:access"]}`)
-	fmt.Fprintln(w.out, `],`)
-	fmt.Fprintln(w.out, `"grants": [`)
-	fmt.Fprintln(w.out, `  {"src": ["autogroup:member"], "dst": ["autogroup:self"],`)
-	fmt.Fprintln(w.out, `   "app": {"tailscale.com/cap/drive":[{"shares":["*"],"access":"rw"}]}}`)
-	fmt.Fprintln(w.out, `]`)
-	fmt.Fprintln(w.out, "\nIf not configured, PocketBrain still starts, but Taildrive share setup will be skipped with a warning.")
 }
 
 func (w *Wizard) askText(r *bufio.Reader, label, def string) (string, error) {
@@ -440,18 +379,3 @@ func defaultModel(provider string) string {
 	}
 }
 
-func generateSecureToken(byteLen int) (string, error) {
-	if byteLen <= 0 {
-		byteLen = 24
-	}
-	b := make([]byte, byteLen)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	out := make([]byte, byteLen)
-	for i := range b {
-		out[i] = alphabet[int(b[i])%len(alphabet)]
-	}
-	return "pb_" + string(out), nil
-}

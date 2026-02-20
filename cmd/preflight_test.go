@@ -33,8 +33,7 @@ func TestRunSetupPreflightNoopWhenEnvComplete(t *testing.T) {
 		"MODEL=gpt-4o\n" +
 		"ENABLE_WHATSAPP=false\n" +
 		"WORKSPACE_PATH=.data/workspace\n" +
-		"TAILSCALE_ENABLED=false\n" +
-		"TAILDRIVE_ENABLED=false\n"
+		"WEBDAV_ENABLED=false\n"
 	if err := os.WriteFile(filepath.Join(tmp, ".env"), []byte(content), 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}

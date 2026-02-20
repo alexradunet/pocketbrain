@@ -11,7 +11,7 @@ Canonical operational workflows for PocketBrain.
 - `docs/runbooks/incident-response.md` - first-response triage and recovery workflow
 - `docs/runbooks/security-ops.md` - secret rotation, dependency hygiene, and risk updates
 - `docs/runbooks/doctor.md` - runtime diagnostics and guided repair workflow
-- `docs/runbooks/taildrive-ops.md` - Taildrive setup, WebDAV verification, and troubleshooting
+- `docs/runbooks/webdav-ops.md` - WebDAV setup, verification, and troubleshooting
 - `docs/runbooks/ci-e2e.md` - CI quality gates and local validation
 - `docs/runbooks/fresh-vps-validation.md` - post-reinstall validation for PocketBrain setup
 

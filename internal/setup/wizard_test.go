@@ -17,17 +17,10 @@ func TestWizardRunWritesEnv(t *testing.T) {
 		"sk-ant-123", // API key
 		"y",          // whatsapp
 		".data/whatsapp-auth",
-		"n", // do not auto-generate token
-		"pair-token-1",
+		"+5511987654321", // whatsapp allowed number
 		".data/workspace",
-		"y", // tailscale
-		"tskey-auth-123",
-		"pocketbrain",
-		".data/tsnet",
-		"y", // taildrive
-		"workspace",
-		"y",
-		"y", // ACL applied confirmation
+		"y",            // webdav
+		"0.0.0.0:6060", // webdav addr
 		"",
 	}, "\n")
 
@@ -47,9 +40,9 @@ func TestWizardRunWritesEnv(t *testing.T) {
 		"PROVIDER=anthropic",
 		"MODEL=claude-sonnet-4-20250514",
 		"API_KEY=sk-ant-123",
-		"TAILSCALE_ENABLED=true",
-		"TS_AUTHKEY=tskey-auth-123",
-		"TAILDRIVE_ENABLED=true",
+		"WEBDAV_ENABLED=true",
+		"WEBDAV_ADDR=0.0.0.0:6060",
+		"WHATSAPP_WHITELIST_NUMBERS=+5511987654321",
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("missing %q in .env:\n%s", want, content)
@@ -57,37 +50,26 @@ func TestWizardRunWritesEnv(t *testing.T) {
 	}
 }
 
-func TestWizardRunGeneratesWhatsAppPairToken(t *testing.T) {
+func TestWizardRunRejectsPhoneWithoutPlus(t *testing.T) {
 	input := strings.Join([]string{
 		"2", // anthropic
 		"claude-sonnet-4-20250514",
 		"sk-ant-123",
 		"y", // whatsapp
 		".data/whatsapp-auth",
-		"y", // auto-generate token
-		".data/workspace",
-		"n", // tailscale
-		"n", // taildrive
+		"5511987654321", // missing + prefix
 		"",
 	}, "\n")
 
 	var out bytes.Buffer
 	w := NewWizard(strings.NewReader(input), &out)
 	envPath := filepath.Join(t.TempDir(), ".env")
-	if err := w.Run(envPath); err != nil {
-		t.Fatalf("Run: %v", err)
+	err := w.Run(envPath)
+	if err == nil {
+		t.Fatal("expected error for phone number without +, got nil")
 	}
-
-	data, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatalf("read .env: %v", err)
-	}
-	content := string(data)
-	if !strings.Contains(content, "WHITELIST_PAIR_TOKEN=pb_") {
-		t.Fatalf("expected generated WHITELIST_PAIR_TOKEN, got:\n%s", content)
-	}
-	if !strings.Contains(out.String(), "Generated WhatsApp pair token: pb_") {
-		t.Fatalf("expected generated token message, got:\n%s", out.String())
+	if !strings.Contains(err.Error(), "international format") {
+		t.Fatalf("expected international format error, got: %v", err)
 	}
 }
 
@@ -110,8 +92,7 @@ func TestWizardRunKronkCatalogSelectionAndDownload(t *testing.T) {
 		"y", // download selected models
 		"n", // enable whatsapp
 		".data/workspace",
-		"n", // tailscale
-		"n", // taildrive
+		"n", // webdav
 		"",
 	}, "\n")
 
@@ -159,8 +140,7 @@ func TestWizardRunKronkSkipsDownloadWhenUserChoosesNo(t *testing.T) {
 		"n", // download selected models
 		"n", // enable whatsapp
 		".data/workspace",
-		"n", // tailscale
-		"n", // taildrive
+		"n", // webdav
 		"",
 	}, "\n")
 

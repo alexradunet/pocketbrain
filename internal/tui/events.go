@@ -13,7 +13,7 @@ const (
 	EventMessageIn
 	EventMessageOut
 	EventWhatsAppStatus
-	EventTailscaleStatus
+	EventWebDAVStatus
 	EventHeartbeatStatus
 	EventVaultStats
 	EventMemoryStats

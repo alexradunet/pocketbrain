@@ -12,8 +12,7 @@ var requiredKeys = []string{
 	"MODEL",
 	"ENABLE_WHATSAPP",
 	"WORKSPACE_PATH",
-	"TAILSCALE_ENABLED",
-	"TAILDRIVE_ENABLED",
+	"WEBDAV_ENABLED",
 }
 
 // NeedSetup returns true when the setup wizard should run.
@@ -34,10 +33,6 @@ func NeedSetup(path string) (bool, string, error) {
 		if strings.TrimSpace(vals[k]) == "" {
 			return true, "missing required key: " + k, nil
 		}
-	}
-
-	if strings.EqualFold(vals["TAILSCALE_ENABLED"], "true") && strings.TrimSpace(vals["TS_AUTHKEY"]) == "" {
-		return true, "missing required key: TS_AUTHKEY", nil
 	}
 
 	return false, "", nil

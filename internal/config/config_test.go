@@ -10,11 +10,8 @@ func clearEnv() {
 	for _, key := range []string{
 		"APP_NAME", "LOG_LEVEL", "DATA_DIR", "PROVIDER", "MODEL",
 		"HEARTBEAT_INTERVAL_MINUTES", "ENABLE_WHATSAPP", "WHATSAPP_AUTH_DIR",
-		"WHITELIST_PAIR_TOKEN", "WHATSAPP_PAIR_MAX_FAILURES",
-		"WHATSAPP_PAIR_FAILURE_WINDOW_MS", "WHATSAPP_PAIR_BLOCK_DURATION_MS",
 		"WHATSAPP_WHITELIST_NUMBERS", "WHATSAPP_WHITELIST_NUMBER",
-		"TAILDRIVE_ENABLED", "TAILDRIVE_SHARE_NAME", "TAILDRIVE_AUTO_SHARE",
-		"TAILSCALE_ENABLED", "TS_AUTHKEY", "TS_HOSTNAME", "TS_STATE_DIR",
+		"WEBDAV_ENABLED", "WEBDAV_ADDR",
 		"WORKSPACE_PATH", "WORKSPACE_ENABLED", "POCKETBRAIN_HOME", "API_KEY",
 	} {
 		os.Unsetenv(key)
@@ -47,20 +44,17 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.WorkspaceEnabled != true {
 		t.Error("WorkspaceEnabled should default to true")
 	}
-	if cfg.TaildriveEnabled != false {
-		t.Error("TaildriveEnabled should default to false")
+	if cfg.WebDAVEnabled != false {
+		t.Error("WebDAVEnabled should default to false")
 	}
-	if cfg.TaildriveShareName != "workspace" {
-		t.Errorf("TaildriveShareName = %q, want %q", cfg.TaildriveShareName, "workspace")
+	if cfg.WebDAVAddr != "0.0.0.0:6060" {
+		t.Errorf("WebDAVAddr = %q, want %q", cfg.WebDAVAddr, "0.0.0.0:6060")
 	}
 	if cfg.OutboxIntervalMs != 60_000 {
 		t.Errorf("OutboxIntervalMs = %d, want 60000", cfg.OutboxIntervalMs)
 	}
 	if cfg.OutboxMaxRetries != 3 {
 		t.Errorf("OutboxMaxRetries = %d, want 3", cfg.OutboxMaxRetries)
-	}
-	if cfg.TailscaleEnabled != false {
-		t.Error("TailscaleEnabled should default to false")
 	}
 }
 
@@ -71,7 +65,8 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("HEARTBEAT_INTERVAL_MINUTES", "15")
 	t.Setenv("WORKSPACE_ENABLED", "false")
 	t.Setenv("ENABLE_WHATSAPP", "false")
-	t.Setenv("TAILDRIVE_ENABLED", "true")
+	t.Setenv("WEBDAV_ENABLED", "true")
+	t.Setenv("WEBDAV_ADDR", "127.0.0.1:9090")
 
 	cfg, err := Load()
 	if err != nil {
@@ -90,8 +85,11 @@ func TestLoadFromEnv(t *testing.T) {
 	if cfg.WorkspaceEnabled != false {
 		t.Error("WorkspaceEnabled should be false")
 	}
-	if cfg.TaildriveEnabled != true {
-		t.Error("TaildriveEnabled should be true")
+	if cfg.WebDAVEnabled != true {
+		t.Error("WebDAVEnabled should be true")
+	}
+	if cfg.WebDAVAddr != "127.0.0.1:9090" {
+		t.Errorf("WebDAVAddr = %q, want %q", cfg.WebDAVAddr, "127.0.0.1:9090")
 	}
 }
 
@@ -200,32 +198,5 @@ func TestValidation(t *testing.T) {
 	}
 	if cfg.WhatsAppAuthDir == "" {
 		t.Error("WhatsAppAuthDir should have a default value")
-	}
-}
-
-func TestValidationTailscaleAuthKeyRequired(t *testing.T) {
-	clearEnv()
-	t.Setenv("TAILSCALE_ENABLED", "true")
-	t.Setenv("TS_AUTHKEY", "")
-
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error when TAILSCALE_ENABLED=true and TS_AUTHKEY is empty")
-	}
-}
-
-func TestDefaultTailscaleStateDir(t *testing.T) {
-	clearEnv()
-	t.Setenv("DATA_DIR", ".data-test")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	cwd, _ := os.Getwd()
-	want := filepath.Join(cwd, ".data-test", "tsnet")
-	if cfg.TailscaleStateDir != want {
-		t.Fatalf("TailscaleStateDir = %q, want %q", cfg.TailscaleStateDir, want)
 	}
 }

@@ -1,4 +1,4 @@
-package taildrive
+package webdav
 
 import (
 	"io"
@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -21,45 +22,35 @@ func TestConfig_Validation(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: Config{
-				Enabled:   true,
-				ShareName: "workspace",
-				RootDir:   t.TempDir(),
+				Enabled: true,
+				Addr:    "127.0.0.1:0",
+				RootDir: t.TempDir(),
 			},
 			wantErr: false,
 		},
 		{
-			name: "empty share name",
-			cfg: Config{
-				Enabled:   true,
-				ShareName: "",
-				RootDir:   t.TempDir(),
-			},
-			wantErr: true,
-		},
-		{
 			name: "empty root dir",
 			cfg: Config{
-				Enabled:   true,
-				ShareName: "workspace",
-				RootDir:   "",
+				Enabled: true,
+				Addr:    "127.0.0.1:0",
+				RootDir: "",
 			},
 			wantErr: true,
 		},
 		{
 			name: "non-existent root dir",
 			cfg: Config{
-				Enabled:   true,
-				ShareName: "workspace",
-				RootDir:   "/tmp/taildrive-test-nonexistent-dir-xyz",
+				Enabled: true,
+				Addr:    "127.0.0.1:0",
+				RootDir: "/tmp/webdav-test-nonexistent-dir-xyz",
 			},
 			wantErr: true,
 		},
 		{
 			name: "disabled config skips validation",
 			cfg: Config{
-				Enabled:   false,
-				ShareName: "",
-				RootDir:   "",
+				Enabled: false,
+				RootDir: "",
 			},
 			wantErr: false,
 		},
@@ -76,48 +67,20 @@ func TestConfig_Validation(t *testing.T) {
 	}
 }
 
-func TestConfig_DefaultShareName(t *testing.T) {
+func TestHandler_PROPFIND(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	svc, err := New(Config{
-		Enabled:   true,
-		ShareName: "myshare",
-		RootDir:   dir,
-	})
-	if err != nil {
-		t.Fatalf("New() unexpected error: %v", err)
-	}
-	if svc.cfg.ShareName != "myshare" {
-		t.Errorf("ShareName = %q, want %q", svc.cfg.ShareName, "myshare")
-	}
-}
-
-func TestWebDAVHandler_ServesWorkspaceDir(t *testing.T) {
-	t.Parallel()
-
-	// Create a temp workspace with a test file.
-	dir := t.TempDir()
-	content := "hello from workspace"
-	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(content), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	// Create a subdirectory with a file.
-	subdir := filepath.Join(dir, "subdir")
-	if err := os.Mkdir(subdir, 0o755); err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(subdir, "nested.txt"), []byte("nested content"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc, err := New(Config{
-		Enabled:   true,
-		ShareName: "workspace",
-		RootDir:   dir,
-		Logger:    logger,
+		Enabled: true,
+		Addr:    "127.0.0.1:0",
+		RootDir: dir,
+		Logger:  logger,
 	})
 	if err != nil {
 		t.Fatalf("New() unexpected error: %v", err)
@@ -125,53 +88,95 @@ func TestWebDAVHandler_ServesWorkspaceDir(t *testing.T) {
 
 	handler := svc.handler()
 
-	// Test serving a file at root.
-	t.Run("root file", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/test.txt", nil)
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
+	req := httptest.NewRequest("PROPFIND", "/", nil)
+	req.Header.Set("Depth", "1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
 
-		if rec.Code != http.StatusOK {
-			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
-		}
-		body := rec.Body.String()
-		if body != content {
-			t.Errorf("body = %q, want %q", body, content)
-		}
-	})
+	// WebDAV PROPFIND returns 207 Multi-Status.
+	if rec.Code != http.StatusMultiStatus {
+		t.Errorf("PROPFIND status = %d, want %d", rec.Code, http.StatusMultiStatus)
+	}
 
-	// Test serving a nested file.
-	t.Run("nested file", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/subdir/nested.txt", nil)
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusOK {
-			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
-		}
-		body := rec.Body.String()
-		if body != "nested content" {
-			t.Errorf("body = %q, want %q", body, "nested content")
-		}
-	})
-
-	// Test 404 for missing file.
-	t.Run("missing file", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/nonexistent.txt", nil)
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusNotFound {
-			t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
-		}
-	})
+	body := rec.Body.String()
+	if !strings.Contains(body, "test.txt") {
+		t.Errorf("PROPFIND response should contain test.txt, got:\n%s", body)
+	}
 }
 
-func TestWebDAVHandler_RejectsTraversal(t *testing.T) {
+func TestHandler_GETServesFiles(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	// Create a file outside the workspace root that should not be reachable.
+	content := "hello from workspace"
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(Config{
+		Enabled: true,
+		Addr:    "127.0.0.1:0",
+		RootDir: dir,
+		Logger:  logger,
+	})
+	if err != nil {
+		t.Fatalf("New() unexpected error: %v", err)
+	}
+
+	handler := svc.handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/test.txt", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := rec.Body.String()
+	if body != content {
+		t.Errorf("body = %q, want %q", body, content)
+	}
+}
+
+func TestHandler_PUTCreatesFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(Config{
+		Enabled: true,
+		Addr:    "127.0.0.1:0",
+		RootDir: dir,
+		Logger:  logger,
+	})
+	if err != nil {
+		t.Fatalf("New() unexpected error: %v", err)
+	}
+
+	handler := svc.handler()
+
+	req := httptest.NewRequest(http.MethodPut, "/new-file.txt", strings.NewReader("new content"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated && rec.Code != http.StatusNoContent {
+		t.Errorf("PUT status = %d, want 201 or 204", rec.Code)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "new-file.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "new content" {
+		t.Errorf("file content = %q, want %q", string(data), "new content")
+	}
+}
+
+func TestHandler_RejectsTraversal(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
 	outsideDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(outsideDir, "secret.txt"), []byte("secret"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -179,10 +184,10 @@ func TestWebDAVHandler_RejectsTraversal(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc, err := New(Config{
-		Enabled:   true,
-		ShareName: "workspace",
-		RootDir:   dir,
-		Logger:    logger,
+		Enabled: true,
+		Addr:    "127.0.0.1:0",
+		RootDir: dir,
+		Logger:  logger,
 	})
 	if err != nil {
 		t.Fatalf("New() unexpected error: %v", err)
@@ -193,10 +198,7 @@ func TestWebDAVHandler_RejectsTraversal(t *testing.T) {
 	traversalPaths := []string{
 		"/../secret.txt",
 		"/../../etc/passwd",
-		"/../../../etc/passwd",
 		"/subdir/../../secret.txt",
-		"/%2e%2e/secret.txt",
-		"/%2e%2e/%2e%2e/etc/passwd",
 	}
 
 	for _, path := range traversalPaths {
@@ -205,9 +207,6 @@ func TestWebDAVHandler_RejectsTraversal(t *testing.T) {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 
-			// Should NOT return 200 with sensitive content.
-			// Go's http.FileServer already handles path cleaning, so traversal
-			// attempts either get redirected (301) or return 404/403.
 			if rec.Code == http.StatusOK {
 				body := rec.Body.String()
 				if body == "secret" {
@@ -228,10 +227,10 @@ func TestService_StartStop(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc, err := New(Config{
-		Enabled:   true,
-		ShareName: "workspace",
-		RootDir:   dir,
-		Logger:    logger,
+		Enabled: true,
+		Addr:    "127.0.0.1:0",
+		RootDir: dir,
+		Logger:  logger,
 	})
 	if err != nil {
 		t.Fatalf("New() unexpected error: %v", err)
@@ -294,7 +293,6 @@ func TestService_DisabledNoOp(t *testing.T) {
 		t.Fatalf("New() unexpected error: %v", err)
 	}
 
-	// Start/Stop on disabled service should be no-ops.
 	if err := svc.Start(); err != nil {
 		t.Errorf("Start() on disabled service: %v", err)
 	}

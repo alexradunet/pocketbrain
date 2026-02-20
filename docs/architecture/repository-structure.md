@@ -29,7 +29,7 @@ internal/            all application packages
   scheduler/         heartbeat cron scheduler
   skills/            skill management
   store/             SQLite repositories
-  taildrive/         Taildrive file sharing
+  webdav/            WebDAV file sharing
   tui/               terminal UI (bubbletea)
   workspace/         file operations with path security
 docs/                architecture, deploy, and runbooks

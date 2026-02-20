@@ -26,9 +26,7 @@ func TestNeedSetupFalseWhenComplete(t *testing.T) {
 		"MODEL=gpt-4o\n" +
 		"ENABLE_WHATSAPP=true\n" +
 		"WORKSPACE_PATH=.data/workspace\n" +
-		"TAILSCALE_ENABLED=true\n" +
-		"TS_AUTHKEY=tskey-auth-abc\n" +
-		"TAILDRIVE_ENABLED=true\n"
+		"WEBDAV_ENABLED=true\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write env: %v", err)
 	}

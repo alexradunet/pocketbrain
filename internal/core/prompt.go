@@ -129,7 +129,7 @@ func (b *PromptBuilder) buildWorkspaceInstructions() string {
 
 	lines := []string{
 		"WORKSPACE ACCESS:",
-		"You have access to a file workspace exposed as a WebDAV directory via Taildrive.",
+		"You have access to a file workspace exposed as a WebDAV directory.",
 		"Files are plain markdown and other document formats.",
 		"Adapt to the user's existing directory structure and naming conventions.",
 		"",

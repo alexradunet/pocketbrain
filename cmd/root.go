@@ -10,7 +10,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "pocketbrain",
 	Short: "Autonomous personal assistant with WhatsApp, vault, and heartbeat",
-	Long:  "PocketBrain is an autonomous assistant runtime with WhatsApp messaging, Markdown vault/PKM, heartbeat scheduler, and Tailscale networking.",
+	Long:  "PocketBrain is an autonomous assistant runtime with WhatsApp messaging, Markdown vault/PKM, heartbeat scheduler, and WebDAV file sharing.",
 }
 
 // Execute runs the root command.

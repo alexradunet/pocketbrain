@@ -18,7 +18,7 @@ import (
 	"github.com/pocketbrain/pocketbrain/internal/scheduler"
 	"github.com/pocketbrain/pocketbrain/internal/skills"
 	"github.com/pocketbrain/pocketbrain/internal/store"
-	"github.com/pocketbrain/pocketbrain/internal/tailscale"
+	"github.com/pocketbrain/pocketbrain/internal/webdav"
 	"github.com/pocketbrain/pocketbrain/internal/tui"
 	"github.com/pocketbrain/pocketbrain/internal/workspace"
 )
@@ -196,33 +196,24 @@ func Run(headless bool) error {
 		shutdown.addCloser(func() { _ = workspaceService.Stop() })
 	}
 
-	// --- Embedded Tailscale (tsnet) + Taildrive share ---
-	if cfg.TailscaleEnabled {
-		rootDir := ""
-		if workspaceService != nil {
-			rootDir = workspaceService.RootPath()
-		}
-		tsSvc, err := tailscale.New(tailscale.Config{
-			Enabled:          true,
-			AuthKey:          cfg.TailscaleAuthKey,
-			Hostname:         cfg.TailscaleHost,
-			StateDir:         cfg.TailscaleStateDir,
-			TaildriveEnabled: cfg.TaildriveEnabled,
-			ShareName:        cfg.TaildriveShareName,
-			AutoShare:        cfg.TaildriveAutoShare,
-			RootDir:          rootDir,
-			Logger:           logger,
+	// --- WebDAV workspace file server ---
+	if cfg.WebDAVEnabled && workspaceService != nil {
+		wdSvc, err := webdav.New(webdav.Config{
+			Enabled: true,
+			Addr:    cfg.WebDAVAddr,
+			RootDir: workspaceService.RootPath(),
+			Logger:  logger,
 		})
 		if err != nil {
-			return fmt.Errorf("tailscale: %w", err)
+			return fmt.Errorf("webdav: %w", err)
 		}
-		if err := tsSvc.Start(); err != nil {
-			return fmt.Errorf("tailscale start: %w", err)
+		if err := wdSvc.Start(); err != nil {
+			return fmt.Errorf("webdav start: %w", err)
 		}
-		shutdown.addCloser(func() { _ = tsSvc.Stop() })
+		shutdown.addCloser(func() { _ = wdSvc.Stop() })
 		bus.Publish(tui.Event{
-			Type: tui.EventTailscaleStatus,
-			Data: tui.StatusEvent{Connected: true, Detail: "tsnet connected"},
+			Type: tui.EventWebDAVStatus,
+			Data: tui.StatusEvent{Connected: true, Detail: "listening on " + wdSvc.Addr()},
 		})
 	}
 
@@ -251,15 +242,7 @@ func Run(headless bool) error {
 			return fmt.Errorf("whatsapp client: %w", err)
 		}
 
-		guard := whatsapp.NewBruteForceGuard(
-			cfg.WhatsAppPairMaxFailures,
-			cfg.WhatsAppPairFailureWindowMs,
-			cfg.WhatsAppPairBlockDurationMs,
-		)
-
 		cmdRouter := whatsapp.NewCommandRouter(
-			cfg.WhitelistPairToken,
-			guard,
 			whitelistRepo,
 			memoryRepo,
 			&sessionStarterAdapter{ctx: ctx, a: assistant},

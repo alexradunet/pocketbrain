@@ -18,7 +18,7 @@ PocketBrain V1 runs in `workspace-only` profile:
 ## 2) Build binary
 
 ```bash
-go build -o pocketbrain .
+go build .
 ```
 
 This produces a single `./pocketbrain` binary with zero runtime dependencies.
@@ -39,19 +39,13 @@ DATA_DIR=.data
 Optional:
 
 ```dotenv
-WHITELIST_PAIR_TOKEN=your-secure-token
 PROVIDER=anthropic
 MODEL=claude-sonnet-4-20250514
 API_KEY=sk-ant-...
 WHATSAPP_AUTH_DIR=.data/whatsapp-auth
 WORKSPACE_PATH=.data/workspace
-TAILSCALE_ENABLED=true
-TS_AUTHKEY=tskey-auth-...
-TS_HOSTNAME=pocketbrain
-TS_STATE_DIR=.data/tsnet
-TAILDRIVE_ENABLED=true
-TAILDRIVE_SHARE_NAME=workspace
-TAILDRIVE_AUTO_SHARE=true
+WEBDAV_ENABLED=true
+WEBDAV_ADDR=0.0.0.0:6060
 ```
 
 Alternative (non-interactive/manual): create `.env` from `.env.example` and fill values directly.
@@ -83,6 +77,6 @@ sudo systemctl status pocketbrain
 
 ```bash
 git pull
-go build -o pocketbrain .
+go build .
 sudo systemctl restart pocketbrain
 ```

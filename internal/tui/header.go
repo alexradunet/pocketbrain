@@ -9,7 +9,7 @@ import (
 type headerModel struct {
 	width          int
 	whatsAppConn   bool
-	tailscaleConn  bool
+	webdavConn     bool
 	heartbeatInfo  string
 }
 
@@ -29,16 +29,16 @@ func (h headerModel) View() string {
 		waStatus += statusDisconnected.Render("● Disconnected")
 	}
 
-	tsStatus := " TS: "
-	if h.tailscaleConn {
-		tsStatus += statusConnected.Render("● Online")
+	wdStatus := " WD: "
+	if h.webdavConn {
+		wdStatus += statusConnected.Render("● Online")
 	} else {
-		tsStatus += statusDisconnected.Render("● Offline")
+		wdStatus += statusDisconnected.Render("● Offline")
 	}
 
 	hb := fmt.Sprintf(" HB: %s ", h.heartbeatInfo)
 
-	bar := lipgloss.JoinHorizontal(lipgloss.Top, title, waStatus, tsStatus, hb)
+	bar := lipgloss.JoinHorizontal(lipgloss.Top, title, waStatus, wdStatus, hb)
 
 	return lipgloss.NewStyle().
 		Width(h.width).

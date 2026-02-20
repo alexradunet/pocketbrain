@@ -13,13 +13,13 @@ Use this runbook for onboarding or repairing a contributor machine.
 ./pocketbrain setup
 ```
 
-The wizard creates/patches `.env` with provider, WhatsApp, workspace, and tailscale settings.
+The wizard creates/patches `.env` with provider, WhatsApp, workspace, and WebDAV settings.
 
 ## 3) Validate core workflows
 
 ```bash
 go test ./... -count=1
-go build -o pocketbrain .
+go build .
 go run . start
 ```
 
