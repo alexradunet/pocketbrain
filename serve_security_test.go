@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/pocketbrain/pocketbrain/internal/config"
+)
 
 func TestValidateWebTerminalExposure(t *testing.T) {
 	tests := []struct {
@@ -47,5 +51,24 @@ func TestValidateWebTerminalExposure(t *testing.T) {
 				t.Fatalf("validateWebTerminalExposure error = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestApplyServeOverrides(t *testing.T) {
+	cfg := &config.Config{
+		SSHAddr:         ":2222",
+		WebTerminalAddr: ":8080",
+		TsnetHostname:   "pocketbrain",
+	}
+
+	applyServeOverrides(cfg, ":3333", "", "pb-node")
+	if cfg.SSHAddr != ":3333" {
+		t.Fatalf("SSHAddr = %q, want %q", cfg.SSHAddr, ":3333")
+	}
+	if cfg.WebTerminalAddr != ":8080" {
+		t.Fatalf("WebTerminalAddr = %q, want %q", cfg.WebTerminalAddr, ":8080")
+	}
+	if cfg.TsnetHostname != "pb-node" {
+		t.Fatalf("TsnetHostname = %q, want %q", cfg.TsnetHostname, "pb-node")
 	}
 }

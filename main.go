@@ -91,15 +91,7 @@ func runServe() {
 	}
 
 	// Apply flag overrides.
-	if *sshAddr != "" {
-		cfg.SSHAddr = *sshAddr
-	}
-	if *webAddr != "" {
-		cfg.WebTerminalAddr = *webAddr
-	}
-	if *tsnetHostname != "" {
-		cfg.TsnetHostname = *tsnetHostname
-	}
+	applyServeOverrides(cfg, *sshAddr, *webAddr, *tsnetHostname)
 	if err := validateWebTerminalExposure(cfg.WebTerminalAddr, *sshOnly, *tsnetFlag); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -165,11 +157,7 @@ func runServe() {
 	if *tsnetFlag {
 		if !tsnet.Available() {
 			fmt.Fprintln(os.Stderr, "tsnet support not compiled; rebuild with: go build -tags tsnet")
-			if webSrv != nil {
-				_ = webSrv.Stop()
-			}
-			_ = ssh.Stop()
-			cleanup()
+			shutdownServeComponents(nil, webSrv, ssh, cleanup)
 			os.Exit(1)
 		}
 		tsListener, err = tsnet.New(tsnet.Config{
@@ -178,11 +166,7 @@ func runServe() {
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "tsnet: %v\n", err)
-			if webSrv != nil {
-				_ = webSrv.Stop()
-			}
-			_ = ssh.Stop()
-			cleanup()
+			shutdownServeComponents(nil, webSrv, ssh, cleanup)
 			os.Exit(1)
 		}
 
@@ -216,14 +200,7 @@ func runServe() {
 	fmt.Printf("\nReceived %s, shutting down...\n", sig)
 
 	// Graceful shutdown in reverse order.
-	if tsListener != nil {
-		_ = tsListener.Close()
-	}
-	if webSrv != nil {
-		_ = webSrv.Stop()
-	}
-	_ = ssh.Stop()
-	cleanup()
+	shutdownServeComponents(tsListener, webSrv, ssh, cleanup)
 	fmt.Println("Shutdown complete")
 }
 
