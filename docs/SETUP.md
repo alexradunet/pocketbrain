@@ -96,6 +96,32 @@ sudo apt-get update
 sudo apt-get install -y git
 ```
 
+### GitHub CLI
+
+Add the official apt repository and install:
+
+```bash
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+  | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] \
+https://cli.github.com/packages stable main" \
+  | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt update && sudo apt install gh -y
+```
+
+Authenticate (select **GitHub.com → HTTPS → Login with a web browser** or paste a token):
+
+```bash
+gh auth login
+```
+
+Verify:
+
+```bash
+gh auth status
+```
+
 ---
 
 ## 5. Install Claude Code
@@ -217,3 +243,5 @@ docker compose up -d --build
 | Check firewall              | `sudo nft list ruleset`                        |
 | Check fail2ban              | `sudo fail2ban-client status sshd`             |
 | Check SSH binding           | `sudo ss -tlnp \| grep :22`                   |
+| GitHub CLI auth             | `gh auth login`                                |
+| GitHub CLI status           | `gh auth status`                               |
