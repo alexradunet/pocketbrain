@@ -389,13 +389,13 @@ func (s *sessionStarterAdapter) StartNewSession(userID, reason string) error {
 
 	if s.bus != nil {
 		s.bus.Publish(tui.Event{
-			Type: tui.EventMessageOut,
-			Data: tui.MessageEvent{
-				UserID:    userID,
-				Text:      "Context switched: started a new session from WhatsApp.",
-				Outgoing:  true,
-				Timestamp: time.Now(),
+			Type: tui.EventSessionChanged,
+			Data: tui.SessionChangedEvent{
+				Channel: "whatsapp",
+				UserID:  userID,
+				Reason:  reason,
 			},
+			Timestamp: time.Now(),
 		})
 	}
 

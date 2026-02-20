@@ -27,6 +27,7 @@ type tickMsg time.Time
 // Model is the root Bubble Tea model.
 type Model struct {
 	eventBus *EventBus
+	eventSub <-chan Event
 	header   headerModel
 	messages messagesModel
 	qr       qrModel
@@ -45,8 +46,14 @@ type Model struct {
 
 // New creates a new TUI model.
 func New(bus *EventBus) Model {
+	var sub <-chan Event
+	if bus != nil {
+		sub = bus.Subscribe()
+	}
+
 	return Model{
 		eventBus: bus,
+		eventSub: sub,
 		header:   newHeaderModel(),
 		messages: newMessagesModel(),
 		qr:       newQRModel(),
@@ -57,7 +64,7 @@ func New(bus *EventBus) Model {
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
-		listenForEvents(m.eventBus),
+		listenForEvents(m.eventSub),
 	)
 }
 
@@ -84,7 +91,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case eventMsg:
 		m.handleEvent(Event(msg))
-		return m, listenForEvents(m.eventBus)
+		return m, listenForEvents(m.eventSub)
 	}
 
 	return m, nil
@@ -114,6 +121,19 @@ func (m *Model) handleEvent(e Event) {
 	case EventMessageOut:
 		if me, ok := e.Data.(MessageEvent); ok {
 			m.messages.addMessage(me)
+		}
+	case EventSessionChanged:
+		if se, ok := e.Data.(SessionChangedEvent); ok {
+			reason := se.Reason
+			if reason == "" {
+				reason = "session changed"
+			}
+			m.messages.addMessage(MessageEvent{
+				UserID:    se.UserID,
+				Text:      fmt.Sprintf("Context changed (%s) on %s.", reason, se.Channel),
+				Outgoing:  true,
+				Timestamp: e.Timestamp,
+			})
 		}
 	case EventWhatsAppStatus:
 		if se, ok := e.Data.(StatusEvent); ok {
@@ -224,10 +244,12 @@ func (m Model) renderStatusPanel(w, h int) string {
 
 // --- tea.Cmd helpers ---
 
-func listenForEvents(bus *EventBus) tea.Cmd {
+func listenForEvents(sub <-chan Event) tea.Cmd {
 	return func() tea.Msg {
-		e := <-bus.Subscribe()
+		if sub == nil {
+			return nil
+		}
+		e := <-sub
 		return eventMsg(e)
 	}
 }
-

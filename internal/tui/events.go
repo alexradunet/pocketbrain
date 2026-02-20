@@ -1,6 +1,9 @@
 package tui
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // Event types for the service event bus.
 // Backend goroutines publish events via channels; the TUI subscribes.
@@ -12,6 +15,7 @@ const (
 	EventLog EventType = iota
 	EventMessageIn
 	EventMessageOut
+	EventSessionChanged
 	EventWhatsAppStatus
 	EventWebDAVStatus
 	EventHeartbeatStatus
@@ -42,6 +46,13 @@ type MessageEvent struct {
 	Timestamp time.Time
 }
 
+// SessionChangedEvent signals that the active conversation context/session changed.
+type SessionChangedEvent struct {
+	Channel string
+	UserID  string
+	Reason  string
+}
+
 // StatusEvent carries connection status.
 type StatusEvent struct {
 	Connected bool
@@ -56,7 +67,10 @@ type StatsEvent struct {
 
 // EventBus fans out events to subscribers.
 type EventBus struct {
-	ch chan Event
+	mu          sync.RWMutex
+	nextID      int
+	bufSize     int
+	subscribers map[int]chan Event
 }
 
 // NewEventBus creates a buffered event bus.
@@ -64,23 +78,40 @@ func NewEventBus(bufSize int) *EventBus {
 	if bufSize <= 0 {
 		bufSize = 256
 	}
-	return &EventBus{ch: make(chan Event, bufSize)}
+	return &EventBus{
+		bufSize:     bufSize,
+		subscribers: make(map[int]chan Event),
+	}
 }
 
-// Publish sends an event non-blocking (drops if buffer full).
+// Publish broadcasts an event to all subscribers, non-blocking per subscriber.
+// Slow subscribers may drop events.
 func (b *EventBus) Publish(e Event) {
 	if e.Timestamp.IsZero() {
 		e.Timestamp = time.Now()
 	}
-	select {
-	case b.ch <- e:
-	default:
+
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	for _, ch := range b.subscribers {
+		select {
+		case ch <- e:
+		default:
+		}
 	}
 }
 
-// Subscribe returns the read channel for consuming events.
+// Subscribe returns a dedicated read channel for consuming events.
 func (b *EventBus) Subscribe() <-chan Event {
-	return b.ch
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	id := b.nextID
+	b.nextID++
+	ch := make(chan Event, b.bufSize)
+	b.subscribers[id] = ch
+	return ch
 }
 
 // PublishLog is a convenience for logging events.
