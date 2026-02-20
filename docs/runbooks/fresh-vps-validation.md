@@ -13,15 +13,18 @@ make build
 ## 2) Configure environment
 
 ```bash
-cp .env.example .env
+./pocketbrain setup
 ```
 
 Set at minimum:
 
 - `PROVIDER` and API key for your chosen provider
-- `WORKSPACE_DIR=.data/workspace`
+- `WORKSPACE_PATH=.data/workspace`
+- `TAILSCALE_ENABLED=true` and `TS_AUTHKEY=...` (for embedded tailnet connectivity)
 - `TAILDRIVE_ENABLED=true` and `TAILDRIVE_*` values (for Taildrive workspace sharing)
 - `ENABLE_WHATSAPP=true` (if WhatsApp channel is required)
+
+Alternative (manual): create `.env` from `.env.example` and fill values directly.
 
 ## 3) Start PocketBrain
 

@@ -4,7 +4,7 @@ Taildrive shares the PocketBrain vault folder as a WebDAV endpoint accessible to
 
 ## Prerequisites
 
-- Tailscale installed and running on the VPS (`tailscale status` shows "online")
+- Embedded Tailscale enabled in PocketBrain (`TAILSCALE_ENABLED=true` and `TS_AUTHKEY` set)
 - Taildrive enabled in your Tailscale ACL policy
 
 ## ACL Policy
@@ -39,7 +39,7 @@ PocketBrain auto-creates the share on startup when `TAILDRIVE_ENABLED=true` and 
 To create manually:
 
 ```bash
-tailscale drive share vault /home/debian/pocketbrain/.data/vault
+tailscale drive share workspace /home/debian/pocketbrain/.data/workspace
 ```
 
 ## Verifying the Share
@@ -100,8 +100,12 @@ tailscale drive unshare vault
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `TAILSCALE_ENABLED` | `false` | Enable embedded tsnet node |
+| `TS_AUTHKEY` | `` | Tailscale auth key used by embedded node |
+| `TS_HOSTNAME` | `pocketbrain` | Tailnet machine hostname |
+| `TS_STATE_DIR` | `.data/tsnet` | Persistent state for embedded node |
 | `TAILDRIVE_ENABLED` | `false` | Enable Taildrive bootstrap check |
-| `TAILDRIVE_SHARE_NAME` | `vault` | Name of the Taildrive share |
+| `TAILDRIVE_SHARE_NAME` | `workspace` | Name of the Taildrive share |
 | `TAILDRIVE_AUTO_SHARE` | `true` | Auto-create share if missing on startup |
 
 ## Obsidian Sync Plugin

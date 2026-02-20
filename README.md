@@ -4,13 +4,32 @@ PocketBrain is a Go assistant runtime with SQLite-backed state, WhatsApp integra
 
 Single binary. Zero runtime dependencies. Just build and run.
 
-## Quick Start
+## Quick Start (Interactive)
 
 ```bash
-cp .env.example .env   # configure provider/model (API key needed for non-Kronk providers)
 make build             # produces ./pocketbrain binary
+./pocketbrain setup    # first-run interactive setup (creates/patches .env)
 ./pocketbrain start    # start with TUI
 ./pocketbrain start --headless  # start headless (for servers)
+```
+
+## Quick Deploy (Headless Server)
+
+```bash
+make build
+./pocketbrain setup          # run once in an interactive shell
+./pocketbrain start --headless
+```
+
+Headless mode requires a complete `.env`. If missing/incomplete, startup fails with instructions.
+
+## Quick Dev Setup
+
+```bash
+make build
+./pocketbrain setup
+make test
+make dev
 ```
 
 ## Commands
@@ -46,7 +65,8 @@ internal/
   scheduler/         heartbeat cron scheduler
   skills/            skill management and installation
   store/             SQLite repositories
-  taildrive/         Taildrive file sharing
+  tailscale/         embedded tsnet + Taildrive share orchestration
+  taildrive/         local file serving components
   tui/               terminal UI (bubbletea)
   workspace/         file operations with path security
 docs/                architecture, deploy, and runbooks
@@ -54,6 +74,13 @@ docs/                architecture, deploy, and runbooks
 
 ## Documentation
 
+- Deployment quick guide: `README.DEPLOY.md`
 - Architecture: `docs/architecture/`
 - Deploy: `docs/deploy/`
 - Runbooks: `docs/runbooks/`
+
+## Documentation Map
+
+- Runtime deployment: `docs/runbooks/runtime-deploy.md`
+- Developer setup: `docs/runbooks/dev-setup.md`
+- Taildrive and embedded tailscale operations: `docs/runbooks/taildrive-ops.md`

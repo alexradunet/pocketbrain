@@ -14,6 +14,9 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start PocketBrain (TUI mode by default, --headless for daemon)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := runSetupPreflight(headless); err != nil {
+			return err
+		}
 		return app.Run(headless)
 	},
 }
@@ -27,6 +30,9 @@ func init() {
 		// Check if user has a TERM for TUI.
 		if os.Getenv("TERM") == "" {
 			headless = true
+		}
+		if err := runSetupPreflight(headless); err != nil {
+			return err
 		}
 		fmt.Println("Starting PocketBrain...")
 		return app.Run(headless)

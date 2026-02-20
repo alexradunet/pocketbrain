@@ -26,7 +26,7 @@ This produces a single `./pocketbrain` binary with zero runtime dependencies.
 ## 3) Configure environment
 
 ```bash
-cp .env.example .env
+./pocketbrain setup
 ```
 
 Required minimum:
@@ -42,13 +42,19 @@ Optional:
 WHITELIST_PAIR_TOKEN=your-secure-token
 PROVIDER=anthropic
 MODEL=claude-sonnet-4-20250514
-ANTHROPIC_API_KEY=sk-ant-...
+API_KEY=sk-ant-...
 WHATSAPP_AUTH_DIR=.data/whatsapp-auth
-WORKSPACE_DIR=.data/workspace
+WORKSPACE_PATH=.data/workspace
+TAILSCALE_ENABLED=true
+TS_AUTHKEY=tskey-auth-...
+TS_HOSTNAME=pocketbrain
+TS_STATE_DIR=.data/tsnet
 TAILDRIVE_ENABLED=true
 TAILDRIVE_SHARE_NAME=workspace
 TAILDRIVE_AUTO_SHARE=true
 ```
+
+Alternative (non-interactive/manual): create `.env` from `.env.example` and fill values directly.
 
 ## 4) Start runtime
 

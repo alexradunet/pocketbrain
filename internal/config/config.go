@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,6 +46,12 @@ type Config struct {
 	TaildriveShareName string
 	TaildriveAutoShare bool
 
+	// Embedded Tailscale (tsnet)
+	TailscaleEnabled  bool
+	TailscaleAuthKey  string
+	TailscaleHost     string
+	TailscaleStateDir string
+
 	// Workspace (files exposed via Taildrive)
 	WorkspacePath    string
 	WorkspaceEnabled bool
@@ -62,12 +69,9 @@ func Load() (*Config, error) {
 
 	dataDir := resolvePath(cwd, envStr("DATA_DIR", ".data"))
 
-	// Workspace path: WORKSPACE_PATH > VAULT_PATH (compat) > default
-	workspaceEnabled := envBool("WORKSPACE_ENABLED", envBool("VAULT_ENABLED", true))
+	// Workspace path: WORKSPACE_PATH > default
+	workspaceEnabled := envBool("WORKSPACE_ENABLED", true)
 	workspacePathRaw := strings.TrimSpace(os.Getenv("WORKSPACE_PATH"))
-	if workspacePathRaw == "" {
-		workspacePathRaw = strings.TrimSpace(os.Getenv("VAULT_PATH"))
-	}
 
 	var workspacePath string
 	if workspacePathRaw != "" {
@@ -117,6 +121,10 @@ func Load() (*Config, error) {
 		TaildriveEnabled:   envBool("TAILDRIVE_ENABLED", false),
 		TaildriveShareName: envStr("TAILDRIVE_SHARE_NAME", "workspace"),
 		TaildriveAutoShare: envBool("TAILDRIVE_AUTO_SHARE", true),
+		TailscaleEnabled:   envBool("TAILSCALE_ENABLED", false),
+		TailscaleAuthKey:   strings.TrimSpace(os.Getenv("TS_AUTHKEY")),
+		TailscaleHost:      envStr("TS_HOSTNAME", "pocketbrain"),
+		TailscaleStateDir:  resolvePath(cwd, envStr("TS_STATE_DIR", filepath.Join(dataDir, "tsnet"))),
 
 		WorkspacePath:    workspacePath,
 		WorkspaceEnabled: workspaceEnabled,
@@ -137,8 +145,58 @@ func (c *Config) validate() error {
 	if c.WorkspaceEnabled && c.WorkspacePath == "" {
 		return fmt.Errorf("WORKSPACE_PATH cannot be empty when WORKSPACE_ENABLED=true")
 	}
+	if c.TailscaleEnabled && c.TailscaleAuthKey == "" {
+		return fmt.Errorf("TS_AUTHKEY cannot be empty when TAILSCALE_ENABLED=true")
+	}
 	if c.HeartbeatIntervalMinutes < 1 {
 		return fmt.Errorf("HEARTBEAT_INTERVAL_MINUTES must be >= 1")
+	}
+	return nil
+}
+
+// LoadDotEnvFile loads KEY=VALUE pairs from a dotenv file into the process
+// environment only for keys that are not already set.
+func LoadDotEnvFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("open dotenv: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		if key == "" {
+			continue
+		}
+		value := strings.TrimSpace(parts[1])
+		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") && len(value) >= 2 {
+			value = value[1 : len(value)-1]
+		}
+		if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") && len(value) >= 2 {
+			value = value[1 : len(value)-1]
+		}
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("setenv %s: %w", key, err)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("scan dotenv: %w", err)
 	}
 	return nil
 }

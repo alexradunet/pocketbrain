@@ -10,10 +10,10 @@ Use this runbook for onboarding or repairing a contributor machine.
 ## 2) Initialize local environment
 
 ```bash
-cp .env.example .env
+./pocketbrain setup
 ```
 
-Edit `.env` with your API key and provider settings.
+The wizard creates/patches `.env` with provider, WhatsApp, workspace, and tailscale settings.
 
 ## 3) Validate core workflows
 

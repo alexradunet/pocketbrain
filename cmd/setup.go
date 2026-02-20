@@ -1,8 +1,10 @@
 package cmd
 
 import (
-	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/pocketbrain/pocketbrain/internal/setup"
 	"github.com/spf13/cobra"
 )
 
@@ -10,10 +12,8 @@ var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Interactive configuration wizard",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("PocketBrain Setup Wizard")
-		fmt.Println("========================")
-		fmt.Println("(Setup wizard will be implemented in a later phase)")
-		return nil
+		w := setup.NewWizard(os.Stdin, os.Stdout)
+		return w.Run(filepath.Join(".", ".env"))
 	},
 }
 

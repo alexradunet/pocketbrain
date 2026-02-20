@@ -18,7 +18,7 @@ import (
 	"github.com/pocketbrain/pocketbrain/internal/scheduler"
 	"github.com/pocketbrain/pocketbrain/internal/skills"
 	"github.com/pocketbrain/pocketbrain/internal/store"
-	"github.com/pocketbrain/pocketbrain/internal/taildrive"
+	"github.com/pocketbrain/pocketbrain/internal/tailscale"
 	"github.com/pocketbrain/pocketbrain/internal/tui"
 	"github.com/pocketbrain/pocketbrain/internal/workspace"
 )
@@ -196,26 +196,34 @@ func Run(headless bool) error {
 		shutdown.addCloser(func() { _ = workspaceService.Stop() })
 	}
 
-	// --- Taildrive file server ---
-	if cfg.TaildriveEnabled && workspaceService != nil {
-		tdSvc, err := taildrive.New(taildrive.Config{
-			Enabled:   true,
-			ShareName: cfg.TaildriveShareName,
-			AutoShare: cfg.TaildriveAutoShare,
-			RootDir:   workspaceService.RootPath(),
-			Logger:    logger,
+	// --- Embedded Tailscale (tsnet) + Taildrive share ---
+	if cfg.TailscaleEnabled {
+		rootDir := ""
+		if workspaceService != nil {
+			rootDir = workspaceService.RootPath()
+		}
+		tsSvc, err := tailscale.New(tailscale.Config{
+			Enabled:          true,
+			AuthKey:          cfg.TailscaleAuthKey,
+			Hostname:         cfg.TailscaleHost,
+			StateDir:         cfg.TailscaleStateDir,
+			TaildriveEnabled: cfg.TaildriveEnabled,
+			ShareName:        cfg.TaildriveShareName,
+			AutoShare:        cfg.TaildriveAutoShare,
+			RootDir:          rootDir,
+			Logger:           logger,
 		})
 		if err != nil {
-			return fmt.Errorf("taildrive: %w", err)
+			return fmt.Errorf("tailscale: %w", err)
 		}
-		if err := tdSvc.Start(); err != nil {
-			return fmt.Errorf("taildrive start: %w", err)
+		if err := tsSvc.Start(); err != nil {
+			return fmt.Errorf("tailscale start: %w", err)
 		}
-		shutdown.addCloser(func() { _ = tdSvc.Stop() })
-		logger.Info("taildrive file server ready",
-			"addr", tdSvc.Addr(),
-			"shareName", cfg.TaildriveShareName,
-		)
+		shutdown.addCloser(func() { _ = tsSvc.Stop() })
+		bus.Publish(tui.Event{
+			Type: tui.EventTailscaleStatus,
+			Data: tui.StatusEvent{Connected: true, Detail: "tsnet connected"},
+		})
 	}
 
 	// Wire and start the heartbeat scheduler (assistant implements HeartbeatRunner).

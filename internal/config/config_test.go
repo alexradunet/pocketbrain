@@ -14,8 +14,8 @@ func clearEnv() {
 		"WHATSAPP_PAIR_FAILURE_WINDOW_MS", "WHATSAPP_PAIR_BLOCK_DURATION_MS",
 		"WHATSAPP_WHITELIST_NUMBERS", "WHATSAPP_WHITELIST_NUMBER",
 		"TAILDRIVE_ENABLED", "TAILDRIVE_SHARE_NAME", "TAILDRIVE_AUTO_SHARE",
-		"WORKSPACE_PATH", "WORKSPACE_ENABLED", "VAULT_PATH", "VAULT_ENABLED",
-		"POCKETBRAIN_HOME",
+		"TAILSCALE_ENABLED", "TS_AUTHKEY", "TS_HOSTNAME", "TS_STATE_DIR",
+		"WORKSPACE_PATH", "WORKSPACE_ENABLED", "POCKETBRAIN_HOME", "API_KEY",
 	} {
 		os.Unsetenv(key)
 	}
@@ -58,6 +58,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.OutboxMaxRetries != 3 {
 		t.Errorf("OutboxMaxRetries = %d, want 3", cfg.OutboxMaxRetries)
+	}
+	if cfg.TailscaleEnabled != false {
+		t.Error("TailscaleEnabled should default to false")
 	}
 }
 
@@ -197,5 +200,32 @@ func TestValidation(t *testing.T) {
 	}
 	if cfg.WhatsAppAuthDir == "" {
 		t.Error("WhatsAppAuthDir should have a default value")
+	}
+}
+
+func TestValidationTailscaleAuthKeyRequired(t *testing.T) {
+	clearEnv()
+	t.Setenv("TAILSCALE_ENABLED", "true")
+	t.Setenv("TS_AUTHKEY", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when TAILSCALE_ENABLED=true and TS_AUTHKEY is empty")
+	}
+}
+
+func TestDefaultTailscaleStateDir(t *testing.T) {
+	clearEnv()
+	t.Setenv("DATA_DIR", ".data-test")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cwd, _ := os.Getwd()
+	want := filepath.Join(cwd, ".data-test", "tsnet")
+	if cfg.TailscaleStateDir != want {
+		t.Fatalf("TailscaleStateDir = %q, want %q", cfg.TailscaleStateDir, want)
 	}
 }

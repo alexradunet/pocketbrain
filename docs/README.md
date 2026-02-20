@@ -4,6 +4,7 @@ All commands assume execution from repository root.
 
 ## Canonical Operations
 
+- Deployment quick guide: `README.DEPLOY.md`
 - Runbooks index: `docs/runbooks/`
 - Developer setup: `docs/runbooks/dev-setup.md`
 - Runtime deploy: `docs/runbooks/runtime-deploy.md`
