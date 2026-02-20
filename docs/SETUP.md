@@ -177,56 +177,23 @@ cd ~/pocketbrain && claude
 
 ---
 
-## 8. Docker Dev Container
+## 8. Development Environment (Host)
 
-### Host setup
+Development runs directly on the host as the `debian` user. No containers.
 
-Docker is installed from Debian repos (`docker.io`). Log rotation is configured
-in `/etc/docker/daemon.json` (10MB max, 3 files).
-
-### Container
-
-The dev container (`pocketbrain-dev`) runs Debian trixie-slim with common
-development tools pre-installed. It mounts the project directory as a volume.
-
-**Build and start:**
+### Install dev tools
 
 ```bash
-docker compose up -d --build
+sudo apt-get install -y build-essential python3 python3-pip python3-venv vim less htop net-tools
 ```
 
-**Enter the container:**
+### Project workspace
 
 ```bash
-docker exec -it pocketbrain-dev bash
+cd ~/pocketbrain
 ```
 
-**Stop:**
-
-```bash
-docker compose down
-```
-
-**Rebuild after Dockerfile changes:**
-
-```bash
-docker compose up -d --build
-```
-
-### Dockerfile
-
-`~/pocketbrain/Dockerfile` — Debian trixie-slim base with:
-- Build tools: `build-essential`, `git`, `curl`
-- Python: `python3`, `pip`, `venv`
-- Utilities: `vim`, `less`, `htop`, `net-tools`
-- User `dev` with passwordless sudo
-
-### docker-compose.yml
-
-- Container name: `pocketbrain-dev`
-- Volume: `.` → `/home/dev/workspace`
-- Resource limits: 4 CPUs, 8GB RAM
-- Restart policy: `unless-stopped`
+All work lives in `~/pocketbrain` and is tracked in git.
 
 ---
 
@@ -237,9 +204,6 @@ docker compose up -d --build
 | SSH into VPS                | `tailscale ssh debian@pocketbrain-host`        |
 | Start Claude Code           | `cd ~/pocketbrain && claude`                   |
 | Check Tailscale status      | `tailscale status`                             |
-| Build/start dev container   | `docker compose up -d --build`                 |
-| Enter dev container         | `docker exec -it pocketbrain-dev bash`         |
-| Stop dev container          | `docker compose down`                          |
 | Check firewall              | `sudo nft list ruleset`                        |
 | Check fail2ban              | `sudo fail2ban-client status sshd`             |
 | Check SSH binding           | `sudo ss -tlnp \| grep :22`                   |
