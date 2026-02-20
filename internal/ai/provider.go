@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
@@ -119,6 +120,7 @@ func (p *FantasyProvider) CreateSession(_ context.Context, title string) (string
 	p.sessions[id] = nil
 	p.mu.Unlock()
 
+	p.logger.Info("session created", "op", "provider.session", "sessionID", id, "title", title)
 	return id, nil
 }
 
@@ -144,6 +146,9 @@ func (p *FantasyProvider) SendMessage(ctx context.Context, sessionID, system, us
 	}
 	agent := fantasy.NewAgent(p.model, opts...)
 
+	p.logger.Info("provider send started", "op", "provider.send", "sessionID", sessionID, "userTextLen", len(userText), "systemPromptLen", len(system), "historyLen", len(history))
+
+	start := time.Now()
 	result, err := agent.Generate(ctx, fantasy.AgentCall{
 		Prompt:   userText,
 		Messages: history,
@@ -151,6 +156,9 @@ func (p *FantasyProvider) SendMessage(ctx context.Context, sessionID, system, us
 	if err != nil {
 		return "", fmt.Errorf("fantasy: generate: %w", err)
 	}
+	duration := time.Since(start)
+
+	p.logAgentResult(sessionID, result, duration)
 
 	text := result.Response.Content.Text()
 
@@ -213,6 +221,42 @@ func (p *FantasyProvider) RecentContext(_ context.Context, sessionID string) (st
 // Close is a no-op for the Fantasy provider.
 func (p *FantasyProvider) Close() error {
 	return nil
+}
+
+// logAgentResult logs the agent execution result at INFO level with summary,
+// and at DEBUG level with per-step tool call details.
+func (p *FantasyProvider) logAgentResult(sessionID string, result *fantasy.AgentResult, duration time.Duration) {
+	totalToolCalls := 0
+	for _, step := range result.Steps {
+		totalToolCalls += len(step.Content.ToolCalls())
+	}
+
+	p.logger.Info("provider send complete",
+		"op", "provider.send",
+		"sessionID", sessionID,
+		"stepCount", len(result.Steps),
+		"toolCallCount", totalToolCalls,
+		"inputTokens", result.TotalUsage.InputTokens,
+		"outputTokens", result.TotalUsage.OutputTokens,
+		"duration", duration.String(),
+		"finishReason", string(result.Response.FinishReason),
+	)
+
+	for i, step := range result.Steps {
+		for _, tc := range step.Content.ToolCalls() {
+			inputPreview := tc.Input
+			if len(inputPreview) > 200 {
+				inputPreview = inputPreview[:200] + "..."
+			}
+			p.logger.Debug("provider tool call",
+				"op", "provider.toolcall",
+				"sessionID", sessionID,
+				"step", i,
+				"tool", tc.ToolName,
+				"input", inputPreview,
+			)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

@@ -108,6 +108,7 @@ func (a *AssistantCore) Ask(ctx context.Context, input AssistantInput) (string, 
 		"userID", input.UserID,
 		"sessionID", sessionID,
 		"textLength", len(input.Text),
+		"textPreview", truncateForLog(input.Text, 100),
 		"memoryContextLength", len(memoryEntries),
 	)
 
@@ -129,6 +130,7 @@ func (a *AssistantCore) Ask(ctx context.Context, input AssistantInput) (string, 
 		"userID", input.UserID,
 		"sessionID", sessionID,
 		"answerLength", len(reply),
+		"answerPreview", truncateForLog(reply, 100),
 	)
 
 	return reply, nil
@@ -228,4 +230,13 @@ func (a *AssistantCore) StartNewMainSession(ctx context.Context, reason string) 
 // operationID generates a short unique identifier for log correlation.
 func operationID(prefix string) string {
 	return prefix + "-" + newUUID()
+}
+
+// truncateForLog returns the first max runes of s, appending "..." if truncated.
+func truncateForLog(s string, max int) string {
+	r := []rune(s)
+	if len(r) > max {
+		return string(r[:max]) + "..."
+	}
+	return s
 }

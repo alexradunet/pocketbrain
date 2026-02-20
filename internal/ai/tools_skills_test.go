@@ -21,7 +21,7 @@ func newTestSkillsTools(t *testing.T) ([]fantasy.AgentTool, string) {
 		t.Fatal(err)
 	}
 	svc := skills.New(ws, slog.Default())
-	return SkillsTools(svc), root
+	return SkillsTools(svc, slog.Default()), root
 }
 
 func seedSkillFile(t *testing.T, root, name, content string) {

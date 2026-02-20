@@ -131,16 +131,33 @@ func Run(headless bool) error {
 
 	// Build Fantasy agent tools.
 	var tools []fantasy.AgentTool
+	var toolNames []string
 	if workspaceService != nil {
-		tools = append(tools, ai.WorkspaceTools(workspaceService)...)
+		wsTools := ai.WorkspaceTools(workspaceService, logger)
+		tools = append(tools, wsTools...)
+		for _, t := range wsTools {
+			toolNames = append(toolNames, t.Info().Name)
+		}
 
 		// Skills tools (skills live inside workspace).
 		skillsService := skills.New(workspaceService, logger)
-		tools = append(tools, ai.SkillsTools(skillsService)...)
+		skTools := ai.SkillsTools(skillsService, logger)
+		tools = append(tools, skTools...)
+		for _, t := range skTools {
+			toolNames = append(toolNames, t.Info().Name)
+		}
 	}
-	tools = append(tools, ai.MemoryTools(memoryRepo)...)
-	tools = append(tools, ai.ChannelTools(channelRepo, outboxRepo)...)
-	logger.Info("tools ready", "toolCount", len(tools))
+	memTools := ai.MemoryTools(memoryRepo, logger)
+	tools = append(tools, memTools...)
+	for _, t := range memTools {
+		toolNames = append(toolNames, t.Info().Name)
+	}
+	chTools := ai.ChannelTools(channelRepo, outboxRepo, logger)
+	tools = append(tools, chTools...)
+	for _, t := range chTools {
+		toolNames = append(toolNames, t.Info().Name)
+	}
+	logger.Info("tools ready", "toolCount", len(tools), "toolNames", toolNames)
 
 	// Create AI provider based on configuration.
 	ctx, cancel := context.WithCancel(context.Background())

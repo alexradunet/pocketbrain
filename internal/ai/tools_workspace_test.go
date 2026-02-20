@@ -18,7 +18,7 @@ func newTestWorkspaceTools(t *testing.T) ([]fantasy.AgentTool, string) {
 	t.Helper()
 	root := t.TempDir()
 	ws := workspace.New(root, slog.Default())
-	return WorkspaceTools(ws), root
+	return WorkspaceTools(ws, slog.Default()), root
 }
 
 func runTool(t *testing.T, tool fantasy.AgentTool, input any) string {

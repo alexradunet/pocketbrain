@@ -89,14 +89,21 @@ func (a *Adapter) Stop() error {
 // Send delivers a text message to the given WhatsApp JID.
 func (a *Adapter) Send(userID, text string) error {
 	if !a.client.IsConnected() {
+		a.logger.Warn("whatsapp send skipped: not connected", "op", "whatsapp.send", "userID", userID)
 		return fmt.Errorf("whatsapp client not connected")
 	}
-	return a.client.SendText(userID, text)
+	if err := a.client.SendText(userID, text); err != nil {
+		return err
+	}
+	a.logger.Info("whatsapp send success", "op", "whatsapp.send", "userID", userID, "textLen", len(text))
+	return nil
 }
 
 // HandleIncoming is called by the WAClient event handler when a message
 // arrives. It delegates to the MessageProcessor.
 func (a *Adapter) HandleIncoming(userID, text string) (string, error) {
+	a.logger.Info("whatsapp incoming", "op", "whatsapp.incoming", "userID", userID, "textLen", len(text))
+
 	a.mu.Lock()
 	handler := a.handler
 	a.mu.Unlock()
@@ -105,7 +112,11 @@ func (a *Adapter) HandleIncoming(userID, text string) (string, error) {
 		return "", fmt.Errorf("no message handler registered")
 	}
 
-	return handler(userID, text)
+	reply, err := handler(userID, text)
+	if err == nil && reply != "" {
+		a.logger.Info("whatsapp reply ready", "op", "whatsapp.incoming", "userID", userID, "replyLen", len(reply))
+	}
+	return reply, err
 }
 
 // MessageProcessor routes incoming messages through commands or the
@@ -143,8 +154,11 @@ func (p *MessageProcessor) Process(userID, text string) (string, error) {
 		return "", nil
 	}
 
+	isCommand := strings.HasPrefix(text, "/")
+	p.logger.Info("whatsapp process started", "op", "whatsapp.process", "userID", userID, "textLen", len(text), "isCommand", isCommand)
+
 	// Route commands first (commands like /pair work even for non-whitelisted users).
-	if strings.HasPrefix(text, "/") {
+	if isCommand {
 		if resp, handled := p.router.Route(userID, text); handled {
 			return resp, nil
 		}
@@ -153,14 +167,20 @@ func (p *MessageProcessor) Process(userID, text string) (string, error) {
 	// Check whitelist for regular messages.
 	allowed, err := p.whitelist.IsWhitelisted("whatsapp", userID)
 	if err != nil {
-		p.logger.Error("whitelist check failed", "userID", userID, "error", err)
+		p.logger.Error("whitelist check failed", "op", "whatsapp.process", "userID", userID, "error", err)
 		return "", fmt.Errorf("whitelist check: %w", err)
 	}
 	if !allowed {
-		p.logger.Warn("non-whitelisted user rejected", "userID", userID)
+		p.logger.Warn("non-whitelisted user rejected", "op", "whatsapp.process", "userID", userID)
 		return "You are not authorized. Ask the operator to whitelist your number.", nil
 	}
 
+	p.logger.Debug("whitelist check passed", "op", "whatsapp.process", "userID", userID)
+
 	// Delegate to the main handler.
-	return p.handler(userID, text)
+	reply, err := p.handler(userID, text)
+	if err == nil {
+		p.logger.Info("whatsapp process complete", "op", "whatsapp.process", "userID", userID, "replyLen", len(reply))
+	}
+	return reply, err
 }

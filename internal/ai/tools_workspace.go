@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"charm.land/fantasy"
 
@@ -43,16 +44,19 @@ type workspaceMoveInput struct {
 type workspaceStatsInput struct{}
 
 // WorkspaceTools returns the 7 workspace tools as Fantasy AgentTools.
-func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
+func WorkspaceTools(ws *workspace.Workspace, logger *slog.Logger) []fantasy.AgentTool {
 	return []fantasy.AgentTool{
 		fantasy.NewAgentTool(
 			"workspace_read",
 			"Read the contents of a file from the workspace. Path is relative to workspace root.",
 			func(_ context.Context, input workspaceReadInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				logger.Info("tool execute", "op", "tool.execute", "tool", "workspace_read", "path", input.Path)
 				content, ok := ws.ReadFile(input.Path)
 				if !ok {
+					logger.Info("tool result", "op", "tool.execute", "tool", "workspace_read", "result", "not_found", "path", input.Path)
 					return fantasy.NewTextResponse(fmt.Sprintf("Error: File not found: %s", input.Path)), nil
 				}
+				logger.Info("tool result", "op", "tool.execute", "tool", "workspace_read", "result", "success", "path", input.Path, "contentLen", len(content))
 				return fantasy.NewTextResponse(content), nil
 			},
 		),
@@ -61,9 +65,12 @@ func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
 			"workspace_write",
 			"Write content to a file in the workspace. Creates the file if it doesn't exist, overwrites if it does.",
 			func(_ context.Context, input workspaceWriteInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				logger.Info("tool execute", "op", "tool.execute", "tool", "workspace_write", "path", input.Path, "contentLen", len(input.Content))
 				if ws.WriteFile(input.Path, input.Content) {
+					logger.Info("tool result", "op", "tool.execute", "tool", "workspace_write", "result", "success", "path", input.Path)
 					return fantasy.NewTextResponse(fmt.Sprintf("Successfully wrote to %s", input.Path)), nil
 				}
+				logger.Info("tool result", "op", "tool.execute", "tool", "workspace_write", "result", "error", "path", input.Path)
 				return fantasy.NewTextResponse(fmt.Sprintf("Error: Failed to write to %s", input.Path)), nil
 			},
 		),
@@ -72,9 +79,12 @@ func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
 			"workspace_append",
 			"Append content to a file in the workspace. Creates the file if it doesn't exist.",
 			func(_ context.Context, input workspaceAppendInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				logger.Info("tool execute", "op", "tool.execute", "tool", "workspace_append", "path", input.Path, "contentLen", len(input.Content))
 				if ws.AppendToFile(input.Path, input.Content) {
+					logger.Info("tool result", "op", "tool.execute", "tool", "workspace_append", "result", "success", "path", input.Path)
 					return fantasy.NewTextResponse(fmt.Sprintf("Successfully appended to %s", input.Path)), nil
 				}
+				logger.Info("tool result", "op", "tool.execute", "tool", "workspace_append", "result", "error", "path", input.Path)
 				return fantasy.NewTextResponse(fmt.Sprintf("Error: Failed to append to %s", input.Path)), nil
 			},
 		),
@@ -83,8 +93,10 @@ func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
 			"workspace_list",
 			"List files and folders in a workspace directory.",
 			func(_ context.Context, input workspaceListInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				logger.Debug("tool execute", "op", "tool.execute", "tool", "workspace_list", "folder", input.Folder)
 				files, _ := ws.ListFiles(input.Folder)
 				if len(files) == 0 {
+					logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_list", "fileCount", 0)
 					return fantasy.NewTextResponse(fmt.Sprintf("Folder is empty: %s", displayFolder(input.Folder))), nil
 				}
 				result := fmt.Sprintf("Contents of %s:\n", displayFolder(input.Folder))
@@ -95,6 +107,7 @@ func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
 						result += fmt.Sprintf("FILE %s (%s)\n", f.Name, formatBytes(f.Size))
 					}
 				}
+				logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_list", "fileCount", len(files))
 				return fantasy.NewTextResponse(result), nil
 			},
 		),
@@ -107,17 +120,20 @@ func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
 				if mode == "" {
 					mode = "name"
 				}
+				logger.Debug("tool execute", "op", "tool.execute", "tool", "workspace_search", "query", input.Query, "mode", mode)
 				if mode != "name" && mode != "content" && mode != "both" {
 					return fantasy.NewTextResponse("Error: Invalid search mode. Use one of: name, content, both"), nil
 				}
 				files, _ := ws.SearchFiles(input.Query, input.Folder, workspace.SearchMode(mode))
 				if len(files) == 0 {
+					logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_search", "matchCount", 0)
 					return fantasy.NewTextResponse(fmt.Sprintf("No files found matching %q in %s mode", input.Query, mode)), nil
 				}
 				result := fmt.Sprintf("Found %d file(s) matching %q in %s mode:\n", len(files), input.Query, mode)
 				for _, f := range files {
 					result += fmt.Sprintf("- %s\n", f.Path)
 				}
+				logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_search", "matchCount", len(files))
 				return fantasy.NewTextResponse(result), nil
 			},
 		),
@@ -126,9 +142,12 @@ func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
 			"workspace_move",
 			"Move or rename a file in the workspace.",
 			func(_ context.Context, input workspaceMoveInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				logger.Info("tool execute", "op", "tool.execute", "tool", "workspace_move", "from", input.From, "to", input.To)
 				if ws.MoveFile(input.From, input.To) {
+					logger.Info("tool result", "op", "tool.execute", "tool", "workspace_move", "result", "success")
 					return fantasy.NewTextResponse(fmt.Sprintf("Successfully moved %s to %s", input.From, input.To)), nil
 				}
+				logger.Info("tool result", "op", "tool.execute", "tool", "workspace_move", "result", "error")
 				return fantasy.NewTextResponse(fmt.Sprintf("Error: Failed to move %s", input.From)), nil
 			},
 		),
@@ -137,14 +156,17 @@ func WorkspaceTools(ws *workspace.Workspace) []fantasy.AgentTool {
 			"workspace_stats",
 			"Get statistics about the workspace: total files, total size, last modified date.",
 			func(_ context.Context, _ workspaceStatsInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				logger.Debug("tool execute", "op", "tool.execute", "tool", "workspace_stats")
 				stats, err := ws.GetStats()
 				if err != nil {
+					logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_stats", "result", "error", "error", err)
 					return fantasy.NewTextResponse(fmt.Sprintf("Error getting workspace stats: %v", err)), nil
 				}
 				lastMod := "N/A"
 				if stats.LastModified != nil && !stats.LastModified.IsZero() {
 					lastMod = stats.LastModified.Format("2006-01-02T15:04:05Z")
 				}
+				logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_stats", "result", "success", "totalFiles", stats.TotalFiles)
 				return fantasy.NewTextResponse(fmt.Sprintf(
 					"Workspace Statistics:\n- Total files: %d\n- Total size: %s\n- Last modified: %s",
 					stats.TotalFiles, formatBytes(stats.TotalSize), lastMod,

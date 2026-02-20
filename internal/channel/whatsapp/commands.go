@@ -47,6 +47,8 @@ func (r *CommandRouter) Route(userID, text string) (string, bool) {
 		arg = strings.TrimSpace(parts[1])
 	}
 
+	r.logger.Debug("command route", "op", "whatsapp.command", "cmd", cmd, "userID", userID)
+
 	switch cmd {
 	case "/pair":
 		return r.handlePair(userID, arg), true
@@ -55,6 +57,7 @@ func (r *CommandRouter) Route(userID, text string) (string, bool) {
 	case "/remember":
 		return r.handleRemember(userID, arg), true
 	default:
+		r.logger.Debug("command unrecognized", "op", "whatsapp.command", "cmd", cmd, "userID", userID)
 		return "", false
 	}
 }
