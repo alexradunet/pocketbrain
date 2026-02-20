@@ -34,9 +34,9 @@ func NewWizard(in io.Reader, out io.Writer) *Wizard {
 	return &Wizard{
 		in:                in,
 		out:               out,
-		fetchCatalog:      fetchKronkCatalogModels,
-		resolveModelValue: resolveKronkModelURLWithSDK,
-		download:          downloadKronkModelWithSDK,
+		fetchCatalog:      FetchKronkCatalogModels,
+		resolveModelValue: ResolveKronkModelURLWithSDK,
+		download:          DownloadKronkModelWithSDK,
 	}
 }
 
@@ -51,7 +51,7 @@ func (w *Wizard) Run(envPath string) error {
 	}
 
 	apiKey := ""
-	model := defaultModel(provider)
+	model := DefaultModel(provider)
 	if provider == "kronk" {
 		entries, err := w.fetchCatalog()
 		if err != nil || len(entries) == 0 {
@@ -86,7 +86,7 @@ func (w *Wizard) Run(envPath string) error {
 			}
 		}
 	} else {
-		model, err = w.askText(r, "Model", defaultModel(provider))
+		model, err = w.askText(r, "Model", DefaultModel(provider))
 		if err != nil {
 			return err
 		}
@@ -272,7 +272,7 @@ func (w *Wizard) askSecret(r *bufio.Reader, label string) (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-func fetchKronkCatalogModels() ([]string, error) {
+func FetchKronkCatalogModels() ([]string, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Get(kronkCatalogURL)
 	if err != nil {
@@ -311,7 +311,7 @@ func parseKronkCatalogModelIDs(md []byte) []string {
 	return ids
 }
 
-func downloadKronkModelWithSDK(out io.Writer, modelID string) error {
+func DownloadKronkModelWithSDK(out io.Writer, modelID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()
 
@@ -343,7 +343,7 @@ func downloadKronkModelWithSDK(out io.Writer, modelID string) error {
 	return nil
 }
 
-func resolveKronkModelURLWithSDK(modelID string) (string, error) {
+func ResolveKronkModelURLWithSDK(modelID string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -364,7 +364,7 @@ func resolveKronkModelURLWithSDK(modelID string) (string, error) {
 	return details.Files.Models[0].URL, nil
 }
 
-func defaultModel(provider string) string {
+func DefaultModel(provider string) string {
 	switch provider {
 	case "anthropic":
 		return "claude-sonnet-4-20250514"

@@ -10,7 +10,6 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/ncruces/go-sqlite3 v0.30.5
-	github.com/spf13/cobra v1.10.2
 	go.mau.fi/whatsmeow v0.0.0-20260219150138-7ae702b1eed4
 	golang.org/x/net v0.50.0
 	golang.org/x/term v0.40.0
@@ -30,6 +29,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.31.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 // indirect
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.9 // indirect
@@ -92,7 +92,6 @@ require (
 	github.com/hashicorp/go-getter v1.8.4 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
 	github.com/hybridgroup/yzma v1.9.0 // indirect
-	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jupiterrider/ffi v0.6.0 // indirect
 	github.com/kaptinlin/go-i18n v0.2.9 // indirect
@@ -126,7 +125,6 @@ require (
 	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect

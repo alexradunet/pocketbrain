@@ -65,6 +65,58 @@ var (
 			Foreground(colorMuted).
 			Padding(0, 1)
 
+	// Setup wizard styles
+	setupPanelStyle = lipgloss.NewStyle().
+			Padding(1, 2)
+
+	setupStepTitleStyle = lipgloss.NewStyle().
+				Foreground(colorSecondary).
+				Bold(true)
+
+	setupDividerStyle = lipgloss.NewStyle().
+				Foreground(colorBorder)
+
+	setupCursorStyle = lipgloss.NewStyle().
+				Foreground(colorPrimary).
+				Bold(true)
+
+	setupHighlightStyle = lipgloss.NewStyle().
+				Foreground(colorPrimary)
+
+	setupCheckSelectedStyle = lipgloss.NewStyle().
+				Foreground(colorSuccess)
+
+	setupHintStyle = lipgloss.NewStyle().
+			Foreground(colorMuted).
+			Italic(true)
+
+	setupErrorStyle = lipgloss.NewStyle().
+			Foreground(colorError).
+			Bold(true)
+
+	setupSuccessStyle = lipgloss.NewStyle().
+				Foreground(colorSuccess).
+				Bold(true)
+
+	setupStatusStyle = lipgloss.NewStyle().
+				Foreground(colorWarning)
+
+	setupSpinnerStyle = lipgloss.NewStyle().
+				Foreground(colorMuted)
+
+	setupProgressActive = lipgloss.NewStyle().
+				Foreground(colorPrimary).
+				Bold(true)
+
+	setupProgressDone = lipgloss.NewStyle().
+				Foreground(colorSuccess)
+
+	setupProgressInactive = lipgloss.NewStyle().
+				Foreground(colorMuted)
+
+	setupProgressSep = lipgloss.NewStyle().
+				Foreground(colorBorder)
+
 	// Suppress unused warnings
 	_ = colorWarning
 	_ = msgBot

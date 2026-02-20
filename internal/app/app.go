@@ -18,21 +18,42 @@ import (
 	"github.com/pocketbrain/pocketbrain/internal/scheduler"
 	"github.com/pocketbrain/pocketbrain/internal/skills"
 	"github.com/pocketbrain/pocketbrain/internal/store"
-	"github.com/pocketbrain/pocketbrain/internal/webdav"
 	"github.com/pocketbrain/pocketbrain/internal/tui"
+	"github.com/pocketbrain/pocketbrain/internal/webdav"
 	"github.com/pocketbrain/pocketbrain/internal/workspace"
 )
 
-// Run is the composition root. It wires all dependencies and starts the app.
+// StartBackend wires all backend services using the given event bus.
+// Returns a cleanup function. The caller owns the TUI lifecycle.
+func StartBackend(bus *tui.EventBus) (func(), error) {
+	return startBackendInternal(bus, false)
+}
+
+// Run starts PocketBrain in headless mode. It creates its own event bus and
+// blocks until interrupted.
 func Run(headless bool) error {
+	bus := tui.NewEventBus(512)
+
+	cleanup, err := startBackendInternal(bus, headless)
+	if err != nil {
+		return err
+	}
+
+	if headless {
+		// Block until signal handler fires.
+		select {}
+	}
+
+	_ = cleanup
+	return nil
+}
+
+func startBackendInternal(bus *tui.EventBus, headless bool) (func(), error) {
 	// Load configuration.
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("config: %w", err)
+		return nil, fmt.Errorf("config: %w", err)
 	}
-
-	// Create event bus for TUI <-> backend communication.
-	bus := tui.NewEventBus(512)
 
 	// Setup structured logging.
 	var logLevel slog.Level
@@ -65,14 +86,14 @@ func Run(headless bool) error {
 	// Ensure data directories exist.
 	for _, dir := range []string{cfg.DataDir, cfg.PocketBrainHome} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("mkdir %s: %w", dir, err)
+			return nil, fmt.Errorf("mkdir %s: %w", dir, err)
 		}
 	}
 
 	// Open database.
 	db, err := store.Open(cfg.DataDir)
 	if err != nil {
-		return fmt.Errorf("database: %w", err)
+		return nil, fmt.Errorf("database: %w", err)
 	}
 
 	// Create repositories.
@@ -124,7 +145,7 @@ func Run(headless bool) error {
 	if cfg.WorkspaceEnabled {
 		workspaceService = workspace.New(cfg.WorkspacePath, logger)
 		if err := workspaceService.Initialize(); err != nil {
-			return fmt.Errorf("workspace: %w", err)
+			return nil, fmt.Errorf("workspace: %w", err)
 		}
 		logger.Info("workspace initialized", "path", cfg.WorkspacePath)
 	}
@@ -183,7 +204,7 @@ func Run(headless bool) error {
 		})
 		if err != nil {
 			cancel()
-			return fmt.Errorf("ai provider: %w", err)
+			return nil, fmt.Errorf("ai provider: %w", err)
 		}
 		provider = fp
 		logger.Info("AI provider ready", "provider", providerName, "model", cfg.Model)
@@ -222,10 +243,10 @@ func Run(headless bool) error {
 			Logger:  logger,
 		})
 		if err != nil {
-			return fmt.Errorf("webdav: %w", err)
+			return nil, fmt.Errorf("webdav: %w", err)
 		}
 		if err := wdSvc.Start(); err != nil {
-			return fmt.Errorf("webdav start: %w", err)
+			return nil, fmt.Errorf("webdav start: %w", err)
 		}
 		shutdown.addCloser(func() { _ = wdSvc.Stop() })
 		bus.Publish(tui.Event{
@@ -256,7 +277,7 @@ func Run(headless bool) error {
 			Logger:  logger,
 		})
 		if err != nil {
-			return fmt.Errorf("whatsapp client: %w", err)
+			return nil, fmt.Errorf("whatsapp client: %w", err)
 		}
 
 		cmdRouter := whatsapp.NewCommandRouter(
@@ -292,7 +313,7 @@ func Run(headless bool) error {
 			return processor.Process(userID, text)
 		}); err != nil {
 			_ = waClient.Close()
-			return fmt.Errorf("whatsapp start: %w", err)
+			return nil, fmt.Errorf("whatsapp start: %w", err)
 		}
 
 		outboxProcessor := whatsapp.NewOutboxProcessor(outboxRepo, waClient, logger)
@@ -335,26 +356,7 @@ func Run(headless bool) error {
 	// Register signal handlers.
 	shutdown.handleSignals()
 
-	if headless {
-		logger.Info("running in headless mode (Ctrl+C to stop)")
-		<-ctx.Done()
-		shutdown.run()
-		return nil
-	}
-
-	// Start TUI.
-	logger.Info("starting TUI")
-	go func() {
-		<-ctx.Done()
-	}()
-
-	if err := tui.Run(bus); err != nil {
-		shutdown.run()
-		return fmt.Errorf("tui: %w", err)
-	}
-
-	shutdown.run()
-	return nil
+	return shutdown.run, nil
 }
 
 // sessionStarterAdapter bridges AssistantCore to the whatsapp.SessionStarter

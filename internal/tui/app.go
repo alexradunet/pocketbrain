@@ -231,13 +231,3 @@ func listenForEvents(bus *EventBus) tea.Cmd {
 	}
 }
 
-// Run starts the TUI program.
-func Run(bus *EventBus) error {
-	p := tea.NewProgram(
-		New(bus),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
-	_, err := p.Run()
-	return err
-}
