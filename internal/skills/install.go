@@ -3,6 +3,7 @@ package skills
 import (
 	"fmt"
 	"net/url"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -71,24 +72,46 @@ func SafeName(s string) string {
 
 // IsSafeSubpath checks whether a relative path is safe (no traversal).
 // It rejects empty paths, absolute paths, and any path containing "..".
-func IsSafeSubpath(path string) bool {
-	if path == "" {
+func IsSafeSubpath(subpath string) bool {
+	if subpath == "" {
 		return false
 	}
-	if filepath.IsAbs(path) {
+	if isAbsPathAnyOS(subpath) {
 		return false
 	}
 
-	cleaned := filepath.Clean(path)
-	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+	normalized := strings.ReplaceAll(subpath, `\`, "/")
+	cleaned := pathpkg.Clean(normalized)
+	if cleaned == "." || cleaned == ".." {
 		return false
 	}
-	// Also check for embedded traversal after cleaning.
-	if strings.Contains(cleaned, ".."+string(filepath.Separator)) {
+	if strings.HasPrefix(cleaned, "../") || strings.Contains(cleaned, "/../") {
+		return false
+	}
+	if strings.HasPrefix(cleaned, "/") {
 		return false
 	}
 
 	return true
+}
+
+func isAbsPathAnyOS(p string) bool {
+	if filepath.IsAbs(p) {
+		return true
+	}
+
+	if strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\`) || strings.HasPrefix(p, "//") || strings.HasPrefix(p, `\\`) {
+		return true
+	}
+
+	if len(p) >= 2 {
+		drive := p[0]
+		if ((drive >= 'a' && drive <= 'z') || (drive >= 'A' && drive <= 'Z')) && p[1] == ':' {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Install clones skills from a GitHub tree URL into the workspace's skills

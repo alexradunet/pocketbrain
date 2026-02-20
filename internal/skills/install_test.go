@@ -122,7 +122,11 @@ func TestIsSafeSubpath_TraversalAttempt(t *testing.T) {
 		"../escape.md",
 		"../../etc/passwd",
 		"skills/../../../etc/passwd",
+		`skills\..\..\..\etc\passwd`,
 		"/absolute/path",
+		`\absolute\path`,
+		`C:\absolute\path`,
+		`\\server\share\path`,
 		"",
 	}
 	for _, p := range paths {

@@ -108,15 +108,22 @@ func TestDataDirResolution(t *testing.T) {
 		t.Errorf("DataDir = %q, want %q", cfg.DataDir, expected)
 	}
 
-	// Absolute path
-	clearEnv()
-	t.Setenv("DATA_DIR", "/tmp/pb-test-data")
-	cfg, err = Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	absoluteCases := []string{
+		"/tmp/pb-test-data",
+		`C:\pb-test-data`,
+		`\\server\share\pb-test-data`,
 	}
-	if cfg.DataDir != "/tmp/pb-test-data" {
-		t.Errorf("DataDir = %q, want %q", cfg.DataDir, "/tmp/pb-test-data")
+
+	for _, tc := range absoluteCases {
+		clearEnv()
+		t.Setenv("DATA_DIR", tc)
+		cfg, err = Load()
+		if err != nil {
+			t.Fatalf("unexpected error for %q: %v", tc, err)
+		}
+		if cfg.DataDir != tc {
+			t.Errorf("DataDir = %q, want %q", cfg.DataDir, tc)
+		}
 	}
 }
 

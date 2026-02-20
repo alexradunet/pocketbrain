@@ -26,13 +26,41 @@ func TestWhatsmeowClient_NewClient_CreatesDB(t *testing.T) {
 }
 
 func TestWhatsmeowClient_NewClient_InvalidAuthDir(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
 	_, err := NewWhatsmeowClient(WhatsmeowConfig{
-		AuthDir: "/dev/null/nope",
+		AuthDir: filePath,
 		Logger:  testLogger(),
 	})
 	if err == nil {
 		t.Fatal("expected error for invalid auth dir")
 	}
+}
+
+func TestWhatsmeowClient_NewClient_EmptyAuthDir(t *testing.T) {
+	_, err := NewWhatsmeowClient(WhatsmeowConfig{
+		AuthDir: "",
+		Logger:  testLogger(),
+	})
+	if err == nil {
+		t.Fatal("expected error for empty auth dir")
+	}
+}
+
+func TestWhatsmeowClient_NewClient_NilLoggerAllowed(t *testing.T) {
+	dir := t.TempDir()
+	client, err := NewWhatsmeowClient(WhatsmeowConfig{
+		AuthDir: dir,
+		Logger:  nil,
+	})
+	if err != nil {
+		t.Fatalf("NewWhatsmeowClient: %v", err)
+	}
+	defer client.Close()
 }
 
 func TestWhatsmeowClient_IsConnected_InitiallyFalse(t *testing.T) {

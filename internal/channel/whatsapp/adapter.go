@@ -157,14 +157,8 @@ func (p *MessageProcessor) Process(userID, text string) (string, error) {
 		return "", fmt.Errorf("whitelist check: %w", err)
 	}
 	if !allowed {
-		added, addErr := p.whitelist.AddToWhitelist("whatsapp", userID)
-		if addErr != nil {
-			p.logger.Error("auto-whitelist failed", "userID", userID, "error", addErr)
-			return "", fmt.Errorf("auto-whitelist: %w", addErr)
-		}
-		if added {
-			p.logger.Info("user auto-whitelisted", "userID", userID)
-		}
+		p.logger.Warn("non-whitelisted user rejected", "userID", userID)
+		return "You are not authorized. Ask the operator to whitelist your number.", nil
 	}
 
 	// Delegate to the main handler.

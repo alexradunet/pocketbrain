@@ -59,19 +59,10 @@ func (r *CommandRouter) Route(userID, text string) (string, bool) {
 	}
 }
 
-// handlePair whitelists the user via the /pair command.
+// handlePair is intentionally disabled. Access is controlled by operator-managed whitelist entries.
 func (r *CommandRouter) handlePair(userID, _ string) string {
-	added, err := r.whitelist.AddToWhitelist("whatsapp", userID)
-	if err != nil {
-		r.logger.Error("failed to whitelist user", "userID", userID, "error", err)
-		return fmt.Sprintf("Pairing failed: %v", err)
-	}
-	if !added {
-		return "You are already paired."
-	}
-
-	r.logger.Info("user paired successfully", "userID", userID)
-	return "Paired successfully! You can now send messages."
+	r.logger.Warn("pairing command denied", "userID", userID)
+	return "Pairing is disabled. Ask the operator to whitelist your number."
 }
 
 // handleNew starts a fresh conversation session.

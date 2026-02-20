@@ -208,10 +208,29 @@ func envInt(key string, fallback int) int {
 }
 
 func resolvePath(cwd, value string) string {
-	if filepath.IsAbs(value) {
+	if isAbsPathAnyOS(value) {
 		return value
 	}
 	return filepath.Join(cwd, value)
+}
+
+func isAbsPathAnyOS(value string) bool {
+	if filepath.IsAbs(value) {
+		return true
+	}
+
+	if strings.HasPrefix(value, "/") || strings.HasPrefix(value, `\`) || strings.HasPrefix(value, "//") || strings.HasPrefix(value, `\\`) {
+		return true
+	}
+
+	if len(value) >= 2 {
+		drive := value[0]
+		if ((drive >= 'a' && drive <= 'z') || (drive >= 'A' && drive <= 'Z')) && value[1] == ':' {
+			return true
+		}
+	}
+
+	return false
 }
 
 func parsePhoneWhitelist(values ...string) []string {

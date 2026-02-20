@@ -280,7 +280,7 @@ func TestWhatsAppAdapter_Stop_Idempotent(t *testing.T) {
 // CommandRouter tests
 // ---------------------------------------------------------------------------
 
-func TestCommandRouter_Pair_WhitelistsUser(t *testing.T) {
+func TestCommandRouter_Pair_Disabled(t *testing.T) {
 	wl := newStubWhitelist()
 	router := &CommandRouter{
 		whitelist:  wl,
@@ -293,33 +293,14 @@ func TestCommandRouter_Pair_WhitelistsUser(t *testing.T) {
 	if !handled {
 		t.Fatal("expected command to be handled")
 	}
-	if resp == "" {
-		t.Fatal("expected non-empty response")
+	if resp != "Pairing is disabled. Ask the operator to whitelist your number." {
+		t.Fatalf("response = %q; want disabled message", resp)
 	}
 
-	// User should now be whitelisted.
+	// User should NOT be whitelisted.
 	ok, _ := wl.IsWhitelisted("whatsapp", "user@test")
-	if !ok {
-		t.Error("user should be whitelisted after /pair")
-	}
-}
-
-func TestCommandRouter_Pair_AlreadyPaired(t *testing.T) {
-	wl := newStubWhitelist()
-	wl.AddToWhitelist("whatsapp", "user@test")
-	router := &CommandRouter{
-		whitelist:  wl,
-		memoryRepo: newStubMemoryRepo(),
-		sessionMgr: &stubSessionStarter{},
-		logger:     testLogger(),
-	}
-
-	resp, handled := router.Route("user@test", "/pair")
-	if !handled {
-		t.Fatal("expected command to be handled")
-	}
-	if resp != "You are already paired." {
-		t.Errorf("response = %q; want %q", resp, "You are already paired.")
+	if ok {
+		t.Error("user should not be whitelisted after /pair")
 	}
 }
 
@@ -404,7 +385,7 @@ func TestMessageProcessor_WhitelistedUser_Processes(t *testing.T) {
 	}
 }
 
-func TestMessageProcessor_AutoWhitelistsAndProcesses(t *testing.T) {
+func TestMessageProcessor_NonWhitelistedUser_Rejected(t *testing.T) {
 	wl := newStubWhitelist()
 
 	var handlerCalled bool
@@ -425,15 +406,15 @@ func TestMessageProcessor_AutoWhitelistsAndProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	if !handlerCalled {
-		t.Error("expected handler to be called for auto-whitelisted user")
+	if handlerCalled {
+		t.Error("handler should not be called for non-whitelisted user")
 	}
-	if resp != "reply" {
-		t.Errorf("response = %q; want %q", resp, "reply")
+	if resp != "You are not authorized. Ask the operator to whitelist your number." {
+		t.Fatalf("response = %q; want rejection message", resp)
 	}
 	ok, _ := wl.IsWhitelisted("whatsapp", "newuser@test")
-	if !ok {
-		t.Error("expected user to be auto-whitelisted")
+	if ok {
+		t.Error("user should not be auto-whitelisted")
 	}
 }
 

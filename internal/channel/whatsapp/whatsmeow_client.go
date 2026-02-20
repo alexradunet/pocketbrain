@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	// Register ncruces sqlite3 as a database/sql driver for whatsmeow's sqlstore.
@@ -41,6 +42,13 @@ type WhatsmeowConfig struct {
 // NewWhatsmeowClient creates a WhatsmeowClient backed by whatsmeow.
 // It initialises the SQL session store but does not connect.
 func NewWhatsmeowClient(cfg WhatsmeowConfig) (*WhatsmeowClient, error) {
+	if strings.TrimSpace(cfg.AuthDir) == "" {
+		return nil, fmt.Errorf("auth dir cannot be empty")
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+
 	if err := os.MkdirAll(cfg.AuthDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create auth dir: %w", err)
 	}
