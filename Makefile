@@ -1,30 +1,26 @@
 SHELL := /usr/bin/env bash
+BINARY := pocketbrain
 
-.PHONY: setup-dev setup-runtime setup dev start test typecheck build logs release shell vault-init doctor
-
-setup-dev:
-	./scripts/setup/install-debian-dev.sh
-
-setup-runtime:
-	./scripts/setup/install-debian-runtime.sh
-
-setup:
-	bun run setup
-
-dev:
-	bun run dev
-
-start:
-	bun run start
-
-test:
-	bun run test
-
-typecheck:
-	bun run typecheck
+.PHONY: build dev test clean setup logs release shell doctor
 
 build:
-	bun run build
+	go build -o $(BINARY) .
+
+dev:
+	go run . start
+
+start:
+	go run . start --headless
+
+test:
+	go test ./... -count=1
+
+setup:
+	go run . setup
+
+clean:
+	rm -f $(BINARY)
+	go clean -cache
 
 logs:
 	./scripts/ops/runtime-logs.sh $(ARGS)
@@ -34,9 +30,6 @@ release:
 
 shell:
 	./scripts/ops/runtime-shell.sh $(ARGS)
-
-vault-init:
-	./scripts/setup/init-vault.sh $(or $(VAULT_DIR),vault) $(ARGS)
 
 doctor:
 	./scripts/ops/doctor.sh $(ARGS)

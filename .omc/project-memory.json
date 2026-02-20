@@ -139,8 +139,32 @@
   "hotPaths": [
     {
       "path": "go/internal/app/app.go",
-      "accessCount": 1,
-      "lastAccessed": 1771541273030,
+      "accessCount": 2,
+      "lastAccessed": 1771576368673,
+      "type": "file"
+    },
+    {
+      "path": "go/go.mod",
+      "accessCount": 2,
+      "lastAccessed": 1771576370063,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/config/config.go",
+      "accessCount": 2,
+      "lastAccessed": 1771576374247,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 2,
+      "lastAccessed": 1771576376476,
+      "type": "directory"
+    },
+    {
+      "path": "go/internal/core/ports.go",
+      "accessCount": 2,
+      "lastAccessed": 1771576380603,
       "type": "file"
     },
     {
@@ -156,21 +180,9 @@
       "type": "file"
     },
     {
-      "path": "go/internal/config/config.go",
-      "accessCount": 1,
-      "lastAccessed": 1771541274357,
-      "type": "file"
-    },
-    {
       "path": "go/internal/core/prompt.go",
       "accessCount": 1,
       "lastAccessed": 1771541274914,
-      "type": "file"
-    },
-    {
-      "path": "go/internal/core/ports.go",
-      "accessCount": 1,
-      "lastAccessed": 1771541275305,
       "type": "file"
     },
     {
@@ -222,12 +234,6 @@
       "type": "file"
     },
     {
-      "path": "go/go.mod",
-      "accessCount": 1,
-      "lastAccessed": 1771541283787,
-      "type": "file"
-    },
-    {
       "path": "go/internal/core/session.go",
       "accessCount": 1,
       "lastAccessed": 1771541284284,
@@ -243,6 +249,78 @@
       "path": "go/internal/workspace/workspace.go",
       "accessCount": 1,
       "lastAccessed": 1771541400084,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/channel/whatsapp/adapter.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576369176,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/channel/whatsapp/commands.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576369645,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/core/assistant_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576374846,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/core/assistant.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576380793,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/channel/whatsapp/adapter_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576381272,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/channel/whatsapp/outbox.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576381805,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/app/shutdown.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576382327,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/channel/whatsapp/bruteforce.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576386597,
+      "type": "file"
+    },
+    {
+      "path": "go/internal/channel",
+      "accessCount": 1,
+      "lastAccessed": 1771576387805,
+      "type": "directory"
+    },
+    {
+      "path": "go",
+      "accessCount": 1,
+      "lastAccessed": 1771576389133,
+      "type": "directory"
+    },
+    {
+      "path": "go/internal/channel/manager.go",
+      "accessCount": 1,
+      "lastAccessed": 1771576392686,
+      "type": "file"
+    },
+    {
+      "path": "Makefile",
+      "accessCount": 1,
+      "lastAccessed": 1771578559434,
       "type": "file"
     }
   ],

@@ -1,4 +1,8 @@
-node_modules
+# Build output
+pocketbrain
+*.exe
+
+# Data & state
 .env
 .env.*
 !.env.example
@@ -6,13 +10,13 @@ node_modules
 data/
 backups/
 .tmp
+
+# Database files
 *.db
 *.db-wal
 *.db-shm
 
-# Runtime-generated secrets/state
-
-# Common secret material
+# Secret material
 *.pem
 *.key
 *.p12
@@ -20,7 +24,10 @@ backups/
 *.crt
 *.cer
 
-# User vault content (track only folder READMEs)
+# User workspace content (track only folder READMEs)
 vault/**
 !vault/**/
 !vault/**/README.md
+
+# Go
+.cache/
