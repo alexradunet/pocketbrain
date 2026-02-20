@@ -84,7 +84,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		case ScreenDashboard:
 			dm, cmd := m.dashboard.Update(msg)
-			m.dashboard = dm.(Model)
+			if d, ok := dm.(Model); ok {
+				m.dashboard = d
+			}
 			return m, cmd
 		}
 		return m, nil
@@ -138,7 +140,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		case ScreenDashboard:
 			dm, cmd := m.dashboard.Update(msg)
-			m.dashboard = dm.(Model)
+			if d, ok := dm.(Model); ok {
+				m.dashboard = d
+			}
 			return m, cmd
 		}
 		return m, nil
@@ -152,7 +156,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		case ScreenDashboard:
 			dm, cmd := m.dashboard.Update(msg)
-			m.dashboard = dm.(Model)
+			if d, ok := dm.(Model); ok {
+				m.dashboard = d
+			}
 			return m, cmd
 		}
 	}

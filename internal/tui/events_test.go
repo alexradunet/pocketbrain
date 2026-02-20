@@ -46,7 +46,7 @@ func TestModel_HandleSessionChangedEvent_AddsMessage(t *testing.T) {
 		},
 	}
 
-	m.handleEvent(e)
+	m = m.handleEvent(e)
 
 	if len(m.messages.messages) != 1 {
 		t.Fatalf("messages len = %d, want 1", len(m.messages.messages))

@@ -42,6 +42,14 @@ type Model struct {
 	memoryCount int
 	outboxCount int
 	activeTasks int
+
+	// computed layout — set in Update, read in View
+	msgW    int
+	msgH    int
+	logW    int
+	logH    int
+	statusW int
+	statusH int
 }
 
 // New creates a new TUI model.
@@ -68,12 +76,70 @@ func (m *Model) SetSize(w, h int) {
 	m.width = w
 	m.height = h
 	m.ready = w > 0 && h > 0
+	if m.ready {
+		m.updateLayout()
+	}
+}
+
+func (m *Model) updateLayout() {
+	mode := layoutMode(m.width)
+	m.header.width = m.width
+	if mode == LayoutCompact {
+		mainH := m.height - 4
+		if mainH < 6 {
+			mainH = 6
+		}
+		msgH := mainH * 40 / 100
+		if msgH < 3 {
+			msgH = 3
+		}
+		statusH := mainH * 30 / 100
+		if statusH < 3 {
+			statusH = 3
+		}
+		logH := mainH - msgH - statusH
+		if logH < 3 {
+			logH = 3
+		}
+		contentW := m.width - 4
+		if contentW < 10 {
+			contentW = 10
+		}
+		m.msgW = contentW
+		m.msgH = msgH - 2
+		m.logW = contentW
+		m.logH = logH - 2
+		m.statusW = contentW
+		m.statusH = statusH
+	} else {
+		leftW, rightW := layoutColumns(m.width, mode)
+		mainH := m.height - 4
+		if mainH < 4 {
+			mainH = 4
+		}
+		msgH := mainH * 2 / 3
+		if msgH < 3 {
+			msgH = 3
+		}
+		logH := mainH - msgH
+		if logH < 3 {
+			logH = 3
+		}
+		m.msgW = leftW - 4
+		m.msgH = msgH - 2
+		m.logW = m.width - 4
+		m.logH = logH - 2
+		m.statusW = rightW - 2
+		m.statusH = msgH
+	}
+	m.messages.width = m.msgW
+	m.messages.height = m.msgH
+	m.logs.width = m.logW
+	m.logs.height = m.logH
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
-		listenForEvents(m.eventSub),
-	)
+	return listenForEvents(m.eventSub)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -82,6 +148,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
+		m.updateLayout()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -98,14 +165,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case eventMsg:
-		m.handleEvent(Event(msg))
+		m = m.handleEvent(Event(msg))
 		return m, listenForEvents(m.eventSub)
 	}
 
 	return m, nil
 }
 
-func (m *Model) handleEvent(e Event) {
+func (m Model) handleEvent(e Event) Model {
 	switch e.Type {
 	case EventLog:
 		if le, ok := e.Data.(LogEvent); ok {
@@ -184,6 +251,7 @@ func (m *Model) handleEvent(e Event) {
 			m.header.webConn = se.Connected
 		}
 	}
+	return m
 }
 
 func (m Model) View() string {
@@ -195,64 +263,32 @@ func (m Model) View() string {
 	if mode == LayoutCompact {
 		return m.viewCompact()
 	}
-	return m.viewColumns(mode)
+	return m.viewColumns()
 }
 
 func (m Model) viewCompact() string {
-	m.header.width = m.width
 	header := m.header.View()
-
-	mainH := m.height - 4
-	if mainH < 6 {
-		mainH = 6
-	}
-
-	msgH := mainH * 40 / 100
-	if msgH < 3 {
-		msgH = 3
-	}
-	statusH := mainH * 30 / 100
-	if statusH < 3 {
-		statusH = 3
-	}
-	logH := mainH - msgH - statusH
-	if logH < 3 {
-		logH = 3
-	}
-
-	contentW := m.width - 4
-	if contentW < 10 {
-		contentW = 10
-	}
-
-	// Messages panel
-	m.messages.width = contentW
-	m.messages.height = msgH - 2
 
 	// Status / QR panel
 	var statusPanel string
 	if m.qr.active() {
-		qrH := statusH * 2 / 3
+		qrH := m.statusH * 2 / 3
 		if qrH < 6 {
 			qrH = 6
 		}
-		sH := statusH - qrH
+		sH := m.statusH - qrH
 		if sH < 2 {
 			sH = 2
 		}
-		m.qr.width = contentW
-		qrView := m.qr.CompactView(contentW, qrH-2)
-		statusContent := m.renderStatusPanel(contentW-4, sH-2)
-		statusView := panelStyle.Width(contentW).Height(sH - 2).Render(statusContent)
+		m.qr.width = m.statusW
+		qrView := m.qr.CompactView(m.statusW, qrH-2)
+		statusContent := m.renderStatusPanel(m.statusW-4, sH-2)
+		statusView := panelStyle.Width(m.statusW).Height(sH - 2).Render(statusContent)
 		statusPanel = lipgloss.JoinVertical(lipgloss.Left, qrView, statusView)
 	} else {
-		statusContent := m.renderStatusPanel(contentW-4, statusH-2)
-		statusPanel = panelStyle.Width(contentW).Height(statusH - 2).Render(statusContent)
+		statusContent := m.renderStatusPanel(m.statusW-4, m.statusH-2)
+		statusPanel = panelStyle.Width(m.statusW).Height(m.statusH - 2).Render(statusContent)
 	}
-
-	// Logs panel
-	m.logs.width = contentW
-	m.logs.height = logH - 2
 
 	help := helpStyle.Render("[q] [m] [l] [tab]")
 
@@ -265,59 +301,35 @@ func (m Model) viewCompact() string {
 	)
 }
 
-func (m Model) viewColumns(mode LayoutMode) string {
-	m.header.width = m.width
+func (m Model) viewColumns() string {
 	header := m.header.View()
-
-	leftW, rightW := layoutColumns(m.width, mode)
-	mainH := m.height - 4
-	if mainH < 4 {
-		mainH = 4
-	}
-
-	msgH := mainH * 2 / 3
-	if msgH < 3 {
-		msgH = 3
-	}
-	logH := mainH - msgH
-	if logH < 3 {
-		logH = 3
-	}
-
-	// Left panel: messages
-	m.messages.width = leftW - 4
-	m.messages.height = msgH - 2
 
 	// Right panel: status info, with QR overlay when active.
 	var statusPanel string
 	if m.qr.active() {
-		qrH := msgH * 2 / 3
+		qrH := m.statusH * 2 / 3
 		if qrH < 8 {
 			qrH = 8
 		}
-		statusH := msgH - qrH
+		statusH := m.statusH - qrH
 		if statusH < 3 {
 			statusH = 3
 		}
 
-		m.qr.width = rightW - 2
-		qrView := m.qr.CompactView(rightW-2, qrH-2)
-		statusContent := m.renderStatusPanel(rightW-6, statusH-2)
-		statusView := panelStyle.Width(rightW - 2).Height(statusH - 2).Render(statusContent)
+		m.qr.width = m.statusW
+		qrView := m.qr.CompactView(m.statusW, qrH-2)
+		statusContent := m.renderStatusPanel(m.statusW-4, statusH-2)
+		statusView := panelStyle.Width(m.statusW).Height(statusH - 2).Render(statusContent)
 		statusPanel = lipgloss.JoinVertical(lipgloss.Left, qrView, statusView)
 	} else {
-		statusContent := m.renderStatusPanel(rightW-6, msgH-2)
-		statusPanel = panelStyle.Width(rightW - 2).Height(msgH - 2).Render(statusContent)
+		statusContent := m.renderStatusPanel(m.statusW-4, m.statusH-2)
+		statusPanel = panelStyle.Width(m.statusW).Height(m.statusH - 2).Render(statusContent)
 	}
 
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top,
 		m.messages.View(),
 		statusPanel,
 	)
-
-	// Bottom panel: logs
-	m.logs.width = m.width - 4
-	m.logs.height = logH - 2
 
 	help := helpStyle.Render("[q]uit  [m]essages  [v]ault  [l]ogs  [tab] focus")
 

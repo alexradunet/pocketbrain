@@ -193,7 +193,7 @@ func (m SetupModel) handleKeyInput(msg tea.KeyMsg) (SetupModel, tea.Cmd) {
 			m.step = next
 			if next == stepKronkCatalog {
 				m.statusText = "Fetching Kronk catalog..."
-				return m, tea.Batch(m.spinner.Tick, fetchCatalogCmd)
+				return m, tea.Batch(m.spinner.Tick, fetchCatalogCmd())
 			}
 			m.initStepInput()
 		}
@@ -579,9 +579,11 @@ func (m SetupModel) renderProgress() string {
 
 // --- Async command helpers ---
 
-func fetchCatalogCmd() tea.Msg {
-	entries, err := setup.FetchKronkCatalogModels()
-	return catalogFetchedMsg{entries: entries, err: err}
+func fetchCatalogCmd() tea.Cmd {
+	return func() tea.Msg {
+		entries, err := setup.FetchKronkCatalogModels()
+		return catalogFetchedMsg{entries: entries, err: err}
+	}
 }
 
 func resolveKronkModelCmd(modelID string) tea.Cmd {
