@@ -13,7 +13,7 @@ go build ./...
 ## 2) Deploy
 
 ```bash
-go build -o pocketbrain .
+go build .
 sudo systemctl restart pocketbrain
 ```
 

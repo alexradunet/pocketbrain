@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 )
 
 // Compile-time check that AssistantCore satisfies HeartbeatRunner.
@@ -76,6 +77,12 @@ func NewAssistantCore(opts AssistantCoreOptions) *AssistantCore {
 
 // Ask processes a user message and returns the model reply.
 func (a *AssistantCore) Ask(ctx context.Context, input AssistantInput) (string, error) {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+	}
+
 	opID := operationID("ask")
 
 	sessionID, err := a.sessionMgr.GetOrCreateMainSession(ctx, a.provider.CreateSession)
@@ -131,6 +138,12 @@ func (a *AssistantCore) Ask(ctx context.Context, input AssistantInput) (string, 
 // then injects the summary into the main session and triggers a proactive
 // notification decision.
 func (a *AssistantCore) RunHeartbeatTasks(ctx context.Context) (string, error) {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+	}
+
 	opID := operationID("heartbeat")
 
 	tasks, err := a.heartbeatRepo.GetTasks()

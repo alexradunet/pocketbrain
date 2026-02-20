@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go doc:*)",
+      "Bash(grep:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(git stash:*)",
+      "Bash(ls:*)",
+      "Bash(git soft-reset-test:*)",
+      "Bash(git reset:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)"
     ]
   }
 }

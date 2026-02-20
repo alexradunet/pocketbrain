@@ -174,7 +174,7 @@ func (w *WhatsmeowClient) handleMessage(evt *events.Message) {
 		return
 	}
 
-	sender := evt.Info.Sender.String()
+	sender := evt.Info.Sender.ToNonAD().String()
 
 	w.mu.Lock()
 	fn := w.onMessage

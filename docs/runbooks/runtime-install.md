@@ -21,6 +21,6 @@ Follow:
 
 ```bash
 git pull
-go build -o pocketbrain .
+go build .
 sudo systemctl restart pocketbrain
 ```

@@ -11,7 +11,7 @@ All commands assume repository root.
 ### 1) Build binary
 
 ```bash
-go build -o pocketbrain .
+go build .
 ```
 
 ### 2) Run interactive setup once
@@ -66,7 +66,7 @@ Optional runtime runbooks:
 ### 2) Build + configure
 
 ```bash
-go build -o pocketbrain .
+go build .
 ./pocketbrain setup
 ```
 
@@ -80,7 +80,7 @@ go run . start
 ### 4) Common developer commands
 
 ```bash
-go build -o pocketbrain .    # compile binary
+go build .    # compile binary
 go test ./... -count=1       # run all tests
 go run . start               # run with TUI (dev)
 go run . start --headless    # run headless
@@ -91,7 +91,7 @@ go run . setup               # interactive setup wizard
 
 Primary keys used by runtime/setup:
 - `PROVIDER`, `MODEL`, `API_KEY`
-- `ENABLE_WHATSAPP`, `WHATSAPP_AUTH_DIR`, `WHITELIST_PAIR_TOKEN`
+- `ENABLE_WHATSAPP`, `WHATSAPP_AUTH_DIR`, `WHATSAPP_WHITELIST_NUMBERS`
 - `WORKSPACE_ENABLED`, `WORKSPACE_PATH`
 - `TAILSCALE_ENABLED`, `TS_AUTHKEY`, `TS_HOSTNAME`, `TS_STATE_DIR`
 - `TAILDRIVE_ENABLED`, `TAILDRIVE_SHARE_NAME`, `TAILDRIVE_AUTO_SHARE`

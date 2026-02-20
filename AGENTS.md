@@ -102,7 +102,7 @@ User (via WhatsApp):
 - `/pair <token>` — whitelist yourself.
 
 Developer:
-- `go build -o pocketbrain .` — compile binary.
+- `go build .` — compile binary.
 - `go test ./... -count=1` — run all tests.
 - `go run . start` — run with TUI.
 - `go run . start --headless` — run headless.

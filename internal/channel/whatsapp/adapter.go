@@ -157,18 +157,13 @@ func (p *MessageProcessor) Process(userID, text string) (string, error) {
 		return "", fmt.Errorf("whitelist check: %w", err)
 	}
 	if !allowed {
-		if p.router != nil && p.router.TokenlessPairingEnabled() {
-			added, addErr := p.whitelist.AddToWhitelist("whatsapp", userID)
-			if addErr != nil {
-				p.logger.Error("tokenless auto-whitelist failed", "userID", userID, "error", addErr)
-				return "", fmt.Errorf("tokenless whitelist: %w", addErr)
-			}
-			if added {
-				p.logger.Info("user auto-whitelisted in tokenless mode", "userID", userID)
-			}
-		} else {
-			p.logger.Warn("message from non-whitelisted user ignored", "userID", userID)
-			return "", nil
+		added, addErr := p.whitelist.AddToWhitelist("whatsapp", userID)
+		if addErr != nil {
+			p.logger.Error("auto-whitelist failed", "userID", userID, "error", addErr)
+			return "", fmt.Errorf("auto-whitelist: %w", addErr)
+		}
+		if added {
+			p.logger.Info("user auto-whitelisted", "userID", userID)
 		}
 	}
 

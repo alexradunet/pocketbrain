@@ -7,7 +7,7 @@ Single binary. Zero runtime dependencies. Just build and run.
 ## Quick Start (Interactive)
 
 ```bash
-go build -o pocketbrain .   # produces ./pocketbrain binary
+go build .                   # produces ./pocketbrain binary
 ./pocketbrain setup          # first-run interactive setup (creates/patches .env)
 ./pocketbrain start          # start with TUI
 ./pocketbrain start --headless  # start headless (for servers)
@@ -19,7 +19,7 @@ the Kronk catalog and can download selected models directly via the Kronk SDK.
 ## Quick Deploy (Headless Server)
 
 ```bash
-go build -o pocketbrain .
+go build .
 ./pocketbrain setup          # run once in an interactive shell
 ./pocketbrain start --headless
 ```
@@ -29,7 +29,7 @@ Headless mode requires a complete `.env`. If missing/incomplete, startup fails w
 ## Quick Dev Setup
 
 ```bash
-go build -o pocketbrain .
+go build .
 ./pocketbrain setup
 go test ./... -count=1
 go run . start
@@ -38,7 +38,7 @@ go run . start
 ## Commands
 
 ```bash
-go build -o pocketbrain .    # compile binary
+go build .    # compile binary
 go test ./... -count=1       # run all tests
 go run . start               # run with TUI (dev)
 go run . start --headless    # run headless

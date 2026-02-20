@@ -10,7 +10,6 @@ Use this runbook for recurring security hygiene and post-incident security actio
 
 ## 2) Rotation cadence
 
-- `WHITELIST_PAIR_TOKEN`: every 30 days
 - Provider API keys: every 60 days or after exposure
 
 ## 3) Rotation procedure

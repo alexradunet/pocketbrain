@@ -12,7 +12,7 @@
 - User conversation data and memory facts (`state.db` tables: `memory`, `session`, `outbox`, `whitelist`).
 - WhatsApp auth state (`DATA_DIR/whatsapp-auth`).
 - Workspace content (`DATA_DIR/workspace`).
-- Runtime credentials (`WHITELIST_PAIR_TOKEN`, provider API keys in `.env`).
+- Runtime credentials (provider API keys in `.env`).
 
 ## Trust Boundaries
 
@@ -28,10 +28,9 @@
 - Threat: untrusted user interacts with assistant channel.
 - Current controls:
   - Whitelist gate in `whitelist` table.
-  - Pair-token flow (`/pair <token>`) with timing-safe comparison.
-  - Brute-force guard with exponential backoff.
+  - Phone-number-based auto-whitelisting via `WHATSAPP_WHITELIST_NUMBERS`.
+  - `/pair` command for self-service whitelisting.
 - Required controls:
-  - Rotate `WHITELIST_PAIR_TOKEN` monthly or after suspected exposure.
   - Audit `whitelist` entries weekly.
 
 ### 2) Data loss or tampering in runtime state

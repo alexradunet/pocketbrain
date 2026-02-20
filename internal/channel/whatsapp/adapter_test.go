@@ -2,11 +2,9 @@ package whatsapp
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/pocketbrain/pocketbrain/internal/core"
 )
@@ -282,97 +280,9 @@ func TestWhatsAppAdapter_Stop_Idempotent(t *testing.T) {
 // CommandRouter tests
 // ---------------------------------------------------------------------------
 
-func TestCommandRouter_Pair_ValidToken(t *testing.T) {
+func TestCommandRouter_Pair_WhitelistsUser(t *testing.T) {
 	wl := newStubWhitelist()
-	guard := NewBruteForceGuard(5, 300000, 900000)
 	router := &CommandRouter{
-		pairToken:  "secret123",
-		guard:      guard,
-		whitelist:  wl,
-		memoryRepo: newStubMemoryRepo(),
-		sessionMgr: &stubSessionStarter{},
-		logger:     testLogger(),
-	}
-
-	resp, handled := router.Route("user@test", "/pair secret123")
-	if !handled {
-		t.Fatal("expected command to be handled")
-	}
-	if resp == "" {
-		t.Fatal("expected non-empty response")
-	}
-
-	// User should now be whitelisted.
-	ok, _ := wl.IsWhitelisted("whatsapp", "user@test")
-	if !ok {
-		t.Error("user should be whitelisted after valid /pair")
-	}
-}
-
-func TestCommandRouter_Pair_InvalidToken(t *testing.T) {
-	wl := newStubWhitelist()
-	guard := NewBruteForceGuard(5, 300000, 900000)
-	router := &CommandRouter{
-		pairToken:  "secret123",
-		guard:      guard,
-		whitelist:  wl,
-		memoryRepo: newStubMemoryRepo(),
-		sessionMgr: &stubSessionStarter{},
-		logger:     testLogger(),
-	}
-
-	resp, handled := router.Route("user@test", "/pair wrongtoken")
-	if !handled {
-		t.Fatal("expected command to be handled")
-	}
-	if resp == "" {
-		t.Fatal("expected non-empty rejection response")
-	}
-
-	// User should NOT be whitelisted.
-	ok, _ := wl.IsWhitelisted("whatsapp", "user@test")
-	if ok {
-		t.Error("user should not be whitelisted after invalid /pair")
-	}
-}
-
-func TestCommandRouter_Pair_BruteForceProtection(t *testing.T) {
-	wl := newStubWhitelist()
-	guard := NewBruteForceGuard(3, 300000, 900000) // block after 3 failures
-	router := &CommandRouter{
-		pairToken:  "secret123",
-		guard:      guard,
-		whitelist:  wl,
-		memoryRepo: newStubMemoryRepo(),
-		sessionMgr: &stubSessionStarter{},
-		logger:     testLogger(),
-	}
-
-	// Exhaust failures.
-	for i := 0; i < 3; i++ {
-		router.Route("attacker@test", "/pair wrong")
-	}
-
-	// Next attempt should be blocked even with the correct token.
-	resp, handled := router.Route("attacker@test", "/pair secret123")
-	if !handled {
-		t.Fatal("expected command to be handled")
-	}
-
-	// Should still be blocked.
-	ok, _ := wl.IsWhitelisted("whatsapp", "attacker@test")
-	if ok {
-		t.Error("attacker should not be whitelisted while blocked")
-	}
-	_ = resp
-}
-
-func TestCommandRouter_Pair_TokenlessMode(t *testing.T) {
-	wl := newStubWhitelist()
-	guard := NewBruteForceGuard(5, 300000, 900000)
-	router := &CommandRouter{
-		pairToken:  "",
-		guard:      guard,
 		whitelist:  wl,
 		memoryRepo: newStubMemoryRepo(),
 		sessionMgr: &stubSessionStarter{},
@@ -386,17 +296,36 @@ func TestCommandRouter_Pair_TokenlessMode(t *testing.T) {
 	if resp == "" {
 		t.Fatal("expected non-empty response")
 	}
+
+	// User should now be whitelisted.
 	ok, _ := wl.IsWhitelisted("whatsapp", "user@test")
 	if !ok {
-		t.Error("user should be whitelisted in tokenless mode")
+		t.Error("user should be whitelisted after /pair")
+	}
+}
+
+func TestCommandRouter_Pair_AlreadyPaired(t *testing.T) {
+	wl := newStubWhitelist()
+	wl.AddToWhitelist("whatsapp", "user@test")
+	router := &CommandRouter{
+		whitelist:  wl,
+		memoryRepo: newStubMemoryRepo(),
+		sessionMgr: &stubSessionStarter{},
+		logger:     testLogger(),
+	}
+
+	resp, handled := router.Route("user@test", "/pair")
+	if !handled {
+		t.Fatal("expected command to be handled")
+	}
+	if resp != "You are already paired." {
+		t.Errorf("response = %q; want %q", resp, "You are already paired.")
 	}
 }
 
 func TestCommandRouter_New_StartsNewSession(t *testing.T) {
 	sessionStarter := &stubSessionStarter{}
 	router := &CommandRouter{
-		pairToken:  "token",
-		guard:      NewBruteForceGuard(5, 300000, 900000),
 		whitelist:  newStubWhitelist(),
 		memoryRepo: newStubMemoryRepo(),
 		sessionMgr: sessionStarter,
@@ -418,8 +347,6 @@ func TestCommandRouter_New_StartsNewSession(t *testing.T) {
 func TestCommandRouter_Remember_SavesMemory(t *testing.T) {
 	memRepo := newStubMemoryRepo()
 	router := &CommandRouter{
-		pairToken:  "token",
-		guard:      NewBruteForceGuard(5, 300000, 900000),
 		whitelist:  newStubWhitelist(),
 		memoryRepo: memRepo,
 		sessionMgr: &stubSessionStarter{},
@@ -458,8 +385,6 @@ func TestMessageProcessor_WhitelistedUser_Processes(t *testing.T) {
 	}
 
 	router := &CommandRouter{
-		pairToken:  "token",
-		guard:      NewBruteForceGuard(5, 300000, 900000),
 		whitelist:  wl,
 		memoryRepo: newStubMemoryRepo(),
 		sessionMgr: &stubSessionStarter{},
@@ -479,7 +404,7 @@ func TestMessageProcessor_WhitelistedUser_Processes(t *testing.T) {
 	}
 }
 
-func TestMessageProcessor_NonWhitelistedUser_Rejects(t *testing.T) {
+func TestMessageProcessor_AutoWhitelistsAndProcesses(t *testing.T) {
 	wl := newStubWhitelist()
 
 	var handlerCalled bool
@@ -489,38 +414,6 @@ func TestMessageProcessor_NonWhitelistedUser_Rejects(t *testing.T) {
 	}
 
 	router := &CommandRouter{
-		pairToken:  "token",
-		guard:      NewBruteForceGuard(5, 300000, 900000),
-		whitelist:  wl,
-		memoryRepo: newStubMemoryRepo(),
-		sessionMgr: &stubSessionStarter{},
-		logger:     testLogger(),
-	}
-
-	mp := NewMessageProcessor(wl, router, handler, testLogger())
-	resp, err := mp.Process("stranger@test", "hello")
-	if err != nil {
-		t.Fatalf("Process: %v", err)
-	}
-	if handlerCalled {
-		t.Error("handler should NOT be called for non-whitelisted user")
-	}
-	// Should get an empty response (ignored) or a rejection.
-	_ = resp
-}
-
-func TestMessageProcessor_TokenlessMode_AutoWhitelistsAndProcesses(t *testing.T) {
-	wl := newStubWhitelist()
-
-	var handlerCalled bool
-	handler := func(userID, text string) (string, error) {
-		handlerCalled = true
-		return "reply", nil
-	}
-
-	router := &CommandRouter{
-		pairToken:  "",
-		guard:      NewBruteForceGuard(5, 300000, 900000),
 		whitelist:  wl,
 		memoryRepo: newStubMemoryRepo(),
 		sessionMgr: &stubSessionStarter{},
@@ -533,14 +426,14 @@ func TestMessageProcessor_TokenlessMode_AutoWhitelistsAndProcesses(t *testing.T)
 		t.Fatalf("Process: %v", err)
 	}
 	if !handlerCalled {
-		t.Error("expected handler to be called in tokenless mode")
+		t.Error("expected handler to be called for auto-whitelisted user")
 	}
 	if resp != "reply" {
 		t.Errorf("response = %q; want %q", resp, "reply")
 	}
 	ok, _ := wl.IsWhitelisted("whatsapp", "newuser@test")
 	if !ok {
-		t.Error("expected user to be auto-whitelisted in tokenless mode")
+		t.Error("expected user to be auto-whitelisted")
 	}
 }
 
@@ -555,8 +448,6 @@ func TestMessageProcessor_EmptyMessage_Ignored(t *testing.T) {
 	}
 
 	router := &CommandRouter{
-		pairToken:  "token",
-		guard:      NewBruteForceGuard(5, 300000, 900000),
 		whitelist:  wl,
 		memoryRepo: newStubMemoryRepo(),
 		sessionMgr: &stubSessionStarter{},
@@ -624,98 +515,3 @@ func TestOutboxProcessor_RetriesOnFailure(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // Constant-time token comparison tests
-// ---------------------------------------------------------------------------
-
-func TestConstantTimeTokenCompare_Equal(t *testing.T) {
-	if !constantTimeTokenCompare("secret123", "secret123") {
-		t.Error("identical tokens should match")
-	}
-}
-
-func TestConstantTimeTokenCompare_NotEqual(t *testing.T) {
-	if constantTimeTokenCompare("secret123", "wrong") {
-		t.Error("different tokens should not match")
-	}
-}
-
-func TestConstantTimeTokenCompare_EmptyBoth(t *testing.T) {
-	if !constantTimeTokenCompare("", "") {
-		t.Error("two empty strings should match")
-	}
-}
-
-func TestConstantTimeTokenCompare_OneEmpty(t *testing.T) {
-	if constantTimeTokenCompare("secret", "") {
-		t.Error("empty vs non-empty should not match")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// BruteForceGuard tests
-// ---------------------------------------------------------------------------
-
-func TestBruteForceGuard_BlocksAfterMaxFailures(t *testing.T) {
-	guard := NewBruteForceGuard(3, 300000, 900000) // 3 failures, 5min window, 15min block
-
-	// First 3 attempts should be allowed.
-	for i := 0; i < 3; i++ {
-		if !guard.Check("user1") {
-			t.Fatalf("attempt %d should be allowed", i+1)
-		}
-		guard.RecordFailure("user1")
-	}
-
-	// 4th attempt should be blocked.
-	if guard.Check("user1") {
-		t.Error("user should be blocked after max failures")
-	}
-}
-
-func TestBruteForceGuard_CleansUpExpiredEntries(t *testing.T) {
-	// Use tiny windows so entries expire immediately.
-	guard := NewBruteForceGuard(3, 1, 1) // 3 failures, 1ms window, 1ms block
-
-	// Generate failures from many unique users.
-	for i := 0; i < 100; i++ {
-		userID := fmt.Sprintf("user-%d", i)
-		guard.RecordFailure(userID)
-	}
-
-	// Wait for all windows and blocks to expire.
-	time.Sleep(10 * time.Millisecond)
-
-	// Trigger cleanup by calling Check on any user.
-	guard.Check("trigger-cleanup")
-
-	// After cleanup, expired entries should be removed.
-	guard.mu.Lock()
-	attemptsLen := len(guard.attempts)
-	blocksLen := len(guard.blocks)
-	guard.mu.Unlock()
-
-	// Should have cleaned up the 100 expired user entries.
-	// Allow some slack — the "trigger-cleanup" user may be present.
-	if attemptsLen > 5 {
-		t.Errorf("attempts map has %d entries; expected most expired entries to be cleaned up", attemptsLen)
-	}
-	if blocksLen > 5 {
-		t.Errorf("blocks map has %d entries; expected most expired entries to be cleaned up", blocksLen)
-	}
-}
-
-func TestBruteForceGuard_ResetsAfterWindow(t *testing.T) {
-	// Use a tiny window (1ms) so it expires immediately.
-	guard := NewBruteForceGuard(3, 1, 1) // 3 failures, 1ms window, 1ms block
-
-	for i := 0; i < 3; i++ {
-		guard.Check("user1")
-		guard.RecordFailure("user1")
-	}
-
-	// Wait for the block to expire.
-	time.Sleep(5 * time.Millisecond)
-
-	if !guard.Check("user1") {
-		t.Error("user should be unblocked after block duration expires")
-	}
-}
