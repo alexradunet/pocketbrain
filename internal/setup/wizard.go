@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,16 +26,18 @@ type Wizard struct {
 	in  io.Reader
 	out io.Writer
 
-	fetchCatalog func() ([]string, error)
-	download     func(io.Writer, string) error
+	fetchCatalog      func() ([]string, error)
+	resolveModelValue func(string) (string, error)
+	download          func(io.Writer, string) error
 }
 
 func NewWizard(in io.Reader, out io.Writer) *Wizard {
 	return &Wizard{
-		in:           in,
-		out:          out,
-		fetchCatalog: fetchKronkCatalogModels,
-		download:     downloadKronkModelWithSDK,
+		in:                in,
+		out:               out,
+		fetchCatalog:      fetchKronkCatalogModels,
+		resolveModelValue: resolveKronkModelURLWithSDK,
+		download:          downloadKronkModelWithSDK,
 	}
 }
 
@@ -64,7 +67,11 @@ func (w *Wizard) Run(envPath string) error {
 			if err != nil {
 				return err
 			}
-			model = selected[0]
+			model, err = w.resolveModelValue(selected[0])
+			if err != nil || strings.TrimSpace(model) == "" {
+				fmt.Fprintf(w.out, "Warning: unable to resolve Kronk model URL for %s (%v). Using model ID.\n", selected[0], err)
+				model = selected[0]
+			}
 
 			downloadNow, err := w.askYesNo(r, "Download selected Kronk model(s) now?", true)
 			if err != nil {
@@ -101,9 +108,21 @@ func (w *Wizard) Run(envPath string) error {
 		if err != nil {
 			return err
 		}
-		pairToken, err = w.askSecret(r, "WhatsApp pair token")
+		generateToken, err := w.askYesNo(r, "Generate WhatsApp pair token automatically?", true)
 		if err != nil {
 			return err
+		}
+		if generateToken {
+			pairToken, err = generateSecureToken(24)
+			if err != nil {
+				return fmt.Errorf("generate pair token: %w", err)
+			}
+			fmt.Fprintf(w.out, "Generated WhatsApp pair token: %s\n", pairToken)
+		} else {
+			pairToken, err = w.askSecret(r, "WhatsApp pair token")
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -339,7 +358,19 @@ func downloadKronkModelWithSDK(out io.Writer, modelID string) error {
 		return fmt.Errorf("catalog init: %w", err)
 	}
 	logf := func(_ context.Context, msg string, args ...any) {
-		_, _ = fmt.Fprintf(out, msg+"\n", args...)
+		if len(args) == 0 {
+			_, _ = fmt.Fprintln(out, msg)
+			return
+		}
+		_, _ = fmt.Fprint(out, msg)
+		for i := 0; i < len(args); i += 2 {
+			if i+1 < len(args) {
+				_, _ = fmt.Fprintf(out, " %v=%v", args[i], args[i+1])
+			} else {
+				_, _ = fmt.Fprintf(out, " %v", args[i])
+			}
+		}
+		_, _ = fmt.Fprintln(out)
 	}
 	if err := ctlg.Download(ctx, catalog.WithLogger(logf)); err != nil {
 		return fmt.Errorf("catalog update: %w", err)
@@ -348,6 +379,27 @@ func downloadKronkModelWithSDK(out io.Writer, modelID string) error {
 		return fmt.Errorf("model download: %w", err)
 	}
 	return nil
+}
+
+func resolveKronkModelURLWithSDK(modelID string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	ctlg, err := catalog.New()
+	if err != nil {
+		return "", fmt.Errorf("catalog init: %w", err)
+	}
+	if err := ctlg.Download(ctx); err != nil {
+		return "", fmt.Errorf("catalog update: %w", err)
+	}
+	details, err := ctlg.Details(modelID)
+	if err != nil {
+		return "", fmt.Errorf("catalog details: %w", err)
+	}
+	if len(details.Files.Models) == 0 || strings.TrimSpace(details.Files.Models[0].URL) == "" {
+		return "", fmt.Errorf("catalog model has no download URL")
+	}
+	return details.Files.Models[0].URL, nil
 }
 
 func defaultModel(provider string) string {
@@ -363,4 +415,20 @@ func defaultModel(provider string) string {
 	default:
 		return ""
 	}
+}
+
+func generateSecureToken(byteLen int) (string, error) {
+	if byteLen <= 0 {
+		byteLen = 24
+	}
+	b := make([]byte, byteLen)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	out := make([]byte, byteLen)
+	for i := range b {
+		out[i] = alphabet[int(b[i])%len(alphabet)]
+	}
+	return "pb_" + string(out), nil
 }
