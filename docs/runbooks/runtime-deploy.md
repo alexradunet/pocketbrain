@@ -18,7 +18,7 @@ PocketBrain V1 runs in `workspace-only` profile:
 ## 2) Build binary
 
 ```bash
-make build
+go build -o pocketbrain .
 ```
 
 This produces a single `./pocketbrain` binary with zero runtime dependencies.
@@ -59,19 +59,13 @@ Alternative (non-interactive/manual): create `.env` from `.env.example` and fill
 ## 4) Start runtime
 
 ```bash
-make start
-```
-
-Or run the binary directly:
-
-```bash
 ./pocketbrain start --headless
 ```
 
 ## 5) Verify health
 
 ```bash
-make logs
+journalctl -u pocketbrain -f
 ```
 
 ## 6) Configure always-on runtime
@@ -89,6 +83,6 @@ sudo systemctl status pocketbrain
 
 ```bash
 git pull
-make build
+go build -o pocketbrain .
 sudo systemctl restart pocketbrain
 ```

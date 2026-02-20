@@ -102,10 +102,10 @@ User (via WhatsApp):
 - `/pair <token>` — whitelist yourself.
 
 Developer:
-- `make build` — compile binary.
-- `make test` — run all tests.
-- `make dev` — run with TUI.
-- `make start` — run headless.
+- `go build -o pocketbrain .` — compile binary.
+- `go test ./... -count=1` — run all tests.
+- `go run . start` — run with TUI.
+- `go run . start --headless` — run headless.
 
 ## Testing
 

@@ -21,7 +21,7 @@ Use this runbook for recurring security hygiene and post-incident security actio
 
 ```bash
 sudo systemctl restart pocketbrain
-make logs
+journalctl -u pocketbrain -f
 ```
 
 4. Verify one functional command path.

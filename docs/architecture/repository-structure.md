@@ -18,7 +18,6 @@ flowchart TB
 ```
 main.go              entry point
 go.mod / go.sum      Go module definition
-Makefile             build/test/run commands
 cmd/                 CLI commands (cobra)
 internal/            all application packages
   ai/                AI providers + tool registry
@@ -46,7 +45,7 @@ docs/                architecture, deploy, and runbooks
 ## Command contract
 
 - Repository root is the only canonical working directory.
-- `make` is the primary command interface.
+- `go` is the primary command interface (`go build`, `go test`, `go run`).
 - `go build ./...` must always succeed.
 - `go test ./... -count=1` must always pass.
 

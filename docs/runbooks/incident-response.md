@@ -8,7 +8,7 @@ Use this runbook during runtime outages, degraded behavior, or suspected data in
 2. Capture current state:
 
 ```bash
-make logs
+journalctl -u pocketbrain -f
 ```
 
 3. Freeze risky manual changes until root cause is identified.

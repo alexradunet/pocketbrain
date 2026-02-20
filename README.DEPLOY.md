@@ -11,7 +11,7 @@ All commands assume repository root.
 ### 1) Build binary
 
 ```bash
-make build
+go build -o pocketbrain .
 ```
 
 ### 2) Run interactive setup once
@@ -50,7 +50,7 @@ Note: headless start requires a complete `.env`. If setup is incomplete, startup
 ### 4) Verify health
 
 ```bash
-make test
+go test ./... -count=1
 ```
 
 Optional runtime runbooks:
@@ -66,25 +66,25 @@ Optional runtime runbooks:
 ### 2) Build + configure
 
 ```bash
-make build
+go build -o pocketbrain .
 ./pocketbrain setup
 ```
 
 ### 3) Validate + run
 
 ```bash
-make test
-make dev
+go test ./... -count=1
+go run . start
 ```
 
 ### 4) Common developer commands
 
 ```bash
-make build
-make test
-make dev
-make start
-make setup
+go build -o pocketbrain .    # compile binary
+go test ./... -count=1       # run all tests
+go run . start               # run with TUI (dev)
+go run . start --headless    # run headless
+go run . setup               # interactive setup wizard
 ```
 
 ## Canonical Environment Keys

@@ -18,9 +18,9 @@ The wizard creates/patches `.env` with provider, WhatsApp, workspace, and tailsc
 ## 3) Validate core workflows
 
 ```bash
-make test
-make build
-make dev
+go test ./... -count=1
+go build -o pocketbrain .
+go run . start
 ```
 
 ## 4) Troubleshooting

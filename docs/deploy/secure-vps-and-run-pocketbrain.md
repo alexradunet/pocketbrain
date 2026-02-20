@@ -64,7 +64,7 @@ As your non-root user:
 ```bash
 git clone <your-repo-url> pocketbrain
 cd pocketbrain
-make build
+go build -o pocketbrain .
 ```
 
 ## 6) Run as a systemd service
@@ -94,7 +94,7 @@ sudo systemctl status pocketbrain
 Stream logs:
 
 ```bash
-make logs
+journalctl -u pocketbrain -f
 ```
 
 ## 7) Backup and restore drill
@@ -105,7 +105,7 @@ Use your VPS/provider snapshot backup workflow for this drill:
 2. Restore to a test instance or rollback target.
 3. Restart PocketBrain service and verify:
    - `sudo systemctl status pocketbrain`
-   - `make logs`
+   - `journalctl -u pocketbrain -f`
 
 Run this drill regularly and keep off-host backup retention enabled.
 

@@ -14,7 +14,7 @@ The `.github/workflows/quality-gates.yml` workflow runs on every PR and push to 
 
 The `.github/workflows/structure-contract.yml` workflow validates Go project structure on PRs:
 
-- Required files: `main.go`, `go.mod`, `go.sum`, `Makefile`, `README.md`
+- Required files: `main.go`, `go.mod`, `go.sum`, `README.md`
 - Required directories: `cmd/`, `internal/`, `docs/`
 - No stale TypeScript artifacts
 

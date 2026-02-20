@@ -14,7 +14,7 @@ jobs:
         run: |
           set -e
           # Required files
-          for f in main.go go.mod go.sum Makefile README.md; do
+          for f in main.go go.mod go.sum README.md; do
             [ -f "$f" ] || { echo "FAIL: missing $f"; exit 1; }
           done
           # Required directories

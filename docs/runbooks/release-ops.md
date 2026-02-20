@@ -13,14 +13,14 @@ go build ./...
 ## 2) Deploy
 
 ```bash
-make build
+go build -o pocketbrain .
 sudo systemctl restart pocketbrain
 ```
 
 ## 3) Verify runtime
 
 ```bash
-make logs
+journalctl -u pocketbrain -f
 ```
 
 Validation checklist:

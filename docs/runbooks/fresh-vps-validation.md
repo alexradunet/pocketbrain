@@ -7,7 +7,7 @@ Use this checklist after reinstalling PocketBrain on a fresh VPS to verify setup
 ```bash
 git clone https://github.com/alexradunet/pocketbrain.git
 cd pocketbrain
-make build
+go build -o pocketbrain .
 ```
 
 ## 2) Configure environment
@@ -29,7 +29,7 @@ Alternative (manual): create `.env` from `.env.example` and fill values directly
 ## 3) Start PocketBrain
 
 ```bash
-make start
+./pocketbrain start --headless
 ```
 
 Confirm logs show healthy startup without errors.
@@ -45,7 +45,7 @@ Confirm these exist after startup:
 ## 5) Run health checks
 
 ```bash
-make logs
+journalctl -u pocketbrain -f
 sudo systemctl status pocketbrain
 ```
 

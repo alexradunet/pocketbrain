@@ -14,13 +14,13 @@ Follow:
 
 ## 3) Handoff checks
 
-- Logs stream works: `make logs`
+- Logs stream works: `journalctl -u pocketbrain -f`
 - Service is healthy: `sudo systemctl status pocketbrain`
 - Workspace directory exists: `ls .data/workspace`
 - Update path validated:
 
 ```bash
 git pull
-make build
+go build -o pocketbrain .
 sudo systemctl restart pocketbrain
 ```
