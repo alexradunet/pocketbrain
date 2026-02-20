@@ -367,6 +367,31 @@ func TestCommandRouter_Pair_BruteForceProtection(t *testing.T) {
 	_ = resp
 }
 
+func TestCommandRouter_Pair_TokenlessMode(t *testing.T) {
+	wl := newStubWhitelist()
+	guard := NewBruteForceGuard(5, 300000, 900000)
+	router := &CommandRouter{
+		pairToken:  "",
+		guard:      guard,
+		whitelist:  wl,
+		memoryRepo: newStubMemoryRepo(),
+		sessionMgr: &stubSessionStarter{},
+		logger:     testLogger(),
+	}
+
+	resp, handled := router.Route("user@test", "/pair")
+	if !handled {
+		t.Fatal("expected command to be handled")
+	}
+	if resp == "" {
+		t.Fatal("expected non-empty response")
+	}
+	ok, _ := wl.IsWhitelisted("whatsapp", "user@test")
+	if !ok {
+		t.Error("user should be whitelisted in tokenless mode")
+	}
+}
+
 func TestCommandRouter_New_StartsNewSession(t *testing.T) {
 	sessionStarter := &stubSessionStarter{}
 	router := &CommandRouter{
@@ -482,6 +507,41 @@ func TestMessageProcessor_NonWhitelistedUser_Rejects(t *testing.T) {
 	}
 	// Should get an empty response (ignored) or a rejection.
 	_ = resp
+}
+
+func TestMessageProcessor_TokenlessMode_AutoWhitelistsAndProcesses(t *testing.T) {
+	wl := newStubWhitelist()
+
+	var handlerCalled bool
+	handler := func(userID, text string) (string, error) {
+		handlerCalled = true
+		return "reply", nil
+	}
+
+	router := &CommandRouter{
+		pairToken:  "",
+		guard:      NewBruteForceGuard(5, 300000, 900000),
+		whitelist:  wl,
+		memoryRepo: newStubMemoryRepo(),
+		sessionMgr: &stubSessionStarter{},
+		logger:     testLogger(),
+	}
+
+	mp := NewMessageProcessor(wl, router, handler, testLogger())
+	resp, err := mp.Process("newuser@test", "hello")
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if !handlerCalled {
+		t.Error("expected handler to be called in tokenless mode")
+	}
+	if resp != "reply" {
+		t.Errorf("response = %q; want %q", resp, "reply")
+	}
+	ok, _ := wl.IsWhitelisted("whatsapp", "newuser@test")
+	if !ok {
+		t.Error("expected user to be auto-whitelisted in tokenless mode")
+	}
 }
 
 func TestMessageProcessor_EmptyMessage_Ignored(t *testing.T) {

@@ -2,6 +2,7 @@ package tailscale
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,17 +13,19 @@ import (
 )
 
 type fakeClient struct {
-	shares []*drive.Share
-	set    *drive.Share
+	shares  []*drive.Share
+	set     *drive.Share
+	listErr error
+	setErr  error
 }
 
 func (f *fakeClient) DriveShareList(ctx context.Context) ([]*drive.Share, error) {
-	return f.shares, nil
+	return f.shares, f.listErr
 }
 
 func (f *fakeClient) DriveShareSet(ctx context.Context, share *drive.Share) error {
 	f.set = share
-	return nil
+	return f.setErr
 }
 
 func (f *fakeClient) Status(ctx context.Context) (*ipnstate.Status, error) {
@@ -135,5 +138,62 @@ func TestValidateConfigTaildriveRootMustExist(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestServiceStartContinuesOnTaildriveACLDenied(t *testing.T) {
+	root := t.TempDir()
+	state := filepath.Join(t.TempDir(), "ts")
+	fc := &fakeClient{listErr: errors.New(`Access denied: taildrive sharing not enabled, please add the attribute "drive:share"`)}
+	fn := &fakeNode{lc: fc}
+
+	s, err := New(Config{
+		Enabled:          true,
+		AuthKey:          "tskey-auth-123",
+		Hostname:         "pocketbrain",
+		StateDir:         state,
+		TaildriveEnabled: true,
+		ShareName:        "workspace",
+		AutoShare:        true,
+		RootDir:          root,
+		Logger:           slog.Default(),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	s.newNode = func(cfg Config) (node, error) { return fn, nil }
+
+	if err := s.Start(); err != nil {
+		t.Fatalf("Start should not fail on ACL denial: %v", err)
+	}
+}
+
+func TestServiceStartContinuesOnTaildriveNotEnabledFromShareSet(t *testing.T) {
+	root := t.TempDir()
+	state := filepath.Join(t.TempDir(), "ts")
+	fc := &fakeClient{
+		shares: []*drive.Share{},
+		setErr: errors.New("500 Internal Server Error: Taildrive not enabled"),
+	}
+	fn := &fakeNode{lc: fc}
+
+	s, err := New(Config{
+		Enabled:          true,
+		AuthKey:          "tskey-auth-123",
+		Hostname:         "pocketbrain",
+		StateDir:         state,
+		TaildriveEnabled: true,
+		ShareName:        "workspace",
+		AutoShare:        true,
+		RootDir:          root,
+		Logger:           slog.Default(),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	s.newNode = func(cfg Config) (node, error) { return fn, nil }
+
+	if err := s.Start(); err != nil {
+		t.Fatalf("Start should not fail when taildrive is disabled in tailnet: %v", err)
 	}
 }

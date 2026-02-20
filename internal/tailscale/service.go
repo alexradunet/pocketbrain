@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -124,8 +125,15 @@ func (s *Service) Start() error {
 			return fmt.Errorf("tailscale local client: %w", err)
 		}
 		if err := ensureShare(ctx, lc, s.cfg.ShareName, s.cfg.RootDir); err != nil {
-			_ = n.Close()
-			return err
+			if isTaildriveACLError(err) {
+				s.logger.Warn("taildrive share setup skipped: missing ACL permission",
+					"error", err,
+					"hint", "add drive:share nodeAttrs in your Tailscale ACL policy or disable TAILDRIVE_ENABLED",
+				)
+			} else {
+				_ = n.Close()
+				return err
+			}
 		}
 	}
 
@@ -137,6 +145,14 @@ func (s *Service) Start() error {
 		s.logger.Info("embedded tailscale started", "hostname", s.cfg.Hostname)
 	}
 	return nil
+}
+
+func isTaildriveACLError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "taildrive sharing not enabled") ||
+		strings.Contains(msg, "taildrive not enabled") ||
+		strings.Contains(msg, "drive:share") ||
+		strings.Contains(msg, "access denied")
 }
 
 func (s *Service) Stop() error {

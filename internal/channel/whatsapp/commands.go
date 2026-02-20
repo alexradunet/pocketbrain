@@ -80,9 +80,17 @@ func (r *CommandRouter) handlePair(userID, token string) string {
 		return "Too many failed attempts. Please try again later."
 	}
 
-	// Empty pair token in config means pairing is disabled.
+	// Empty pair token means tokenless onboarding mode.
 	if r.pairToken == "" {
-		return "Pairing is not configured on this server."
+		added, err := r.whitelist.AddToWhitelist("whatsapp", userID)
+		if err != nil {
+			r.logger.Error("failed to whitelist user in tokenless mode", "userID", userID, "error", err)
+			return fmt.Sprintf("Pairing failed: %v", err)
+		}
+		if !added {
+			return "You are already paired."
+		}
+		return "Paired successfully! Pair token is not required on this server."
 	}
 
 	if !constantTimeTokenCompare(token, r.pairToken) {
@@ -106,6 +114,12 @@ func (r *CommandRouter) handlePair(userID, token string) string {
 
 	r.logger.Info("user paired successfully", "userID", userID)
 	return "Paired successfully! You can now send messages."
+}
+
+// TokenlessPairingEnabled reports whether users should be auto-onboarded
+// without requiring /pair token.
+func (r *CommandRouter) TokenlessPairingEnabled() bool {
+	return strings.TrimSpace(r.pairToken) == ""
 }
 
 // handleNew starts a fresh conversation session.

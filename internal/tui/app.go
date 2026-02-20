@@ -29,6 +29,7 @@ type Model struct {
 	eventBus *EventBus
 	header   headerModel
 	messages messagesModel
+	qr       qrModel
 	logs     logsModel
 	focus    Panel
 	width    int
@@ -48,6 +49,7 @@ func New(bus *EventBus) Model {
 		eventBus: bus,
 		header:   newHeaderModel(),
 		messages: newMessagesModel(),
+		qr:       newQRModel(),
 		logs:     newLogsModel(),
 		focus:    PanelMessages,
 	}
@@ -93,6 +95,17 @@ func (m *Model) handleEvent(e Event) {
 	case EventLog:
 		if le, ok := e.Data.(LogEvent); ok {
 			m.logs.addEntry(le)
+			// Drive QR panel from WhatsApp pairing logs.
+			switch le.Message {
+			case "whatsapp QR code ready - scan with your phone":
+				if raw, ok := le.Fields["qr"]; ok {
+					if qrText, ok := raw.(string); ok {
+						m.qr.setQR(qrText)
+					}
+				}
+			case "whatsapp pairing successful", "whatsapp QR code timed out", "whatsapp pairing error":
+				m.qr.clear()
+			}
 		}
 	case EventMessageIn:
 		if me, ok := e.Data.(MessageEvent); ok {
@@ -157,9 +170,16 @@ func (m Model) View() string {
 	m.messages.width = leftW - 4
 	m.messages.height = msgH - 2
 
-	// Right panel: status
-	statusContent := m.renderStatusPanel(rightW-6, msgH-2)
-	statusPanel := panelStyle.Width(rightW - 2).Height(msgH - 2).Render(statusContent)
+	// Right panel: pairing QR or status.
+	var statusPanel string
+	if m.qr.active() {
+		m.qr.width = rightW - 2
+		m.qr.height = msgH - 2
+		statusPanel = m.qr.View()
+	} else {
+		statusContent := m.renderStatusPanel(rightW-6, msgH-2)
+		statusPanel = panelStyle.Width(rightW - 2).Height(msgH - 2).Render(statusContent)
+	}
 
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top,
 		m.messages.View(),
