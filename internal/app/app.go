@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"charm.land/fantasy"
@@ -40,8 +42,11 @@ func Run(headless bool) error {
 	}
 
 	if headless {
-		// Block until signal handler fires.
-		select {}
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+		<-sigCh
+		cleanup()
+		return nil
 	}
 
 	_ = cleanup
@@ -283,7 +288,12 @@ func startBackendInternal(bus *tui.EventBus, headless bool) (func(), error) {
 		cmdRouter := whatsapp.NewCommandRouter(
 			whitelistRepo,
 			memoryRepo,
-			&sessionStarterAdapter{ctx: ctx, a: assistant},
+			&sessionStarterAdapter{
+				ctx:         ctx,
+				a:           assistant,
+				channelRepo: channelRepo,
+				bus:         bus,
+			},
 			logger,
 		)
 
@@ -362,11 +372,32 @@ func startBackendInternal(bus *tui.EventBus, headless bool) (func(), error) {
 // sessionStarterAdapter bridges AssistantCore to the whatsapp.SessionStarter
 // interface (drops the returned session ID).
 type sessionStarterAdapter struct {
-	ctx context.Context
-	a   *core.AssistantCore
+	ctx         context.Context
+	a           *core.AssistantCore
+	channelRepo core.ChannelRepository
+	bus         *tui.EventBus
 }
 
-func (s *sessionStarterAdapter) StartNewSession(_, reason string) error {
-	_, err := s.a.StartNewMainSession(s.ctx, reason)
-	return err
+func (s *sessionStarterAdapter) StartNewSession(userID, reason string) error {
+	if _, err := s.a.StartNewMainSession(s.ctx, reason); err != nil {
+		return err
+	}
+
+	if s.channelRepo != nil {
+		_ = s.channelRepo.SaveLastChannel("whatsapp", userID)
+	}
+
+	if s.bus != nil {
+		s.bus.Publish(tui.Event{
+			Type: tui.EventMessageOut,
+			Data: tui.MessageEvent{
+				UserID:    userID,
+				Text:      "Context switched: started a new session from WhatsApp.",
+				Outgoing:  true,
+				Timestamp: time.Now(),
+			},
+		})
+	}
+
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/term"
 
 	"github.com/pocketbrain/pocketbrain/internal/app"
 	"github.com/pocketbrain/pocketbrain/internal/config"
@@ -20,7 +21,7 @@ func main() {
 
 	_ = config.LoadDotEnvFile(".env")
 
-	if os.Getenv("TERM") == "" {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		*headless = true
 	}
 

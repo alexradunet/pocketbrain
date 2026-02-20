@@ -7,10 +7,10 @@ Single binary. Zero runtime dependencies. Just build and run.
 ## Quick Start (Interactive)
 
 ```bash
-go build .                   # produces ./pocketbrain binary
-./pocketbrain setup          # first-run interactive setup (creates/patches .env)
-./pocketbrain start          # start with TUI
-./pocketbrain start --headless  # start headless (for servers)
+go build .                       # produces ./pocketbrain binary
+./pocketbrain                    # first run auto-launches setup wizard TUI
+./pocketbrain --setup            # force re-run setup wizard
+./pocketbrain --headless         # start headless (for servers)
 ```
 
 If you choose `kronk` in setup, the wizard pulls the current model list from
@@ -20,8 +20,8 @@ the Kronk catalog and can download selected models directly via the Kronk SDK.
 
 ```bash
 go build .
-./pocketbrain setup          # run once in an interactive shell
-./pocketbrain start --headless
+./pocketbrain                    # run once interactively to complete setup
+./pocketbrain --headless
 ```
 
 Headless mode requires a complete `.env`. If missing/incomplete, startup fails with instructions.
@@ -30,19 +30,16 @@ Headless mode requires a complete `.env`. If missing/incomplete, startup fails w
 
 ```bash
 go build .
-./pocketbrain setup
+./pocketbrain                    # complete setup wizard
 go test ./... -count=1
-go run . start
+go run .                         # run with TUI
 ```
 
-## Commands
+## Flags
 
-```bash
-go build .    # compile binary
-go test ./... -count=1       # run all tests
-go run . start               # run with TUI (dev)
-go run . start --headless    # run headless
-go run . setup               # interactive setup wizard
+```
+--headless    Run without TUI (daemon mode for systemd/Docker)
+--setup       Force run setup wizard even if .env is complete
 ```
 
 ## Data Paths
@@ -61,21 +58,20 @@ go run . setup               # interactive setup wizard
 ## Repository Layout
 
 ```
-main.go              entry point
-cmd/                 CLI commands (cobra)
+main.go              entry point (flag-based, TUI-first)
 internal/
   ai/                AI providers (Anthropic, OpenAI-compatible) + tool registry
-  app/               composition root and shutdown
+  app/               composition root, backend wiring, and shutdown
   channel/           channel manager + message chunking/rate limiting
   channel/whatsapp/  WhatsApp adapter (whatsmeow)
   config/            environment configuration
   core/              assistant, session manager, prompt builder, ports
   scheduler/         heartbeat cron scheduler
+  setup/             setup wizard logic, env file management
   skills/            skill management and installation
   store/             SQLite repositories
-  tailscale/         embedded tsnet + Taildrive share orchestration
-  taildrive/         local file serving components
-  tui/               terminal UI (bubbletea)
+  tui/               terminal UI (Bubble Tea) — dashboard + setup wizard
+  webdav/            WebDAV workspace file server
   workspace/         file operations with path security
 docs/                architecture, deploy, and runbooks
 ```

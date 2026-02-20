@@ -418,6 +418,61 @@ func TestMessageProcessor_NonWhitelistedUser_Rejected(t *testing.T) {
 	}
 }
 
+func TestMessageProcessor_NonWhitelistedUser_NewCommandRejected(t *testing.T) {
+	wl := newStubWhitelist()
+
+	sessionStarter := &stubSessionStarter{}
+	router := &CommandRouter{
+		whitelist:  wl,
+		memoryRepo: newStubMemoryRepo(),
+		sessionMgr: sessionStarter,
+		logger:     testLogger(),
+	}
+
+	mp := NewMessageProcessor(wl, router, func(userID, text string) (string, error) {
+		return "reply", nil
+	}, testLogger())
+
+	resp, err := mp.Process("newuser@test", "/new")
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if resp != "You are not authorized. Ask the operator to whitelist your number." {
+		t.Fatalf("response = %q; want rejection message", resp)
+	}
+	if sessionStarter.callCount() != 0 {
+		t.Fatalf("StartNewSession called %d times; want 0", sessionStarter.callCount())
+	}
+}
+
+func TestMessageProcessor_NonWhitelistedUser_RememberCommandRejected(t *testing.T) {
+	wl := newStubWhitelist()
+
+	memRepo := newStubMemoryRepo()
+	router := &CommandRouter{
+		whitelist:  wl,
+		memoryRepo: memRepo,
+		sessionMgr: &stubSessionStarter{},
+		logger:     testLogger(),
+	}
+
+	mp := NewMessageProcessor(wl, router, func(userID, text string) (string, error) {
+		return "reply", nil
+	}, testLogger())
+
+	resp, err := mp.Process("newuser@test", "/remember secret fact")
+	if err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if resp != "You are not authorized. Ask the operator to whitelist your number." {
+		t.Fatalf("response = %q; want rejection message", resp)
+	}
+	entries, _ := memRepo.GetAll()
+	if len(entries) != 0 {
+		t.Fatalf("memory entries = %d; want 0", len(entries))
+	}
+}
+
 func TestMessageProcessor_EmptyMessage_Ignored(t *testing.T) {
 	wl := newStubWhitelist()
 	wl.AddToWhitelist("whatsapp", "user@test")

@@ -157,8 +157,21 @@ func (p *MessageProcessor) Process(userID, text string) (string, error) {
 	isCommand := strings.HasPrefix(text, "/")
 	p.logger.Info("whatsapp process started", "op", "whatsapp.process", "userID", userID, "textLen", len(text), "isCommand", isCommand)
 
-	// Route commands first (commands like /pair work even for non-whitelisted users).
+	// Route commands first. Only /pair is allowed for non-whitelisted users.
 	if isCommand {
+		cmd := strings.ToLower(strings.Fields(text)[0])
+		if cmd != "/pair" {
+			allowed, err := p.whitelist.IsWhitelisted("whatsapp", userID)
+			if err != nil {
+				p.logger.Error("whitelist check failed", "op", "whatsapp.process", "userID", userID, "error", err)
+				return "", fmt.Errorf("whitelist check: %w", err)
+			}
+			if !allowed {
+				p.logger.Warn("non-whitelisted command rejected", "op", "whatsapp.process", "userID", userID, "cmd", cmd)
+				return "You are not authorized. Ask the operator to whitelist your number.", nil
+			}
+		}
+
 		if resp, handled := p.router.Route(userID, text); handled {
 			return resp, nil
 		}

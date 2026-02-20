@@ -362,7 +362,13 @@ func (m SetupModel) View() string {
 		Render("PocketBrain Setup Wizard")
 
 	b.WriteString(title + "\n")
-	b.WriteString(setupDividerStyle.Render(strings.Repeat("─", min(50, m.width-4))) + "\n\n")
+	divW := m.width - 4
+	if divW < 10 {
+		divW = 40
+	} else if divW > 50 {
+		divW = 50
+	}
+	b.WriteString(setupDividerStyle.Render(strings.Repeat("─", divW)) + "\n\n")
 
 	// Progress indicator
 	progress := m.renderProgress()
@@ -407,8 +413,14 @@ func (m SetupModel) View() string {
 	}
 
 	content := b.String()
+	panelW := m.width - 4
+	if panelW < 40 {
+		panelW = 60
+	} else if panelW > 60 {
+		panelW = 60
+	}
 	return setupPanelStyle.
-		Width(min(60, m.width-4)).
+		Width(panelW).
 		Render(content)
 }
 

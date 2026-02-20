@@ -44,6 +44,10 @@ func ChannelTools(channelRepo core.ChannelRepository, outboxRepo core.OutboxRepo
 					logger.Info("tool result", "op", "tool.execute", "tool", "send_channel_message", "result", "no_target")
 					return fantasy.NewTextResponse("Last-used channel data is invalid."), nil
 				}
+				if channel != "whatsapp" {
+					logger.Info("tool result", "op", "tool.execute", "tool", "send_channel_message", "result", "unsupported_channel", "channel", channel)
+					return fantasy.NewTextResponse(fmt.Sprintf("Channel %q is not currently supported for proactive delivery.", channel)), nil
+				}
 
 				if err := outboxRepo.Enqueue(channel, userID, text, 0); err != nil {
 					logger.Info("tool result", "op", "tool.execute", "tool", "send_channel_message", "result", "error", "error", err)
