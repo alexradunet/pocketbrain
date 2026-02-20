@@ -171,7 +171,7 @@ func (w *Workspace) ListFiles(folderPath string) ([]WorkspaceFile, error) {
 
 	entries, err := os.ReadDir(fullPath)
 	if err != nil {
-		return nil, nil //nolint:nilerr // return empty on error
+		return nil, fmt.Errorf("list files %q: %w", folderPath, err)
 	}
 
 	files := make([]WorkspaceFile, 0, len(entries))

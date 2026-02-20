@@ -94,7 +94,11 @@ func WorkspaceTools(ws *workspace.Workspace, logger *slog.Logger) []fantasy.Agen
 			"List files and folders in a workspace directory.",
 			func(_ context.Context, input workspaceListInput, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
 				logger.Debug("tool execute", "op", "tool.execute", "tool", "workspace_list", "folder", input.Folder)
-				files, _ := ws.ListFiles(input.Folder)
+				files, err := ws.ListFiles(input.Folder)
+				if err != nil {
+					logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_list", "result", "error", "error", err)
+					return fantasy.NewTextResponse(fmt.Sprintf("Error listing folder: %v", err)), nil
+				}
 				if len(files) == 0 {
 					logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_list", "fileCount", 0)
 					return fantasy.NewTextResponse(fmt.Sprintf("Folder is empty: %s", displayFolder(input.Folder))), nil
@@ -124,7 +128,11 @@ func WorkspaceTools(ws *workspace.Workspace, logger *slog.Logger) []fantasy.Agen
 				if mode != "name" && mode != "content" && mode != "both" {
 					return fantasy.NewTextResponse("Error: Invalid search mode. Use one of: name, content, both"), nil
 				}
-				files, _ := ws.SearchFiles(input.Query, input.Folder, workspace.SearchMode(mode))
+				files, err := ws.SearchFiles(input.Query, input.Folder, workspace.SearchMode(mode))
+				if err != nil {
+					logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_search", "result", "error", "error", err)
+					return fantasy.NewTextResponse(fmt.Sprintf("Error searching files: %v", err)), nil
+				}
 				if len(files) == 0 {
 					logger.Debug("tool result", "op", "tool.execute", "tool", "workspace_search", "matchCount", 0)
 					return fantasy.NewTextResponse(fmt.Sprintf("No files found matching %q in %s mode", input.Query, mode)), nil

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -192,13 +193,13 @@ func (a *AssistantCore) RunHeartbeatTasks(ctx context.Context) (string, error) {
 	summary, err := a.provider.SendMessage(ctx, heartbeatSessionID, systemPrompt, heartbeatPrompt)
 	if err != nil {
 		a.logger.ErrorContext(ctx, "heartbeat provider call failed", "operationID", opID, "heartbeatSessionID", heartbeatSessionID, "error", err)
-		return "Heartbeat failed: invalid response format from model.", nil //nolint:nilerr
+		return "Heartbeat failed: invalid response format from model.", fmt.Errorf("heartbeat provider call: %w", err)
 	}
 
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
 		a.logger.ErrorContext(ctx, "heartbeat empty summary", "operationID", opID, "heartbeatSessionID", heartbeatSessionID)
-		return "Heartbeat failed: no summary reply from model.", nil
+		return "Heartbeat failed: no summary reply from model.", errors.New("heartbeat summary was empty")
 	}
 
 	// Inject summary into main session (no reply needed).

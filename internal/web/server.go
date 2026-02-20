@@ -71,7 +71,7 @@ func (s *Server) Stop() error {
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: websocketCheckOrigin,
 }
 
 type resizeMsg struct {

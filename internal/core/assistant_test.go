@@ -262,8 +262,25 @@ func TestAssistantCore_RunHeartbeatTasks_ProviderError(t *testing.T) {
 	core := buildTestCore(prov, mem, ch, hb)
 
 	result, err := core.RunHeartbeatTasks(context.Background())
-	if err != nil {
-		t.Fatalf("expected nil error (friendly message), got: %v", err)
+	if err == nil {
+		t.Fatal("expected non-nil error for heartbeat provider failure")
+	}
+	if result == "" {
+		t.Error("expected friendly result message, got empty string")
+	}
+}
+
+func TestAssistantCore_RunHeartbeatTasks_EmptySummaryIsError(t *testing.T) {
+	prov, mem, ch, hb := defaultMocks()
+	hb.tasks = []string{"task-a"}
+	prov.sendMessageFn = func(_ context.Context, _, _, _ string) (string, error) {
+		return "   ", nil
+	}
+	core := buildTestCore(prov, mem, ch, hb)
+
+	result, err := core.RunHeartbeatTasks(context.Background())
+	if err == nil {
+		t.Fatal("expected non-nil error for heartbeat empty summary")
 	}
 	if result == "" {
 		t.Error("expected friendly result message, got empty string")

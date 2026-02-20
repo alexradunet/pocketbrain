@@ -100,6 +100,10 @@ func runServe() {
 	if *tsnetHostname != "" {
 		cfg.TsnetHostname = *tsnetHostname
 	}
+	if err := validateWebTerminalExposure(cfg.WebTerminalAddr, *sshOnly, *tsnetFlag); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	// Start the backend (all services: DB, AI, WhatsApp, etc.).
 	bus := tui.NewEventBus(512)
@@ -221,4 +225,14 @@ func runServe() {
 	_ = ssh.Stop()
 	cleanup()
 	fmt.Println("Shutdown complete")
+}
+
+func validateWebTerminalExposure(webAddr string, sshOnly, tsnetEnabled bool) error {
+	if sshOnly || tsnetEnabled {
+		return nil
+	}
+	if web.IsLocalOnlyAddr(webAddr) {
+		return nil
+	}
+	return fmt.Errorf("unsafe web terminal bind %q: use --tsnet or bind to localhost only", webAddr)
 }
