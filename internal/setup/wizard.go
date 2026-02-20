@@ -169,6 +169,13 @@ func (w *Wizard) Run(envPath string) error {
 			return err
 		}
 	}
+	if enableTailscale {
+		w.printTailscaleACLGuidance()
+		_, err = w.askYesNo(r, "Have you applied the Taildrive ACL policy above?", false)
+		if err != nil {
+			return err
+		}
+	}
 
 	values := map[string]string{
 		"PROVIDER":             provider,
@@ -199,6 +206,22 @@ func (w *Wizard) Run(envPath string) error {
 		fmt.Fprintln(w.out, "Next steps: start PocketBrain, then use /pair <token> and scan QR code in logs/TUI.")
 	}
 	return nil
+}
+
+func (w *Wizard) printTailscaleACLGuidance() {
+	fmt.Fprintln(w.out, "\nTailscale ACL setup reminder:")
+	fmt.Fprintln(w.out, "1) Open https://login.tailscale.com/admin/acls")
+	fmt.Fprintln(w.out, "2) Add nodeAttrs + grants for Taildrive permissions.")
+	fmt.Fprintln(w.out, "3) Ensure this node is targeted by tag or email.")
+	fmt.Fprintln(w.out, "\nPolicy template:")
+	fmt.Fprintln(w.out, `"nodeAttrs": [`)
+	fmt.Fprintln(w.out, `  {"target": ["tag:pocketbrain-go"], "attr": ["drive:share", "drive:access"]}`)
+	fmt.Fprintln(w.out, `],`)
+	fmt.Fprintln(w.out, `"grants": [`)
+	fmt.Fprintln(w.out, `  {"src": ["autogroup:member"], "dst": ["autogroup:self"],`)
+	fmt.Fprintln(w.out, `   "app": {"tailscale.com/cap/drive":[{"shares":["*"],"access":"rw"}]}}`)
+	fmt.Fprintln(w.out, `]`)
+	fmt.Fprintln(w.out, "\nIf not configured, PocketBrain still starts, but Taildrive share setup will be skipped with a warning.")
 }
 
 func (w *Wizard) askText(r *bufio.Reader, label, def string) (string, error) {

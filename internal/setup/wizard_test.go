@@ -27,6 +27,7 @@ func TestWizardRunWritesEnv(t *testing.T) {
 		"y", // taildrive
 		"workspace",
 		"y",
+		"y", // ACL applied confirmation
 		"",
 	}, "\n")
 
