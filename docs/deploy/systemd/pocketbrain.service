@@ -8,8 +8,7 @@ Type=simple
 User=debian
 WorkingDirectory=/home/debian/pocketbrain
 Environment=HOME=/home/debian
-Environment=PATH=/home/debian/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/home/debian/.bun/bin/bun run start
+ExecStart=/home/debian/pocketbrain/pocketbrain start --headless
 Restart=always
 RestartSec=5
 

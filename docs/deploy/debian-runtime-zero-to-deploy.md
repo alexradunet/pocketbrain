@@ -1,7 +1,5 @@
 # Debian Runtime Zero-to-Deploy
 
-OpenCode skill equivalent: `pocketbrain-runtime-deploy`.
-
 This is a short entry point. The canonical runtime deploy workflow lives in runbooks.
 
 ## Canonical references
@@ -12,4 +10,4 @@ This is a short entry point. The canonical runtime deploy workflow lives in runb
 
 ## Quick pointer
 
-Use `docs/runbooks/runtime-deploy.md` for all command steps (`setup-runtime`, `.env`, `start`, `logs`, service enablement, updates, and release handoff).
+Use `docs/runbooks/runtime-deploy.md` for all command steps (build, `.env`, start, logs, service enablement, and updates).

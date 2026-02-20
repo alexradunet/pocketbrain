@@ -5,16 +5,16 @@ Use this runbook for every staging or production release candidate.
 ## 1) Pre-release checks
 
 ```bash
-bun run typecheck
-bun run test:processes
-bun run test
-bun run build
+go vet ./...
+go test ./... -count=1 -race
+go build ./...
 ```
 
-## 2) Execute release script
+## 2) Deploy
 
 ```bash
-make release TAG=$(git rev-parse --short HEAD)
+make build
+sudo systemctl restart pocketbrain
 ```
 
 ## 3) Verify runtime
@@ -31,7 +31,6 @@ Validation checklist:
 ## 4) Release record
 
 Capture:
-- tag
 - git SHA
 - key changes
 - known risks

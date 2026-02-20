@@ -1,67 +1,67 @@
-# Coding Architecture Guide 💻
+# Coding Architecture Guide
 
-This page explains how the code is structured at module/class level so contributors can jump in fast.
+This page explains how the code is structured at package level so contributors can jump in fast.
 
 ## 1) Composition Root (How the app is wired)
 
-`src/index.ts` is the single composition root.
+`main.go` -> `cmd/` (Cobra CLI) -> `internal/app/app.go` is the single composition root.
 
 ```mermaid
 flowchart TB
-  Index[src/index.ts]
-  Index --> Repos[SQLite Repositories]
-  Index --> Runtime[RuntimeProvider]
-  Index --> Sessions[SessionManager]
-  Index --> Prompts[PromptBuilder]
-  Index --> Assistant[AssistantCore]
-  Index --> Vault[VaultService + vaultProvider]
-  Index --> Scheduler[HeartbeatScheduler]
-  Index --> Channels[ChannelManager + WhatsAppAdapter]
+  Main[main.go / cmd/]
+  Main --> App[app.go composition root]
+  App --> Config[config.Config]
+  App --> Store[SQLite Repositories]
+  App --> AI[AI Provider + Tool Registry]
+  App --> Core[AssistantCore]
+  App --> Scheduler[HeartbeatScheduler]
+  App --> Channels[ChannelManager + WhatsAppAdapter]
+  App --> TUI[Terminal UI]
 ```
 
 Why this is good:
-- ✅ No hidden global initialization
-- ✅ Dependency graph is explicit
-- ✅ Easier testing and refactoring
+- No hidden global initialization
+- Dependency graph is explicit
+- Easier testing and refactoring
 
 ## 2) Core vs Adapters (Port-Adapter Style)
 
 ```mermaid
 flowchart LR
-  subgraph Core[Core 🧠]
+  subgraph Core[Core]
     AC[AssistantCore]
     SM[SessionManager]
     PB[PromptBuilder]
-    Ports[ports/* interfaces]
+    Ports[core/ports.go interfaces]
   end
 
-  subgraph Adapters[Adapters 🔌]
-    WA[channels/whatsapp/*]
-    SQL[adapters/persistence/repositories/*]
-    Plugins[adapters/plugins/*]
+  subgraph Adapters[Adapters]
+    WA[channel/whatsapp/]
+    SQL[store/]
+    Tools[ai/tools_*.go]
   end
 
-  subgraph Infra[Infrastructure 🧱]
-    OC[OpenCode SDK]
+  subgraph Infra[Infrastructure]
+    Provider[AI Provider API]
     DB[(SQLite state.db)]
-    VF[(Vault files)]
+    WS[(Workspace files)]
   end
 
   AC --> Ports
   WA --> AC
   SQL --> DB
-  Plugins --> VF
-  AC --> OC
+  Tools --> WS
+  AC --> Provider
   Ports --> SQL
 ```
 
 Rule of thumb:
-- Core defines behavior/contracts.
-- Adapters implement I/O details.
+- Core defines behavior/contracts (`internal/core/`).
+- Adapters implement I/O details (`internal/store/`, `internal/channel/`, `internal/ai/`).
 
 ## 3) Chat Request Code Path
 
-Main entrypoint: `AssistantCore.ask()` in `src/core/assistant.ts`.
+Main entrypoint: `AssistantCore.Ask()` in `internal/core/assistant.go`.
 
 ```mermaid
 sequenceDiagram
@@ -69,21 +69,22 @@ sequenceDiagram
   participant SR as SessionManager
   participant MR as MemoryRepository
   participant PB as PromptBuilder
-  participant OC as OpenCode Client
+  participant AI as AI Provider
   participant CR as ChannelRepository
 
-  A->>SR: getOrCreateMainSession()
-  A->>CR: saveLastChannel() (whatsapp)
-  A->>MR: getAll()
-  A->>PB: buildAgentSystemPrompt(memory)
-  A->>OC: session.prompt(system + input)
-  OC-->>A: parts[]
+  A->>SR: GetOrCreateMainSession()
+  A->>CR: SaveLastChannel()
+  A->>MR: GetAll()
+  A->>PB: BuildSystemPrompt(memory)
+  A->>AI: SendMessage(system + input)
+  AI-->>A: response (with tool calls)
+  A->>A: Tool loop (if tool calls)
   A-->>Caller: extracted text response
 ```
 
 ## 4) Heartbeat Code Path
 
-Heartbeat scheduler lives in `src/scheduler/heartbeat.ts`, execution in `AssistantCore.runHeartbeatTasks()`.
+Heartbeat scheduler lives in `internal/scheduler/heartbeat.go`, execution in `AssistantCore.RunHeartbeatTasks()`.
 
 ```mermaid
 sequenceDiagram
@@ -91,72 +92,59 @@ sequenceDiagram
   participant AC as AssistantCore
   participant HR as HeartbeatRepository
   participant SM as SessionManager
-  participant OC as OpenCode Client
+  participant AI as AI Provider
   participant OR as OutboxRepository
 
-  HS->>AC: runHeartbeatTasks()
-  AC->>HR: getTasks()
-  AC->>SM: getOrCreateHeartbeatSession()
-  AC->>SM: getOrCreateMainSession()
-  AC->>OC: prompt heartbeat tasks
-  AC->>OC: inject summary into main session
-  AC->>OC: proactive notification decision prompt
+  HS->>AC: RunHeartbeatTasks()
+  AC->>HR: GetTasks()
+  AC->>SM: GetOrCreateHeartbeatSession()
+  AC->>SM: GetOrCreateMainSession()
+  AC->>AI: prompt heartbeat tasks
+  AC->>AI: inject summary into main session
+  AC->>AI: proactive notification decision prompt
   HS->>OR: enqueue failure notification (on repeated failures)
 ```
 
-## 5) Vault + PKM Code Path
+## 5) Workspace Code Path
 
-Vault API surface is in `src/vault/vault-service.ts`; tools are exposed via `src/adapters/plugins/vault.plugin.ts`.
+Workspace operations are in `internal/workspace/workspace.go`; tools are exposed via `internal/ai/tools_workspace.go`.
 
 ```mermaid
 flowchart TD
-  Tool[vault_* tools]
-  Tool --> VS[VaultService]
-  VS --> FS[Filesystem under .data/vault]
-  VS --> Links[markdown-links.ts]
-  VS --> Tags[markdown-tags.ts]
-
-  Tool --> Search[vault_search mode: name/content/both]
-  Tool --> Backlinks[vault_backlinks]
-  Tool --> TagSearch[vault_tag_search]
+  Tool[workspace_* tools]
+  Tool --> WS[Workspace]
+  WS --> FS[Filesystem under .data/workspace]
+  WS --> Search[workspace_search]
+  WS --> Stats[workspace_stats]
 ```
-
-Recent PKM-related code points:
-- `searchFiles(query, folder, mode)`
-- `findBacklinks(target, folder)`
-- `searchByTag(tag, folder)`
 
 ## 6) Persistence Model (SQLite)
 
-Schema bootstrap: `src/store/db.ts`.
+Schema bootstrap: `internal/store/db.go`.
 
 Main tables:
-- `kv` (session IDs, last-channel)
+- `session` (session IDs)
 - `memory` (durable facts)
 - `whitelist` (channel access)
 - `outbox` (proactive queued messages + retry metadata)
 - `heartbeat_tasks` (scheduled agent tasks)
+- `channel` (last-used channel tracking)
 
-## 7) Test Strategy Map 🧪
+## 7) Test Strategy
 
-```mermaid
-flowchart LR
-  Unit[Unit tests]
-  Unit --> VaultTests[tests/vault/*]
-  Unit --> CoreTests[tests/core/*]
-  Unit --> RepoTests[tests/adapters/persistence/*]
-  Unit --> ChannelTests[tests/adapters/channels/*]
-```
+222+ tests across 11 packages. Test files live alongside source (`*_test.go`).
 
-Command baseline:
 ```bash
-bun run typecheck
-bun test
+go test ./... -count=1        # run all tests
+go test ./... -count=1 -race  # with race detection
+go vet ./...                  # static analysis
 ```
+
+No external mocking libraries — all mocks are hand-written stubs in test files.
 
 ## 8) Practical Extension Points
 
-- Add new channel: implement `ChannelAdapter` and register in `src/index.ts`.
-- Add new tool/plugin: create under `src/adapters/plugins/` and wire via OpenCode config.
-- Add new persistence implementation: implement core port, bind in composition root.
-- Add new vault capability: extend `VaultService` first, then expose tool.
+- Add new channel: implement `core.ChannelAdapter` (`internal/core/ports.go`), register in `app.go`.
+- Add new AI tool: create in `internal/ai/tools_*.go`, register via `ai.Registry`.
+- Add new persistence: implement core port interface, bind in composition root.
+- Add new workspace feature: extend `workspace.Workspace`, expose via tool.

@@ -64,7 +64,7 @@ As your non-root user:
 ```bash
 git clone <your-repo-url> pocketbrain
 cd pocketbrain
-make setup-runtime
+make build
 ```
 
 ## 6) Run as a systemd service

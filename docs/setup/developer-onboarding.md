@@ -1,7 +1,5 @@
 # Developer Onboarding
 
-OpenCode skill equivalent: `pocketbrain-dev-setup`.
-
 This is a short entry point. The canonical developer setup workflow lives in runbooks.
 
 ## Canonical references

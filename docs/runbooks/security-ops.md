@@ -11,7 +11,7 @@ Use this runbook for recurring security hygiene and post-incident security actio
 ## 2) Rotation cadence
 
 - `WHITELIST_PAIR_TOKEN`: every 30 days
-- provider/API credentials: every 60 days or after exposure
+- Provider API keys: every 60 days or after exposure
 
 ## 3) Rotation procedure
 
@@ -20,6 +20,7 @@ Use this runbook for recurring security hygiene and post-incident security actio
 3. Restart runtime and verify health:
 
 ```bash
+sudo systemctl restart pocketbrain
 make logs
 ```
 
@@ -28,17 +29,16 @@ make logs
 
 ## 4) Dependency hygiene
 
-- Weekly: vulnerability review
+- Weekly: vulnerability review (`govulncheck ./...` if installed)
 - Monthly: dependency refresh and full regression checks
 - Critical CVEs: patch within 48 hours
 
 Validation command set:
 
 ```bash
-bun run typecheck
-bun run test:processes
-bun run test
-bun run build
+go vet ./...
+go test ./... -count=1 -race
+go build ./...
 ```
 
 ## 5) Residual risk maintenance

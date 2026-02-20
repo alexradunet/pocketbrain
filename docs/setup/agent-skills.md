@@ -1,36 +1,28 @@
-# Agent Skills Catalog
+# Agent Skills
 
-PocketBrain externalizes repeatable workflows as OpenCode skills.
+PocketBrain supports dynamic skills that can be loaded, created, and installed from GitHub.
+
+## Skill tools
+
+The AI assistant has access to these skill management tools:
+
+- `skill_list` — list all installed skills
+- `skill_load` — load a skill by name
+- `skill_create` — create a new skill
+- `skill_install` — install a skill from a GitHub repository
 
 ## Skill location
 
-- Active runtime skills: `$OPENCODE_CONFIG_DIR/.agents/skills/<name>/SKILL.md`
-- Default runtime path when vault is enabled: `VAULT_PATH/99-system/99-pocketbrain/.agents/skills/`
-- Repository copies under `.agents/skills/` are treated as bundled defaults and can be seeded into the runtime path.
-
-## Current skills
-
-- `pocketbrain-install` - zero-to-healthy first install on Debian
-- `pocketbrain-runtime-deploy` - runtime deployment and health verification
-- `pocketbrain-dev-setup` - contributor machine setup and dev validation
-- `pocketbrain-release-ops` - release checklist and managed deployment
-- `pocketbrain-incident-response` - first-response triage and recovery
-- `pocketbrain-security-ops` - secret rotation, dependency hygiene, and residual risk process
-- `pocketbrain-ci-e2e` - CI E2E secret setup and validation behavior
-- `pocketbrain-vault-autoconfig` - adapt to each vault's Obsidian settings and conventions
+Skills are stored in the workspace under `.data/workspace/skills/`.
 
 ## Usage
 
-Ask explicitly for the skill to apply, for example:
+Ask the assistant to manage skills:
 
-- "Use `pocketbrain-runtime-deploy` to deploy this host"
-- "Use `pocketbrain-release-ops` for this release"
-- "Use `pocketbrain-incident-response` to triage this outage"
-
-Each skill references canonical runbooks in `docs/runbooks/`.
+- "List my skills"
+- "Create a skill for daily standup reports"
+- "Install the skill from github.com/user/repo"
 
 ## Authoring rules
 
-- Skill file must be named `SKILL.md`
-- Frontmatter requires `name` and `description`
-- Skill name must match directory name and use lowercase hyphenated format
+Skills are markdown files with frontmatter metadata. See `internal/skills/` for the implementation.

@@ -1,4 +1,4 @@
-# Repository Structure Contract 🧭
+# Repository Structure Contract
 
 Canonical repository layout for PocketBrain.
 
@@ -7,58 +7,50 @@ Canonical repository layout for PocketBrain.
 ```mermaid
 flowchart TB
   Root[Repository Root]
-  Root --> Src[src/ app code]
-  Root --> Tests[tests/ automated tests]
-  Root --> Scripts[scripts/ setup + runtime + ops]
+  Root --> Main[main.go entry point]
+  Root --> Cmd[cmd/ CLI commands]
+  Root --> Internal[internal/ all packages]
   Root --> Docs[docs/ architecture + guides + runbooks]
-  Root --> Skills[.agents/skills/ reusable workflows]
-  Root --> Dev[development/ CI + contracts]
 ```
 
-## Top-level folders
+## Top-level layout
 
-### `src/`
-
-Application source code.
-
-### `tests/`
-
-Automated tests for the application.
-
-### `scripts/`
-
-Executable scripts grouped by purpose:
-- `setup/` machine/bootstrap setup
-- `ops/` release/runtime operational helpers
-
-### `docs/`
-
-Documentation and runbooks only.
-
-### `development/`
-
-Development and CI contract tooling.
-
-### `.agents/skills/`
-
-OpenCode/agent-compatible reusable skills (`SKILL.md` files).
+```
+main.go              entry point
+go.mod / go.sum      Go module definition
+Makefile             build/test/run commands
+cmd/                 CLI commands (cobra)
+internal/            all application packages
+  ai/                AI providers + tool registry
+  app/               composition root and shutdown
+  channel/           channel manager + message chunking
+  channel/whatsapp/  WhatsApp adapter (whatsmeow)
+  config/            environment configuration
+  core/              assistant, session manager, prompt builder, ports
+  scheduler/         heartbeat cron scheduler
+  skills/            skill management
+  store/             SQLite repositories
+  taildrive/         Taildrive file sharing
+  tui/               terminal UI (bubbletea)
+  workspace/         file operations with path security
+docs/                architecture, deploy, and runbooks
+```
 
 ## Placement checklist
 
-1. Is it executable app code? -> `src/`
-2. Is it a test? -> `tests/`
-3. Is it an operator/setup/runtime script? -> `scripts/`
+1. Is it a CLI command? -> `cmd/`
+2. Is it application code? -> `internal/` (appropriate subpackage)
+3. Is it a test? -> alongside source as `*_test.go`
 4. Is it documentation? -> `docs/`
-5. Is it reusable agent workflow knowledge? -> `.agents/skills/`
-6. Is it CI/repo-contract tooling? -> `development/`
 
 ## Command contract
 
 - Repository root is the only canonical working directory.
 - `make` is the primary command interface.
-- No compatibility wrapper scripts at `scripts/*.sh`.
+- `go build ./...` must always succeed.
+- `go test ./... -count=1` must always pass.
 
 ## Enforcement
 
-- Structure rules are enforced by `development/ci/validate-structure.sh`.
-- PRs run `.github/workflows/structure-contract.yml`.
+- PRs run `.github/workflows/quality-gates.yml` (build, test, vet).
+- PRs run `.github/workflows/structure-contract.yml` (validates Go project structure, rejects stale TS artifacts).

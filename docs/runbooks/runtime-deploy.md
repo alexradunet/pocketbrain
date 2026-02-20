@@ -4,19 +4,26 @@ Use this runbook for deploying or redeploying PocketBrain runtime on Debian.
 
 ## Runtime Profile (V1)
 
-PocketBrain V1 runs in `vault-only` profile:
+PocketBrain V1 runs in `workspace-only` profile:
 
-- WhatsApp + memory + vault tools are enabled.
+- WhatsApp + memory + workspace tools are enabled.
 - No host/system command execution is exposed to chat users.
 - Self-evolution and autonomous code changes are out of scope.
 
 ## 1) Install prerequisites
 
+- Go 1.25+
+- Git
+
+## 2) Build binary
+
 ```bash
-make setup-runtime
+make build
 ```
 
-## 2) Configure environment
+This produces a single `./pocketbrain` binary with zero runtime dependencies.
+
+## 3) Configure environment
 
 ```bash
 cp .env.example .env
@@ -33,34 +40,35 @@ Optional:
 
 ```dotenv
 WHITELIST_PAIR_TOKEN=your-secure-token
-OPENCODE_MODEL=provider/model
-OPENCODE_CONFIG_DIR=.data/vault/99-system/99-pocketbrain
+PROVIDER=anthropic
+MODEL=claude-sonnet-4-20250514
+ANTHROPIC_API_KEY=sk-ant-...
 WHATSAPP_AUTH_DIR=.data/whatsapp-auth
-VAULT_ENABLED=true
+WORKSPACE_DIR=.data/workspace
 TAILDRIVE_ENABLED=true
-TAILDRIVE_SHARE_NAME=vault
+TAILDRIVE_SHARE_NAME=workspace
 TAILDRIVE_AUTO_SHARE=true
 ```
 
-Notes:
-
-- If `OPENCODE_CONFIG_DIR` is unset and vault is enabled, PocketBrain defaults it to `VAULT_PATH/99-system/99-pocketbrain`.
-- Keep runtime state local (`.data/state.db`, WhatsApp auth, XDG runtime dirs). The vault path stores portable config and skills.
-
-## 3) Start runtime
+## 4) Start runtime
 
 ```bash
-bun install
 make start
 ```
 
-## 4) Verify health
+Or run the binary directly:
+
+```bash
+./pocketbrain start --headless
+```
+
+## 5) Verify health
 
 ```bash
 make logs
 ```
 
-## 5) Configure always-on runtime
+## 6) Configure always-on runtime
 
 - Use `docs/deploy/systemd/pocketbrain.service`.
 - Enable service on boot:
@@ -71,16 +79,10 @@ sudo systemctl enable --now pocketbrain
 sudo systemctl status pocketbrain
 ```
 
-## 6) Update workflow
+## 7) Update workflow
 
 ```bash
 git pull
-bun install
-make start
-```
-
-## 7) Managed release
-
-```bash
-make release TAG=$(git rev-parse --short HEAD)
+make build
+sudo systemctl restart pocketbrain
 ```

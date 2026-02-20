@@ -1,25 +1,35 @@
-# CI OpenCode E2E Runbook
+# CI Quality Gates Runbook
 
-Use this runbook to enable and verify model-path E2E checks in CI.
+Use this runbook to understand and verify CI quality gate checks.
 
-## 1) Configure required secret
+## 1) Quality gates
 
-- Secret name: `OPENCODE_MODEL`
-- Format: `provider/model` (example: `openai/gpt-5`)
+The `.github/workflows/quality-gates.yml` workflow runs on every PR and push to main:
 
-## 2) GitHub setup
+- `go build ./...` — compilation check
+- `go test ./... -count=1 -race` — full test suite with race detection
+- `go vet ./...` — static analysis
 
-1. Open repository `Settings -> Secrets and variables -> Actions`.
-2. Add `OPENCODE_MODEL`.
-3. Re-run PR workflow.
-4. Confirm `Run OpenCode E2E test (optional)` executes in `.github/workflows/quality-gates.yml`.
+## 2) Structure contract
 
-## 3) Validation expectations
+The `.github/workflows/structure-contract.yml` workflow validates Go project structure on PRs:
 
-- Without secret: step is skipped.
-- With secret: step runs `bun run test:opencode:e2e` and passes.
+- Required files: `main.go`, `go.mod`, `go.sum`, `Makefile`, `README.md`
+- Required directories: `cmd/`, `internal/`, `docs/`
+- No stale TypeScript artifacts
+
+## 3) Local validation
+
+Run the same checks locally before pushing:
+
+```bash
+go build ./...
+go test ./... -count=1 -race
+go vet ./...
+```
 
 ## 4) Troubleshooting
 
-- Step skipped unexpectedly: check exact secret name.
-- Step fails: verify model identifier format and provider credentials.
+- Build fails: check `go mod tidy` for missing dependencies.
+- Test fails with race: investigate concurrent access patterns.
+- Vet warnings: fix reported issues before merging.

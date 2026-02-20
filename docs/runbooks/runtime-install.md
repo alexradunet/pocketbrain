@@ -16,11 +16,11 @@ Follow:
 
 - Logs stream works: `make logs`
 - Service is healthy: `sudo systemctl status pocketbrain`
-- PocketBrain vault home exists: `ls .data/vault/99-system/99-pocketbrain`
+- Workspace directory exists: `ls .data/workspace`
 - Update path validated:
 
 ```bash
 git pull
-bun install
-make start
+make build
+sudo systemctl restart pocketbrain
 ```

@@ -2,18 +2,18 @@
 
 Use this runbook for onboarding or repairing a contributor machine.
 
-## 1) Bootstrap local prerequisites
+## 1) Prerequisites
 
-```bash
-make setup-dev
-```
+- Go 1.25+ installed and in `PATH`
+- Git
 
 ## 2) Initialize local environment
 
 ```bash
 cp .env.example .env
-bun run setup
 ```
+
+Edit `.env` with your API key and provider settings.
 
 ## 3) Validate core workflows
 
@@ -23,10 +23,8 @@ make build
 make dev
 ```
 
-PocketBrain runtime skill/config home defaults to `VAULT_PATH/99-system/99-pocketbrain` when vault is enabled.
-
 ## 4) Troubleshooting
 
-- `bun: command not found`: ensure Bun is installed and in `PATH`.
+- `go: command not found`: ensure Go is installed and in `PATH`.
 - Missing `.env`: create it from `.env.example`.
-- Test/build failures: run `bun install --frozen-lockfile` and retry.
+- Test/build failures: run `go mod tidy` and retry.

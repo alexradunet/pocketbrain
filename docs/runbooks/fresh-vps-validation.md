@@ -1,14 +1,13 @@
 # Fresh VPS Validation Runbook
 
-Use this checklist after reinstalling PocketBrain on a fresh VPS to verify vault-backed PocketBrain setup and recovery behavior.
+Use this checklist after reinstalling PocketBrain on a fresh VPS to verify setup and recovery behavior.
 
-## 1) Clone and install prerequisites
+## 1) Clone and build
 
 ```bash
 git clone https://github.com/alexradunet/pocketbrain.git
 cd pocketbrain
-make setup-runtime
-bun install
+make build
 ```
 
 ## 2) Configure environment
@@ -19,74 +18,58 @@ cp .env.example .env
 
 Set at minimum:
 
-- `VAULT_ENABLED=true`
-- `VAULT_PATH=.data/vault` (or your synced mount path)
-- `TAILDRIVE_ENABLED=true` and `TAILDRIVE_*` values (for Taildrive vault sharing)
+- `PROVIDER` and API key for your chosen provider
+- `WORKSPACE_DIR=.data/workspace`
+- `TAILDRIVE_ENABLED=true` and `TAILDRIVE_*` values (for Taildrive workspace sharing)
 - `ENABLE_WHATSAPP=true` (if WhatsApp channel is required)
 
-## 3) Initialize vault scaffold
-
-```bash
-make vault-init VAULT_DIR=.data/vault
-```
-
-Verify the PocketBrain vault home exists:
-
-- `.data/vault/99-system/99-pocketbrain`
-- `.data/vault/99-system/99-pocketbrain/.agents/skills`
-
-## 4) Start PocketBrain
+## 3) Start PocketBrain
 
 ```bash
 make start
 ```
 
-Confirm logs show healthy startup without OpenCode config/plugin path errors.
+Confirm logs show healthy startup without errors.
 
-## 5) Validate OpenCode config in vault
+## 4) Validate data directories
 
 Confirm these exist after startup:
 
-- `.data/vault/99-system/99-pocketbrain/opencode.json`
-- `.data/vault/99-system/99-pocketbrain/.agents/skills/`
+- `.data/state.db`
+- `.data/workspace/`
+- `.data/whatsapp-auth/` (if WhatsApp enabled)
 
-## 6) Run doctor checks
-
-```bash
-make doctor
-```
-
-Expected checks include:
-
-- vault path writable
-- PocketBrain vault home writable
-- PocketBrain runtime skills dir writable
-
-## 7) Validate code health (recommended)
+## 5) Run health checks
 
 ```bash
-bun run typecheck
-bun run test
+make logs
+sudo systemctl status pocketbrain
 ```
 
-## 8) Functional smoke tests
+## 6) Validate code health (recommended)
+
+```bash
+go vet ./...
+go test ./... -count=1
+```
+
+## 7) Functional smoke tests
 
 From chat, run lightweight checks:
 
-- call `vault_obsidian_config`
-- append to daily note via `vault_daily`
+- Send a message and confirm a response
+- Use `/new` to start a fresh session
+- Use `/remember` to save a memory fact
 
-Confirm resulting files are written in expected vault locations.
+## 8) Reinstall resilience drill
 
-## 9) Reinstall resilience drill
-
-Simulate a fresh host while keeping vault sync content:
+Simulate a fresh host while keeping data:
 
 1. Stop service/runtime.
-2. Remove local runtime directories except synced vault mount.
-3. Re-clone repo and repeat steps 1, 2, and 4.
+2. Remove local runtime directories except synced workspace.
+3. Re-clone repo and repeat steps 1-3.
 
 Success criteria:
 
-- PocketBrain starts without manual recreation of config/skills/process files.
-- Vault-backed PocketBrain home under `99-system/99-pocketbrain` is reused automatically.
+- PocketBrain starts without manual recreation of config files.
+- SQLite state is recreated on fresh start.

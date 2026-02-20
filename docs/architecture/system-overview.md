@@ -1,22 +1,22 @@
-# PocketBrain Architecture Overview 🧠
+# PocketBrain Architecture Overview
 
 This page explains how PocketBrain works end-to-end, with diagrams and a fast mental model.
 
 ## 1) Big Picture
 
-- Goal: one assistant runtime with persistent memory and a local markdown vault.
+- Goal: one assistant runtime with persistent memory and workspace file management.
 - Style: dependency-injected core, adapter-based infrastructure, SQLite state.
-- Runtime service: `pocketbrain`.
+- Runtime: single static Go binary, zero runtime dependencies.
 
 ```mermaid
 flowchart LR
-  User[User 📱] --> WA[WhatsApp Adapter]
+  User[User] --> WA[WhatsApp Adapter]
   WA --> CM[ChannelManager]
   CM --> AC[AssistantCore]
-  AC --> OC[OpenCode Runtime]
+  AC --> AI[AI Provider API]
   AC --> DB[(SQLite state.db)]
-  AC --> VP[Vault Plugin]
-  VP --> Vault[(.data/vault Markdown)]
+  AC --> WS[Workspace Tools]
+  WS --> Files[(.data/workspace)]
 ```
 
 ## 2) Request Flow (Normal Chat)
@@ -28,16 +28,17 @@ sequenceDiagram
   participant C as ChannelManager
   participant A as AssistantCore
   participant S as SessionManager
-  participant O as OpenCode
+  participant P as AI Provider
   participant D as SQLite
 
   U->>W: message
   W->>C: normalized text
-  C->>A: ask(channel, userID, text)
-  A->>S: getOrCreateMainSession()
+  C->>A: Ask(channel, userID, text)
+  A->>S: GetOrCreateMainSession()
   A->>D: load memory + save last channel
-  A->>O: session.prompt(system + user text)
-  O-->>A: assistant parts
+  A->>P: SendMessage(system + user text)
+  P-->>A: response (+ tool calls)
+  A->>A: tool loop (if needed)
   A-->>C: final text
   C-->>W: send response
   W-->>U: message delivered
@@ -45,19 +46,19 @@ sequenceDiagram
 
 ## 3) Data Ownership Model
 
-- `.data/vault/` = long-lived knowledge files (Markdown).
-- `.data/vault/99-system/99-pocketbrain/` = synced PocketBrain OpenCode config + skills/process knowledge.
+- `.data/workspace/` = long-lived knowledge files.
 - `.data/state.db` = runtime state (sessions, memory, whitelist, outbox, heartbeat tasks).
 - Content stays in files, operational state stays in SQLite.
 
 ## 4) Core Components
 
-- `src/index.ts` — composition root, wires dependencies.
-- `src/core/assistant.ts` — orchestrates prompts/sessions/memory context.
-- `src/core/session-manager.ts` — main + heartbeat session lifecycle.
-- `src/scheduler/heartbeat.ts` — periodic tasks with retry and notification.
-- `src/vault/vault-service.ts` — vault reads/writes/search/backlinks/tags.
-- `src/store/db.ts` — SQLite schema bootstrapping.
+- `main.go` / `cmd/` — entry point and Cobra CLI.
+- `internal/app/app.go` — composition root, wires all dependencies.
+- `internal/core/assistant.go` — orchestrates prompts/sessions/memory context.
+- `internal/core/session.go` — main + heartbeat session lifecycle.
+- `internal/scheduler/heartbeat.go` — periodic tasks with retry and notification.
+- `internal/workspace/workspace.go` — file operations with path security.
+- `internal/store/db.go` — SQLite schema bootstrapping.
 
 ## 5) Layer Map
 
@@ -73,13 +74,13 @@ flowchart TB
   subgraph Adapters[Adapter Layer]
     WA[WhatsApp Adapter]
     Repos[SQLite Repositories]
-    Plugins[Tool Plugins]
+    Tools[AI Tool Registry]
   end
 
   subgraph Infra[Infrastructure]
-    OC[OpenCode Runtime]
+    AI[AI Provider API]
     SQL[(SQLite)]
-    VF[(Vault Files)]
+    WS[(Workspace Files)]
   end
 
   WA --> AC
@@ -87,20 +88,20 @@ flowchart TB
   AC --> PB
   AC --> Ports
   Ports --> Repos
-  Plugins --> VF
+  Tools --> WS
   Repos --> SQL
-  AC --> OC
+  AC --> AI
 ```
 
 ## 6) Why This Architecture Is Practical
 
 - Easy to reason about: composition root + explicit dependencies.
 - Testable: core depends on ports, tests can mock adapters.
-- Markdown vault remains tool-agnostic.
+- Single static binary: zero runtime dependencies, easy deployment.
 - Reliable operations: outbox retries + heartbeat retries + WAL SQLite.
 
 ## 7) Where To Read Next
 
-- Repo structure contract: `docs/architecture/repository-structure.md`
+- Coding architecture: `docs/architecture/coding-architecture.md`
 - Security model: `docs/architecture/security-threat-model.md`
-- Dev onboarding: `docs/setup/developer-onboarding.md`
+- Developer setup: `docs/runbooks/dev-setup.md`

@@ -2,24 +2,24 @@
 
 ## Scope
 
-- Runtime application in `src/`
+- Runtime application in `internal/`
 - Runtime data in `.data/` (`DATA_DIR`)
-- Runtime process managed by Bun/service manager
-- Operational scripts in `scripts/ops/` and provider snapshot tooling
+- Runtime process: single Go binary managed by systemd
+- Deployment on Debian VPS
 
 ## Assets
 
-- User conversation data and memory facts (`state.db` tables: `memory`, `kv`, `outbox`, `whitelist`).
+- User conversation data and memory facts (`state.db` tables: `memory`, `session`, `outbox`, `whitelist`).
 - WhatsApp auth state (`DATA_DIR/whatsapp-auth`).
-- Vault content (`DATA_DIR/vault`).
-- Runtime credentials (`WHITELIST_PAIR_TOKEN`, provider auth via OpenCode config).
+- Workspace content (`DATA_DIR/workspace`).
+- Runtime credentials (`WHITELIST_PAIR_TOKEN`, provider API keys in `.env`).
 
 ## Trust Boundaries
 
 1. External network -> WhatsApp edge.
 2. Runtime process -> host filesystem (`.data/`).
-3. Operator shell -> scripts that control release/runtime + VPS/provider backup tooling.
-4. OpenCode runtime -> model provider endpoints.
+3. Operator shell -> systemd service control.
+4. Runtime process -> AI provider endpoints (Anthropic, OpenAI-compatible, Google).
 
 ## Primary Threats and Controls
 
@@ -29,26 +29,28 @@
 - Current controls:
   - Whitelist gate in `whitelist` table.
   - Pair-token flow (`/pair <token>`) with timing-safe comparison.
+  - Brute-force guard with exponential backoff.
 - Required controls:
   - Rotate `WHITELIST_PAIR_TOKEN` monthly or after suspected exposure.
   - Audit `whitelist` entries weekly.
 
 ### 2) Data loss or tampering in runtime state
 
-- Threat: accidental deletion/corruption of `/data` or rollback to stale state.
+- Threat: accidental deletion/corruption of `.data/` or rollback to stale state.
 - Current controls:
   - Canonical data path config and persistent volume usage.
+  - SQLite WAL mode for crash resilience.
   - VPS/provider snapshot and backup capabilities.
 - Required controls:
-  - Weekly backup/restore drill via VPS/provider workflow with documented evidence.
+  - Weekly backup/restore drill with documented evidence.
   - Immutable backup storage copy outside runtime host.
 
 ### 3) Secret leakage
 
 - Threat: secrets committed or exposed in logs/process output.
 - Current controls:
-  - `.env` is never bundled with application code.
-  - Structured logging for app flow.
+  - `.env` is gitignored and never bundled with application code.
+  - Structured logging via `slog`.
 - Required controls:
   - Never commit `.env` or raw credentials.
   - Redaction review for new logs touching auth/config values.
@@ -57,31 +59,31 @@
 
 - Threat: unpinned dependencies introduce unreviewed changes.
 - Current controls:
-  - App dependencies pinned in `package.json` and `bun.lock`.
-  - Runtime dependency versions pinned in lockfiles where applicable.
+  - Dependencies pinned in `go.mod` and `go.sum`.
+  - Single static binary with no runtime dependencies.
 - Required controls:
   - Monthly dependency refresh window and regression run.
-  - Critical CVE response within 48h.
+  - Critical CVE response within 48h (`govulncheck` if available).
 
 ### 5) False healthy deployments
 
 - Threat: system reports healthy while key dependencies are broken.
 - Current controls:
   - Runtime startup checks and structured logs.
-  - Release workflow runs preflight validation commands.
+  - CI quality gates: build, test with race detection, vet.
 - Required controls:
   - Keep health checks strict and review when startup logic changes.
   - Include rollback-health validation on every release.
 
-### 6) Capability drift beyond vault-only profile
+### 6) Capability drift beyond workspace-only profile
 
-- Threat: plugin or prompt changes accidentally enable system command behavior in chat runtime.
+- Threat: tool or prompt changes accidentally enable system command behavior in chat runtime.
 - Current controls:
-  - Runtime prompt now declares vault-only capability boundaries.
-  - OpenCode plugin list is limited to install_skill, memory, channel messaging, and vault tools.
+  - Runtime prompt declares workspace-only capability boundaries.
+  - Tool registry limited to workspace, memory, channel, and skill tools.
 - Required controls:
-  - Keep CI policy tests that fail on forbidden plugin additions.
-  - Review prompt boundary text whenever tool surface changes.
+  - Review tool registry whenever tool surface changes.
+  - Review prompt boundary text on tool additions.
 
 ## Residual Risk Register
 
@@ -90,7 +92,6 @@
 | RR-01 | WhatsApp provider/runtime external dependency outage | No local failover | Medium | Operations |
 | RR-02 | Human error in VPS snapshot/restore selection | Manual provider workflow | Medium | Operations |
 | RR-03 | Secret rotation lag | Policy added, enforcement manual | Medium | Security/Operations |
-| RR-04 | E2E model-path test skipped when secret missing | CI has optional gate | Low-Medium | DevOps |
 
 ## Security Definition of Done
 
