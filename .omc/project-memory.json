@@ -138,6 +138,84 @@
   },
   "hotPaths": [
     {
+      "path": "",
+      "accessCount": 4,
+      "lastAccessed": 1771579056265,
+      "type": "directory"
+    },
+    {
+      "path": "docs/runbooks/dev-setup.md",
+      "accessCount": 3,
+      "lastAccessed": 1771578943801,
+      "type": "file"
+    },
+    {
+      "path": "docs/runbooks/runtime-deploy.md",
+      "accessCount": 3,
+      "lastAccessed": 1771578953045,
+      "type": "file"
+    },
+    {
+      "path": "docs/runbooks/runtime-install.md",
+      "accessCount": 3,
+      "lastAccessed": 1771578956196,
+      "type": "file"
+    },
+    {
+      "path": "docs/runbooks/fresh-vps-validation.md",
+      "accessCount": 3,
+      "lastAccessed": 1771578966175,
+      "type": "file"
+    },
+    {
+      "path": "docs/runbooks/release-ops.md",
+      "accessCount": 3,
+      "lastAccessed": 1771578970397,
+      "type": "file"
+    },
+    {
+      "path": "docs/runbooks/ci-e2e.md",
+      "accessCount": 3,
+      "lastAccessed": 1771578975830,
+      "type": "file"
+    },
+    {
+      "path": "docs/runbooks/doctor.md",
+      "accessCount": 3,
+      "lastAccessed": 1771578981082,
+      "type": "file"
+    },
+    {
+      "path": "docs/runbooks/security-ops.md",
+      "accessCount": 3,
+      "lastAccessed": 1771578988708,
+      "type": "file"
+    },
+    {
+      "path": "docs/architecture/coding-architecture.md",
+      "accessCount": 3,
+      "lastAccessed": 1771579015372,
+      "type": "file"
+    },
+    {
+      "path": "docs/architecture/security-threat-model.md",
+      "accessCount": 3,
+      "lastAccessed": 1771579040035,
+      "type": "file"
+    },
+    {
+      "path": "docs/setup/agent-skills.md",
+      "accessCount": 3,
+      "lastAccessed": 1771579044255,
+      "type": "file"
+    },
+    {
+      "path": "docs/README.md",
+      "accessCount": 3,
+      "lastAccessed": 1771579046705,
+      "type": "file"
+    },
+    {
       "path": "go/internal/app/app.go",
       "accessCount": 2,
       "lastAccessed": 1771576368673,
@@ -156,15 +234,45 @@
       "type": "file"
     },
     {
-      "path": "",
-      "accessCount": 2,
-      "lastAccessed": 1771576376476,
-      "type": "directory"
-    },
-    {
       "path": "go/internal/core/ports.go",
       "accessCount": 2,
       "lastAccessed": 1771576380603,
+      "type": "file"
+    },
+    {
+      "path": ".env.example",
+      "accessCount": 2,
+      "lastAccessed": 1771578780956,
+      "type": "file"
+    },
+    {
+      "path": "docs/deploy/systemd/pocketbrain.service",
+      "accessCount": 2,
+      "lastAccessed": 1771578789105,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 2,
+      "lastAccessed": 1771578803790,
+      "type": "file"
+    },
+    {
+      "path": "AGENTS.md",
+      "accessCount": 2,
+      "lastAccessed": 1771578830190,
+      "type": "file"
+    },
+    {
+      "path": "docs/architecture/system-overview.md",
+      "accessCount": 2,
+      "lastAccessed": 1771579083186,
+      "type": "file"
+    },
+    {
+      "path": "docs/architecture/repository-structure.md",
+      "accessCount": 2,
+      "lastAccessed": 1771579116996,
       "type": "file"
     },
     {
@@ -321,6 +429,12 @@
       "path": "Makefile",
       "accessCount": 1,
       "lastAccessed": 1771578559434,
+      "type": "file"
+    },
+    {
+      "path": ".claude/settings.local.json",
+      "accessCount": 1,
+      "lastAccessed": 1771579066225,
       "type": "file"
     }
   ],
