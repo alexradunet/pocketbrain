@@ -20,10 +20,19 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:tailscale.com)",
       "Bash(go get:*)",
-      "Bash(go vet:*)"
+      "Bash(go vet:*)",
+      "Bash(/usr/local/go/bin/go version:*)",
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "Bash(sudo -E bash -)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(chmod:*)",
+      "Bash(gh api:*)",
+      "mcp__plugin_oh-my-claudecode_t__state_clear"
     ]
   },
   "enabledPlugins": {
-    "tmux-cli@cctools-plugins": true
+    "tmux-cli@cctools-plugins": true,
+    "superpowers@claude-plugins-official": true
   }
 }

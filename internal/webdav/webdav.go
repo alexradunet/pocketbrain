@@ -71,7 +71,7 @@ func (s *Service) Start() error {
 
 	addr := s.cfg.Addr
 	if addr == "" {
-		addr = "0.0.0.0:6060"
+		addr = "127.0.0.1:6060"
 	}
 
 	ln, err := net.Listen("tcp", addr)

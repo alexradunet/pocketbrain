@@ -107,13 +107,13 @@ func Load() (*Config, error) {
 		EnableWhatsApp:  envBool("ENABLE_WHATSAPP", false),
 		WhatsAppAuthDir: waAuthDir,
 
-		OutboxIntervalMs: 60_000,
-		OutboxMaxRetries: 3,
+		OutboxIntervalMs: envInt("OUTBOX_INTERVAL_MS", 60_000),
+		OutboxMaxRetries: envInt("OUTBOX_MAX_RETRIES", 3),
 
 		WhatsAppWhitelistNumbers: parsePhoneWhitelist(os.Getenv("WHATSAPP_WHITELIST_NUMBERS"), os.Getenv("WHATSAPP_WHITELIST_NUMBER")),
 
 		WebDAVEnabled: envBool("WEBDAV_ENABLED", false),
-		WebDAVAddr:    envStr("WEBDAV_ADDR", "0.0.0.0:6060"),
+		WebDAVAddr:    envStr("WEBDAV_ADDR", "127.0.0.1:6060"),
 
 		WorkspacePath:    workspacePath,
 		WorkspaceEnabled: workspaceEnabled,

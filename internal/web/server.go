@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 	gossh "golang.org/x/crypto/ssh"
@@ -34,8 +35,8 @@ type Server struct {
 func New(cfg Config) *Server {
 	sub, _ := fs.Sub(staticFS, "static")
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.FS(sub)))
-	mux.HandleFunc("/ws", handleWebSocket(cfg))
+	mux.Handle("GET /", http.FileServer(http.FS(sub)))
+	mux.HandleFunc("GET /ws", handleWebSocket(cfg))
 
 	return &Server{
 		httpSrv: &http.Server{Addr: cfg.Addr, Handler: mux},
@@ -67,7 +68,9 @@ func (s *Server) Serve(ln net.Listener) error {
 
 // Stop gracefully shuts down the web server.
 func (s *Server) Stop() error {
-	return s.httpSrv.Shutdown(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return s.httpSrv.Shutdown(ctx)
 }
 
 var upgrader = websocket.Upgrader{

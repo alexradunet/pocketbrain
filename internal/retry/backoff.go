@@ -13,8 +13,8 @@ func ExponentialDelay(base, max time.Duration, attempt int) time.Duration {
 	}
 
 	delay := base * (1 << uint(attempt-1))
-	if max > 0 && delay > max {
-		return max
+	if max > 0 {
+		return min(delay, max)
 	}
 	return delay
 }

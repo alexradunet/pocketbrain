@@ -164,7 +164,7 @@ func (w *WhatsmeowClient) Close() error {
 }
 
 // handleEvent dispatches whatsmeow events.
-func (w *WhatsmeowClient) handleEvent(evt interface{}) {
+func (w *WhatsmeowClient) handleEvent(evt any) {
 	switch v := evt.(type) {
 	case *events.Message:
 		w.handleMessage(v)

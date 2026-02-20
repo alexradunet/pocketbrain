@@ -47,8 +47,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.WebDAVEnabled != false {
 		t.Error("WebDAVEnabled should default to false")
 	}
-	if cfg.WebDAVAddr != "0.0.0.0:6060" {
-		t.Errorf("WebDAVAddr = %q, want %q", cfg.WebDAVAddr, "0.0.0.0:6060")
+	if cfg.WebDAVAddr != "127.0.0.1:6060" {
+		t.Errorf("WebDAVAddr = %q, want %q", cfg.WebDAVAddr, "127.0.0.1:6060")
 	}
 	if cfg.OutboxIntervalMs != 60_000 {
 		t.Errorf("OutboxIntervalMs = %d, want 60000", cfg.OutboxIntervalMs)

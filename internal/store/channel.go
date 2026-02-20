@@ -9,11 +9,11 @@ import (
 
 // ChannelRepo implements core.ChannelRepository backed by SQLite kv table.
 type ChannelRepo struct {
-	conn *sqlite3.Conn
+	db *DB
 }
 
 func NewChannelRepo(db *DB) *ChannelRepo {
-	return &ChannelRepo{conn: db.Conn()}
+	return &ChannelRepo{db: db}
 }
 
 func (r *ChannelRepo) SaveLastChannel(channel, userID string) error {
@@ -21,23 +21,27 @@ func (r *ChannelRepo) SaveLastChannel(channel, userID string) error {
 	if err != nil {
 		return err
 	}
-	return withStmt(r.conn, "INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", func(stmt *sqlite3.Stmt) error {
-		stmt.BindText(1, "last_channel")
-		stmt.BindText(2, string(value))
-		stmt.Step()
-		return stmt.Err()
+	return r.db.exec(func() error {
+		return withStmt(r.db.conn, "INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", func(stmt *sqlite3.Stmt) error {
+			stmt.BindText(1, "last_channel")
+			stmt.BindText(2, string(value))
+			stmt.Step()
+			return stmt.Err()
+		})
 	})
 }
 
 func (r *ChannelRepo) GetLastChannel() (*core.LastChannel, error) {
 	var raw string
-	err := withStmt(r.conn, "SELECT value FROM kv WHERE key = ?", func(stmt *sqlite3.Stmt) error {
-		stmt.BindText(1, "last_channel")
-		if !stmt.Step() {
+	err := r.db.exec(func() error {
+		return withStmt(r.db.conn, "SELECT value FROM kv WHERE key = ?", func(stmt *sqlite3.Stmt) error {
+			stmt.BindText(1, "last_channel")
+			if !stmt.Step() {
+				return nil
+			}
+			raw = stmt.ColumnText(0)
 			return nil
-		}
-		raw = stmt.ColumnText(0)
-		return nil
+		})
 	})
 	if err != nil {
 		return nil, err

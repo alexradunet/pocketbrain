@@ -5,14 +5,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/ncruces/go-sqlite3"
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
 // DB wraps a SQLite connection with prepared-statement management.
+// The shared connection must not be used concurrently; all access is
+// serialized via the exec method.
 type DB struct {
 	conn *sqlite3.Conn
+	mu   sync.Mutex
+}
+
+// exec serializes all repository access to the shared SQLite connection.
+// Every repository operation that touches conn must be wrapped in exec.
+func (db *DB) exec(fn func() error) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return fn()
 }
 
 // Open creates the data directory if needed, opens state.db, enables WAL
@@ -99,6 +111,7 @@ func (db *DB) migrate() error {
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id)`,
+		`CREATE INDEX IF NOT EXISTS idx_outbox_channel ON outbox(channel, next_retry_at)`,
 	}
 
 	for _, stmt := range ddl {
