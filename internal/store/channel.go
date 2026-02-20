@@ -25,7 +25,7 @@ func (r *ChannelRepo) SaveLastChannel(channel, userID string) error {
 		stmt.BindText(1, "last_channel")
 		stmt.BindText(2, string(value))
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	})
 }
 

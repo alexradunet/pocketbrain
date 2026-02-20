@@ -138,7 +138,7 @@ func (db *DB) migrateMemoryNormalized() error {
 		for stmt.Step() {
 			rows = append(rows, row{id: stmt.ColumnInt64(0), fact: stmt.ColumnText(1)})
 		}
-		return nil
+		return stmt.Err()
 	}); err != nil {
 		return err
 	}
@@ -153,6 +153,9 @@ func (db *DB) migrateMemoryNormalized() error {
 				stmt.BindText(1, NormalizeMemoryFact(r.fact))
 				stmt.BindInt64(2, r.id)
 				stmt.Step()
+				if err := stmt.Err(); err != nil {
+					return err
+				}
 				if err := stmt.Reset(); err != nil {
 					return err
 				}
@@ -175,7 +178,7 @@ func (db *DB) hasColumn(table, column string) (bool, error) {
 				break
 			}
 		}
-		return nil
+		return stmt.Err()
 	})
 	if err != nil {
 		return false, err

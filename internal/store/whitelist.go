@@ -35,7 +35,7 @@ func (r *WhitelistRepo) AddToWhitelist(channel, userID string) (bool, error) {
 		stmt.BindText(1, channel)
 		stmt.BindText(2, userID)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	})
 	return err == nil, err
 }
@@ -45,7 +45,7 @@ func (r *WhitelistRepo) RemoveFromWhitelist(channel, userID string) (bool, error
 		stmt.BindText(1, channel)
 		stmt.BindText(2, userID)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	}); err != nil {
 		return false, err
 	}

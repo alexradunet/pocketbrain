@@ -31,7 +31,7 @@ func (r *OutboxRepo) Enqueue(channel, userID, text string, maxRetries int) error
 		stmt.BindText(4, time.Now().UTC().Format(time.RFC3339))
 		stmt.BindInt(5, maxRetries)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	})
 }
 
@@ -55,7 +55,7 @@ func (r *OutboxRepo) ListPending(channel string) ([]core.OutboxMessage, error) {
 			}
 			msgs = append(msgs, m)
 		}
-		return nil
+		return stmt.Err()
 	})
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func (r *OutboxRepo) Acknowledge(id int64) error {
 	return withStmt(r.conn, "DELETE FROM outbox WHERE id = ?", func(stmt *sqlite3.Stmt) error {
 		stmt.BindInt64(1, id)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	})
 }
 
@@ -77,6 +77,6 @@ func (r *OutboxRepo) MarkRetry(id int64, retryCount int, nextRetryAt string) err
 		stmt.BindText(2, nextRetryAt)
 		stmt.BindInt64(3, id)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	})
 }

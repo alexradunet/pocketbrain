@@ -43,7 +43,7 @@ func (r *MemoryRepo) Append(fact string, source *string) (bool, error) {
 		}
 		stmt.BindText(4, time.Now().UTC().Format(time.RFC3339))
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	})
 	return err == nil, err
 }
@@ -52,7 +52,7 @@ func (r *MemoryRepo) Delete(id int64) (bool, error) {
 	if err := withStmt(r.conn, "DELETE FROM memory WHERE id = ?", func(stmt *sqlite3.Stmt) error {
 		stmt.BindInt64(1, id)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	}); err != nil {
 		return false, err
 	}
@@ -82,7 +82,7 @@ func (r *MemoryRepo) Update(id int64, fact string) (bool, error) {
 		stmt.BindText(2, normalized)
 		stmt.BindInt64(3, id)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	}); err != nil {
 		return false, err
 	}
@@ -103,7 +103,7 @@ func (r *MemoryRepo) GetAll() ([]core.MemoryEntry, error) {
 			}
 			entries = append(entries, e)
 		}
-		return nil
+		return stmt.Err()
 	})
 	if err != nil {
 		return nil, err

@@ -34,7 +34,7 @@ func (r *SessionRepo) SaveSessionID(key, sessionID string) error {
 		stmt.BindText(1, key)
 		stmt.BindText(2, sessionID)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	})
 }
 
@@ -42,6 +42,6 @@ func (r *SessionRepo) DeleteSession(key string) error {
 	return withStmt(r.conn, "DELETE FROM kv WHERE key = ?", func(stmt *sqlite3.Stmt) error {
 		stmt.BindText(1, key)
 		stmt.Step()
-		return nil
+		return stmt.Err()
 	})
 }

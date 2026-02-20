@@ -17,7 +17,7 @@ func (r *HeartbeatRepo) GetTasks() ([]string, error) {
 		for stmt.Step() {
 			tasks = append(tasks, stmt.ColumnText(0))
 		}
-		return nil
+		return stmt.Err()
 	})
 	if err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func (r *HeartbeatRepo) GetTaskCount() (int, error) {
 		if stmt.Step() {
 			count = stmt.ColumnInt(0)
 		}
-		return nil
+		return stmt.Err()
 	})
 	if err != nil {
 		return 0, err

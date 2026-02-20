@@ -138,5 +138,5 @@ func (s *Service) Install(rawURL string) error {
 	// For now we return nil to indicate successful validation.
 	// The actual git operations require exec and are deferred to a future phase.
 
-	return fmt.Errorf("install not yet implemented (validated: %s/%s branch=%s path=%s)", owner, repo, branch, path)
+	return fmt.Errorf("skill installation from GitHub is not yet available")
 }

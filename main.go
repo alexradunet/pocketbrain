@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -133,7 +134,8 @@ func runServe() {
 	// Start web terminal (unless --ssh-only).
 	var webSrv *web.Server
 	if !*sshOnly {
-		sshTarget := "127.0.0.1" + cfg.SSHAddr
+		_, sshPort, _ := net.SplitHostPort(cfg.SSHAddr)
+		sshTarget := "127.0.0.1:" + sshPort
 		webSrv = web.New(web.Config{
 			Addr:    cfg.WebTerminalAddr,
 			SSHAddr: sshTarget,
