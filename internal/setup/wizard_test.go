@@ -2,8 +2,10 @@ package setup
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -50,5 +52,89 @@ func TestWizardRunWritesEnv(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Fatalf("missing %q in .env:\n%s", want, content)
 		}
+	}
+}
+
+func TestParseKronkCatalogModelIDs(t *testing.T) {
+	md := []byte(`
+| [Qwen3-8B-Q8_0](https://example.com/a) | Text |
+| [gpt-oss-20b-Q8_0](https://example.com/b) | Text |
+`)
+	got := parseKronkCatalogModelIDs(md)
+	want := []string{"Qwen3-8B-Q8_0", "gpt-oss-20b-Q8_0"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseKronkCatalogModelIDs = %v, want %v", got, want)
+	}
+}
+
+func TestWizardRunKronkCatalogSelectionAndDownload(t *testing.T) {
+	input := strings.Join([]string{
+		"1", // kronk provider
+		"2,1",
+		"y", // download selected models
+		"n", // enable whatsapp
+		".data/workspace",
+		"n", // tailscale
+		"n", // taildrive
+		"",
+	}, "\n")
+
+	var out bytes.Buffer
+	w := NewWizard(strings.NewReader(input), &out)
+
+	var downloaded []string
+	w.fetchCatalog = func() ([]string, error) {
+		return []string{"Qwen3-8B-Q8_0", "gpt-oss-20b-Q8_0"}, nil
+	}
+	w.download = func(_ io.Writer, modelID string) error {
+		downloaded = append(downloaded, modelID)
+		return nil
+	}
+
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := w.Run(envPath); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatalf("read .env: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "PROVIDER=kronk") {
+		t.Fatalf("missing PROVIDER in env: %s", content)
+	}
+	// First selected model becomes MODEL.
+	if !strings.Contains(content, "MODEL=gpt-oss-20b-Q8_0") {
+		t.Fatalf("missing selected MODEL in env: %s", content)
+	}
+	if !reflect.DeepEqual(downloaded, []string{"gpt-oss-20b-Q8_0", "Qwen3-8B-Q8_0"}) {
+		t.Fatalf("downloaded = %v", downloaded)
+	}
+}
+
+func TestWizardRunKronkSkipsDownloadWhenUserChoosesNo(t *testing.T) {
+	input := strings.Join([]string{
+		"1", // kronk provider
+		"1",
+		"n", // download selected models
+		"n", // enable whatsapp
+		".data/workspace",
+		"n", // tailscale
+		"n", // taildrive
+		"",
+	}, "\n")
+
+	var out bytes.Buffer
+	w := NewWizard(strings.NewReader(input), &out)
+	w.fetchCatalog = func() ([]string, error) { return []string{"Qwen3-8B-Q8_0"}, nil }
+	w.download = func(_ io.Writer, modelID string) error {
+		t.Fatalf("download should not be called, got %s", modelID)
+		return nil
+	}
+
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := w.Run(envPath); err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 }

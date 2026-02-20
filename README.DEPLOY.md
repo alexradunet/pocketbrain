@@ -26,6 +26,11 @@ The setup wizard creates or patches `.env` and configures:
 - Workspace directory
 - Embedded Tailscale (`tsnet`) and Taildrive sharing
 
+When `kronk` is selected as provider, setup fetches the live model list from:
+`https://github.com/ardanlabs/kronk_catalogs/blob/main/CATALOG.md`
+and lets you choose model(s) to download directly via the Kronk SDK
+(no separate `kronk` CLI required).
+
 ### 3) Start runtime
 
 With TUI:

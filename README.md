@@ -13,6 +13,9 @@ make build             # produces ./pocketbrain binary
 ./pocketbrain start --headless  # start headless (for servers)
 ```
 
+If you choose `kronk` in setup, the wizard pulls the current model list from
+the Kronk catalog and can download selected models directly via the Kronk SDK.
+
 ## Quick Deploy (Headless Server)
 
 ```bash

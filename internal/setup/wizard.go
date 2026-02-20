@@ -2,21 +2,40 @@ package setup
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/ardanlabs/kronk/sdk/tools/catalog"
 	"golang.org/x/term"
 )
+
+const kronkCatalogURL = "https://raw.githubusercontent.com/ardanlabs/kronk_catalogs/main/CATALOG.md"
+
+var kronkCatalogIDPattern = regexp.MustCompile(`\|\s*\[([^\]]+)\]\(`)
 
 type Wizard struct {
 	in  io.Reader
 	out io.Writer
+
+	fetchCatalog func() ([]string, error)
+	download     func(io.Writer, string) error
 }
 
 func NewWizard(in io.Reader, out io.Writer) *Wizard {
-	return &Wizard{in: in, out: out}
+	return &Wizard{
+		in:           in,
+		out:          out,
+		fetchCatalog: fetchKronkCatalogModels,
+		download:     downloadKronkModelWithSDK,
+	}
 }
 
 func (w *Wizard) Run(envPath string) error {
@@ -28,13 +47,43 @@ func (w *Wizard) Run(envPath string) error {
 	if err != nil {
 		return err
 	}
-	model, err := w.askText(r, "Model", defaultModel(provider))
-	if err != nil {
-		return err
-	}
 
 	apiKey := ""
-	if provider != "kronk" {
+	model := defaultModel(provider)
+	if provider == "kronk" {
+		entries, err := w.fetchCatalog()
+		if err != nil || len(entries) == 0 {
+			fmt.Fprintf(w.out, "Warning: unable to fetch Kronk catalog (%v). Falling back to manual model entry.\n", err)
+			model, err = w.askText(r, "Model", "Qwen3-8B-Q8_0")
+			if err != nil {
+				return err
+			}
+		} else {
+			fmt.Fprintln(w.out, "\nKronk catalog models:")
+			selected, err := w.askMultiChoice(r, "Choose model(s) to download", entries, 0)
+			if err != nil {
+				return err
+			}
+			model = selected[0]
+
+			downloadNow, err := w.askYesNo(r, "Download selected Kronk model(s) now?", true)
+			if err != nil {
+				return err
+			}
+			if downloadNow {
+				for _, m := range selected {
+					fmt.Fprintf(w.out, "Downloading %s via Kronk SDK...\n", m)
+					if err := w.download(w.out, m); err != nil {
+						fmt.Fprintf(w.out, "Warning: failed to download %s: %v\n", m, err)
+					}
+				}
+			}
+		}
+	} else {
+		model, err = w.askText(r, "Model", defaultModel(provider))
+		if err != nil {
+			return err
+		}
 		apiKey, err = w.askSecret(r, "API key")
 		if err != nil {
 			return err
@@ -167,6 +216,46 @@ func (w *Wizard) askChoice(r *bufio.Reader, label string, options []string, defa
 	return options[idx-1], nil
 }
 
+func (w *Wizard) askMultiChoice(r *bufio.Reader, label string, options []string, defaultIdx int) ([]string, error) {
+	fmt.Fprintf(w.out, "%s:\n", label)
+	for i, opt := range options {
+		fmt.Fprintf(w.out, "  %d) %s\n", i+1, opt)
+	}
+	fmt.Fprintf(w.out, "Choose numbers (comma separated) [%d]: ", defaultIdx+1)
+	line, err := r.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return []string{options[defaultIdx]}, nil
+	}
+
+	parts := strings.Split(line, ",")
+	selected := make([]string, 0, len(parts))
+	seen := make(map[string]struct{})
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 1 || n > len(options) {
+			continue
+		}
+		val := options[n-1]
+		if _, ok := seen[val]; ok {
+			continue
+		}
+		seen[val] = struct{}{}
+		selected = append(selected, val)
+	}
+	if len(selected) == 0 {
+		return []string{options[defaultIdx]}, nil
+	}
+	return selected, nil
+}
+
 func (w *Wizard) askYesNo(r *bufio.Reader, label string, def bool) (bool, error) {
 	defStr := "y"
 	if !def {
@@ -200,6 +289,65 @@ func (w *Wizard) askSecret(r *bufio.Reader, label string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(line), nil
+}
+
+func fetchKronkCatalogModels() ([]string, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(kronkCatalogURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("catalog http status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return parseKronkCatalogModelIDs(body), nil
+}
+
+func parseKronkCatalogModelIDs(md []byte) []string {
+	lines := bytes.Split(md, []byte{'\n'})
+	seen := make(map[string]struct{})
+	var ids []string
+	for _, line := range lines {
+		m := kronkCatalogIDPattern.FindSubmatch(line)
+		if len(m) < 2 {
+			continue
+		}
+		id := strings.TrimSpace(string(m[1]))
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func downloadKronkModelWithSDK(out io.Writer, modelID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+	defer cancel()
+
+	ctlg, err := catalog.New()
+	if err != nil {
+		return fmt.Errorf("catalog init: %w", err)
+	}
+	logf := func(_ context.Context, msg string, args ...any) {
+		_, _ = fmt.Fprintf(out, msg+"\n", args...)
+	}
+	if err := ctlg.Download(ctx, catalog.WithLogger(logf)); err != nil {
+		return fmt.Errorf("catalog update: %w", err)
+	}
+	if _, err := ctlg.DownloadModel(ctx, logf, modelID); err != nil {
+		return fmt.Errorf("model download: %w", err)
+	}
+	return nil
 }
 
 func defaultModel(provider string) string {
