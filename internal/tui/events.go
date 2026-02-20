@@ -22,6 +22,8 @@ const (
 	EventVaultStats
 	EventMemoryStats
 	EventOutboxStats
+	EventSSHStatus
+	EventWebStatus
 )
 
 // Event carries data from backend services to the TUI.

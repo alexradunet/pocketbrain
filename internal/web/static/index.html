@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PocketBrain Terminal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1b26; }
+        #terminal { width: 100%; height: 100%; }
+        #status {
+            position: fixed; top: 8px; right: 12px;
+            font-family: monospace; font-size: 12px;
+            color: #6b7280; z-index: 10;
+        }
+        #status.connected { color: #10b981; }
+        #status.error { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div id="status">Connecting...</div>
+    <div id="terminal"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0/lib/addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0/lib/addon-web-links.js"></script>
+    <script>
+        const statusEl = document.getElementById('status');
+        const term = new Terminal({
+            cursorBlink: true,
+            fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Menlo, Monaco, monospace',
+            fontSize: 14,
+            theme: {
+                background: '#1a1b26',
+                foreground: '#a9b1d6',
+                cursor: '#c0caf5',
+                selectionBackground: '#33467c',
+                black: '#15161e',
+                red: '#f7768e',
+                green: '#9ece6a',
+                yellow: '#e0af68',
+                blue: '#7aa2f7',
+                magenta: '#bb9af7',
+                cyan: '#7dcfff',
+                white: '#a9b1d6',
+            },
+        });
+
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+
+        const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+        term.loadAddon(webLinksAddon);
+
+        term.open(document.getElementById('terminal'));
+        fitAddon.fit();
+
+        // WebSocket connection to the server.
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(proto + '//' + location.host + '/ws');
+        ws.binaryType = 'arraybuffer';
+
+        ws.onopen = () => {
+            statusEl.textContent = 'Connected';
+            statusEl.className = 'connected';
+            // Send initial terminal dimensions as binary (resize control message).
+            sendResize();
+            // Hide status after a moment.
+            setTimeout(() => { statusEl.style.display = 'none'; }, 1500);
+        };
+
+        ws.onmessage = (event) => {
+            if (event.data instanceof ArrayBuffer) {
+                term.write(new Uint8Array(event.data));
+            } else {
+                term.write(event.data);
+            }
+        };
+
+        ws.onclose = () => {
+            statusEl.textContent = 'Disconnected';
+            statusEl.className = 'error';
+            statusEl.style.display = 'block';
+            term.write('\r\n\x1b[31mConnection closed. Refresh to reconnect.\x1b[0m\r\n');
+        };
+
+        ws.onerror = () => {
+            statusEl.textContent = 'Connection error';
+            statusEl.className = 'error';
+            statusEl.style.display = 'block';
+        };
+
+        // Terminal input -> WebSocket (text frame).
+        term.onData((data) => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(data);
+            }
+        });
+
+        // Resize -> WebSocket (binary frame with JSON).
+        function sendResize() {
+            if (ws.readyState === WebSocket.OPEN) {
+                const msg = JSON.stringify({ cols: term.cols, rows: term.rows });
+                const bytes = new TextEncoder().encode(msg);
+                ws.send(bytes.buffer);
+            }
+        }
+
+        term.onResize(sendResize);
+        window.addEventListener('resize', () => {
+            fitAddon.fit();
+        });
+
+        // Focus terminal on click.
+        document.addEventListener('click', () => term.focus());
+        term.focus();
+    </script>
+</body>
+</html>

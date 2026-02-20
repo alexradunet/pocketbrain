@@ -10,6 +10,8 @@ type headerModel struct {
 	width          int
 	whatsAppConn   bool
 	webdavConn     bool
+	sshConn        bool
+	webConn        bool
 	heartbeatInfo  string
 }
 
@@ -43,7 +45,21 @@ func (h headerModel) viewCompact() string {
 		wdIcon += statusDisconnected.Render("●")
 	}
 
-	bar := lipgloss.JoinHorizontal(lipgloss.Top, title, waIcon, wdIcon)
+	sshIcon := " SSH:"
+	if h.sshConn {
+		sshIcon += statusConnected.Render("●")
+	} else {
+		sshIcon += statusDisconnected.Render("●")
+	}
+
+	webIcon := " WEB:"
+	if h.webConn {
+		webIcon += statusConnected.Render("●")
+	} else {
+		webIcon += statusDisconnected.Render("●")
+	}
+
+	bar := lipgloss.JoinHorizontal(lipgloss.Top, title, waIcon, wdIcon, sshIcon, webIcon)
 
 	return lipgloss.NewStyle().
 		Width(h.width).
@@ -68,9 +84,23 @@ func (h headerModel) viewFull() string {
 		wdStatus += statusDisconnected.Render("● Offline")
 	}
 
+	sshStatus := " SSH: "
+	if h.sshConn {
+		sshStatus += statusConnected.Render("● Listening")
+	} else {
+		sshStatus += statusDisconnected.Render("● Off")
+	}
+
+	webStatus := " WEB: "
+	if h.webConn {
+		webStatus += statusConnected.Render("● Listening")
+	} else {
+		webStatus += statusDisconnected.Render("● Off")
+	}
+
 	hb := fmt.Sprintf(" HB: %s ", h.heartbeatInfo)
 
-	bar := lipgloss.JoinHorizontal(lipgloss.Top, title, waStatus, wdStatus, hb)
+	bar := lipgloss.JoinHorizontal(lipgloss.Top, title, waStatus, wdStatus, sshStatus, webStatus, hb)
 
 	return lipgloss.NewStyle().
 		Width(h.width).

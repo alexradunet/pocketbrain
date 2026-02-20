@@ -45,6 +45,18 @@ type Config struct {
 	WorkspacePath    string
 	WorkspaceEnabled bool
 
+	// SSH server (Wish)
+	SSHEnabled bool
+	SSHAddr    string
+
+	// Web terminal (xterm.js + WebSocket)
+	WebTerminalEnabled bool
+	WebTerminalAddr    string
+
+	// Tailscale (tsnet)
+	TsnetEnabled  bool
+	TsnetHostname string
+
 	// Derived paths
 	PocketBrainHome string
 }
@@ -108,6 +120,15 @@ func Load() (*Config, error) {
 
 		WorkspacePath:    workspacePath,
 		WorkspaceEnabled: workspaceEnabled,
+
+		SSHEnabled: envBool("SSH_ENABLED", false),
+		SSHAddr:    envStr("SSH_ADDR", ":2222"),
+
+		WebTerminalEnabled: envBool("WEB_TERMINAL_ENABLED", false),
+		WebTerminalAddr:    envStr("WEB_TERMINAL_ADDR", ":8080"),
+
+		TsnetEnabled:  envBool("TSNET_ENABLED", false),
+		TsnetHostname: envStr("TSNET_HOSTNAME", "pocketbrain"),
 
 		PocketBrainHome: pocketBrainHome,
 	}

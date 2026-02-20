@@ -62,6 +62,14 @@ func New(bus *EventBus) Model {
 	}
 }
 
+// SetSize sets the terminal dimensions for the model.
+// Used by SSH sessions to provide initial dimensions before the program starts.
+func (m *Model) SetSize(w, h int) {
+	m.width = w
+	m.height = h
+	m.ready = w > 0 && h > 0
+}
+
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		listenForEvents(m.eventSub),
@@ -166,6 +174,14 @@ func (m *Model) handleEvent(e Event) {
 	case EventOutboxStats:
 		if se, ok := e.Data.(StatsEvent); ok {
 			m.outboxCount = se.Count
+		}
+	case EventSSHStatus:
+		if se, ok := e.Data.(StatusEvent); ok {
+			m.header.sshConn = se.Connected
+		}
+	case EventWebStatus:
+		if se, ok := e.Data.(StatusEvent); ok {
+			m.header.webConn = se.Connected
 		}
 	}
 }
