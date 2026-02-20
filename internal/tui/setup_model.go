@@ -317,31 +317,46 @@ func (m *SetupModel) initStepInput() {
 	m.statusText = ""
 	m.err = nil
 
+	// Constrain text input width to fit the panel
+	inputW := m.width - 12
+	if inputW < 20 {
+		inputW = 20
+	}
+	if inputW > 60 {
+		inputW = 60
+	}
+
 	switch m.step {
 	case stepModel:
 		m.textInput = textinput.New()
 		m.textInput.Placeholder = setup.DefaultModel(m.values["PROVIDER"])
+		m.textInput.Width = inputW
 		m.textInput.Focus()
 	case stepAPIKey:
 		m.textInput = textinput.New()
 		m.textInput.Placeholder = "sk-..."
 		m.textInput.EchoMode = textinput.EchoPassword
+		m.textInput.Width = inputW
 		m.textInput.Focus()
 	case stepWhatsAppAuthDir:
 		m.textInput = textinput.New()
 		m.textInput.Placeholder = ".data/whatsapp-auth"
+		m.textInput.Width = inputW
 		m.textInput.Focus()
 	case stepWhatsAppNumber:
 		m.textInput = textinput.New()
 		m.textInput.Placeholder = "+5511987654321"
+		m.textInput.Width = inputW
 		m.textInput.Focus()
 	case stepWorkspacePath:
 		m.textInput = textinput.New()
 		m.textInput.Placeholder = ".data/workspace"
+		m.textInput.Width = inputW
 		m.textInput.Focus()
 	case stepWebDAVAddr:
 		m.textInput = textinput.New()
 		m.textInput.Placeholder = "0.0.0.0:6060"
+		m.textInput.Width = inputW
 		m.textInput.Focus()
 	case stepWhatsAppEnable:
 		m.choice = newChoiceModel("Enable WhatsApp?", []string{"Yes", "No"}, false)
@@ -442,9 +457,13 @@ func (m SetupModel) View() string {
 	b.WriteString(title + "\n")
 	divW := m.width - 4
 	if divW < 10 {
-		divW = 40
-	} else if divW > 50 {
+		divW = 10
+	}
+	if divW > 50 {
 		divW = 50
+	}
+	if m.width > 0 && divW > m.width {
+		divW = m.width
 	}
 	b.WriteString(setupDividerStyle.Render(strings.Repeat("─", divW)) + "\n\n")
 
@@ -493,9 +512,10 @@ func (m SetupModel) View() string {
 				lines = lines[len(lines)-maxLines:]
 			}
 			logW := m.width - 10
-			if logW < 30 {
-				logW = 50
-			} else if logW > 70 {
+			if logW < 20 {
+				logW = 20
+			}
+			if logW > 70 {
 				logW = 70
 			}
 			for _, line := range lines {
@@ -523,10 +543,14 @@ func (m SetupModel) View() string {
 
 	content := b.String()
 	panelW := m.width - 4
-	if panelW < 40 {
+	if panelW < 20 {
+		panelW = 20
+	}
+	if panelW > 60 {
 		panelW = 60
-	} else if panelW > 60 {
-		panelW = 60
+	}
+	if m.width > 0 && panelW > m.width {
+		panelW = m.width
 	}
 	return setupPanelStyle.
 		Width(panelW).

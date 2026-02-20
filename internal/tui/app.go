@@ -175,12 +175,86 @@ func (m Model) View() string {
 		return "Initializing PocketBrain..."
 	}
 
+	mode := layoutMode(m.width)
+	if mode == LayoutCompact {
+		return m.viewCompact()
+	}
+	return m.viewColumns(mode)
+}
+
+func (m Model) viewCompact() string {
+	m.header.width = m.width
 	header := m.header.View()
 
-	// Layout calculations.
-	leftW := m.width / 2
-	rightW := m.width - leftW
-	mainH := m.height - 4 // header + help + borders
+	mainH := m.height - 4
+	if mainH < 6 {
+		mainH = 6
+	}
+
+	msgH := mainH * 40 / 100
+	if msgH < 3 {
+		msgH = 3
+	}
+	statusH := mainH * 30 / 100
+	if statusH < 3 {
+		statusH = 3
+	}
+	logH := mainH - msgH - statusH
+	if logH < 3 {
+		logH = 3
+	}
+
+	contentW := m.width - 4
+	if contentW < 10 {
+		contentW = 10
+	}
+
+	// Messages panel
+	m.messages.width = contentW
+	m.messages.height = msgH - 2
+
+	// Status / QR panel
+	var statusPanel string
+	if m.qr.active() {
+		qrH := statusH * 2 / 3
+		if qrH < 6 {
+			qrH = 6
+		}
+		sH := statusH - qrH
+		if sH < 2 {
+			sH = 2
+		}
+		m.qr.width = contentW
+		qrView := m.qr.CompactView(contentW, qrH-2)
+		statusContent := m.renderStatusPanel(contentW-4, sH-2)
+		statusView := panelStyle.Width(contentW).Height(sH - 2).Render(statusContent)
+		statusPanel = lipgloss.JoinVertical(lipgloss.Left, qrView, statusView)
+	} else {
+		statusContent := m.renderStatusPanel(contentW-4, statusH-2)
+		statusPanel = panelStyle.Width(contentW).Height(statusH - 2).Render(statusContent)
+	}
+
+	// Logs panel
+	m.logs.width = contentW
+	m.logs.height = logH - 2
+
+	help := helpStyle.Render("[q] [m] [l] [tab]")
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		m.messages.View(),
+		statusPanel,
+		m.logs.View(),
+		help,
+	)
+}
+
+func (m Model) viewColumns(mode LayoutMode) string {
+	m.header.width = m.width
+	header := m.header.View()
+
+	leftW, rightW := layoutColumns(m.width, mode)
+	mainH := m.height - 4
 	if mainH < 4 {
 		mainH = 4
 	}
@@ -201,7 +275,6 @@ func (m Model) View() string {
 	// Right panel: status info, with QR overlay when active.
 	var statusPanel string
 	if m.qr.active() {
-		// Split right panel: QR on top, status on bottom.
 		qrH := msgH * 2 / 3
 		if qrH < 8 {
 			qrH = 8
@@ -211,10 +284,10 @@ func (m Model) View() string {
 			statusH = 3
 		}
 
+		m.qr.width = rightW - 2
 		qrView := m.qr.CompactView(rightW-2, qrH-2)
 		statusContent := m.renderStatusPanel(rightW-6, statusH-2)
 		statusView := panelStyle.Width(rightW - 2).Height(statusH - 2).Render(statusContent)
-
 		statusPanel = lipgloss.JoinVertical(lipgloss.Left, qrView, statusView)
 	} else {
 		statusContent := m.renderStatusPanel(rightW-6, msgH-2)

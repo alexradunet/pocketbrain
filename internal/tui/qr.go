@@ -38,7 +38,21 @@ func (q *qrModel) setQR(code string) {
 	q.status = qrStatusActive
 
 	var buf bytes.Buffer
-	qrterminal.GenerateHalfBlock(q.rawCode, qrterminal.L, &buf)
+	if q.width > 0 && q.width < 50 {
+		config := qrterminal.Config{
+			HalfBlocks:     true,
+			Level:          qrterminal.L,
+			Writer:         &buf,
+			QuietZone:      1,
+			BlackChar:      qrterminal.BLACK_BLACK,
+			WhiteChar:      qrterminal.WHITE_WHITE,
+			WhiteBlackChar: qrterminal.WHITE_BLACK,
+			BlackWhiteChar: qrterminal.BLACK_WHITE,
+		}
+		qrterminal.GenerateWithConfig(q.rawCode, config)
+	} else {
+		qrterminal.GenerateHalfBlock(q.rawCode, qrterminal.L, &buf)
+	}
 	q.ascii = strings.TrimRight(buf.String(), "\n")
 }
 
@@ -98,6 +112,17 @@ func (q qrModel) CompactView(maxW, maxH int) string {
 		}
 		if len(qrLines) > available {
 			qrLines = qrLines[:available]
+		}
+	}
+
+	// Clip each QR line to fit available width
+	clipW := maxW - 4
+	if clipW > 0 {
+		for i, line := range qrLines {
+			runes := []rune(line)
+			if len(runes) > clipW {
+				qrLines[i] = string(runes[:clipW])
+			}
 		}
 	}
 

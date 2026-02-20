@@ -62,7 +62,11 @@ func (l logsModel) View() string {
 		default:
 			levelStr = logDebug.Render("DEBUG")
 		}
-		line := fmt.Sprintf(" %s %s", levelStr, truncate(e.Message, l.width-12))
+		maxW := l.width - 12
+		if maxW < 10 {
+			maxW = 10
+		}
+		line := fmt.Sprintf(" %s %s", levelStr, truncate(e.Message, maxW))
 		lines = append(lines, line)
 	}
 

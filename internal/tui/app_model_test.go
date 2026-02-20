@@ -105,3 +105,36 @@ func TestAppModelWindowSizeForwarded(t *testing.T) {
 		t.Fatalf("expected 120x40, got %dx%d", app.width, app.height)
 	}
 }
+
+func TestAppModelDashboardReadyAfterBackendStarted(t *testing.T) {
+	m := NewApp(".env", false, stubStartBackend)
+	m.width = 80
+	m.height = 24
+	bus := NewEventBus(16)
+
+	var model tea.Model = m
+	model, _ = model.Update(backendStartedMsg{
+		bus:     bus,
+		cleanup: func() {},
+	})
+	app := model.(AppModel)
+	if !app.dashboard.ready {
+		t.Fatal("expected dashboard.ready=true after backendStartedMsg with pre-set size")
+	}
+}
+
+func TestAppModelDashboardNotReadyWithZeroSize(t *testing.T) {
+	m := NewApp(".env", false, stubStartBackend)
+	// width and height are 0 (default)
+	bus := NewEventBus(16)
+
+	var model tea.Model = m
+	model, _ = model.Update(backendStartedMsg{
+		bus:     bus,
+		cleanup: func() {},
+	})
+	app := model.(AppModel)
+	if app.dashboard.ready {
+		t.Fatal("expected dashboard.ready=false when width/height are zero")
+	}
+}

@@ -120,6 +120,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dashboard = New(msg.bus)
 		m.dashboard.width = m.width
 		m.dashboard.height = m.height
+		m.dashboard.ready = m.width > 0 && m.height > 0
 		return m, m.dashboard.Init()
 
 	case tea.KeyMsg:

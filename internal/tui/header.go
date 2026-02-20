@@ -20,6 +20,38 @@ func newHeaderModel() headerModel {
 }
 
 func (h headerModel) View() string {
+	if h.width < 60 {
+		return h.viewCompact()
+	}
+	return h.viewFull()
+}
+
+func (h headerModel) viewCompact() string {
+	title := headerStyle.Render("PocketBrain")
+
+	waIcon := " WA:"
+	if h.whatsAppConn {
+		waIcon += statusConnected.Render("●")
+	} else {
+		waIcon += statusDisconnected.Render("●")
+	}
+
+	wdIcon := " WD:"
+	if h.webdavConn {
+		wdIcon += statusConnected.Render("●")
+	} else {
+		wdIcon += statusDisconnected.Render("●")
+	}
+
+	bar := lipgloss.JoinHorizontal(lipgloss.Top, title, waIcon, wdIcon)
+
+	return lipgloss.NewStyle().
+		Width(h.width).
+		Background(lipgloss.Color("#1F2937")).
+		Render(bar)
+}
+
+func (h headerModel) viewFull() string {
 	title := headerStyle.Render(" PocketBrain v1.0 ")
 
 	waStatus := " WA: "

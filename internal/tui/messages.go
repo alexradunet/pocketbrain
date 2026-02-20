@@ -55,16 +55,20 @@ func (m messagesModel) View() string {
 	for _, msg := range m.messages[start:end] {
 		ts := msg.Timestamp.Format("15:04")
 		var line string
+		maxW := m.width - 20
+		if maxW < 10 {
+			maxW = 10
+		}
 		if msg.Outgoing {
 			line = fmt.Sprintf("%s %s %s",
 				logTimestamp.Render("["+ts+"]"),
 				msgBot.Render("bot:"),
-				truncate(msg.Text, m.width-20))
+				truncate(msg.Text, maxW))
 		} else {
 			line = fmt.Sprintf("%s %s %s",
 				logTimestamp.Render("["+ts+"]"),
 				msgUser.Render("user:"),
-				truncate(msg.Text, m.width-20))
+				truncate(msg.Text, maxW))
 		}
 		lines = append(lines, line)
 	}
