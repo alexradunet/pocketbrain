@@ -7,7 +7,7 @@ Single binary. Zero runtime dependencies. Just build and run.
 ## Quick Start
 
 ```bash
-cp .env.example .env   # configure API key and provider
+cp .env.example .env   # configure provider/model (API key needed for non-Kronk providers)
 make build             # produces ./pocketbrain binary
 ./pocketbrain start    # start with TUI
 ./pocketbrain start --headless  # start headless (for servers)

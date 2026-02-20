@@ -93,7 +93,7 @@ func Load() (*Config, error) {
 		LogLevel: envStr("LOG_LEVEL", "info"),
 		DataDir:  dataDir,
 
-		Provider: envStr("PROVIDER", ""),
+		Provider: envStr("PROVIDER", "kronk"),
 		Model:    envStr("MODEL", ""),
 		APIKey:   envStr("API_KEY", ""),
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -146,15 +147,16 @@ func Run(headless bool) error {
 	shutdown := newShutdown(logger, cancel, db)
 
 	var provider core.Provider
+	providerName := strings.TrimSpace(cfg.Provider)
+	if providerName == "" {
+		providerName = "kronk"
+	}
+
 	switch {
-	case cfg.APIKey == "":
+	case providerName != "kronk" && cfg.APIKey == "":
 		provider = ai.NewStubProvider(logger)
-		logger.Warn("no API_KEY configured; using stub provider")
+		logger.Warn("no API_KEY configured for provider; using stub provider", "provider", providerName)
 	default:
-		providerName := cfg.Provider
-		if providerName == "" {
-			providerName = "openai"
-		}
 		fp, err := ai.NewFantasyProvider(ctx, ai.FantasyProviderConfig{
 			ProviderName: providerName,
 			APIKey:       cfg.APIKey,

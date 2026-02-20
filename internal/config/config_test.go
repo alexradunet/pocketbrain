@@ -35,6 +35,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.LogLevel != "info" {
 		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "info")
 	}
+	if cfg.Provider != "kronk" {
+		t.Errorf("Provider = %q, want %q", cfg.Provider, "kronk")
+	}
 	if cfg.HeartbeatIntervalMinutes != 30 {
 		t.Errorf("HeartbeatIntervalMinutes = %d, want 30", cfg.HeartbeatIntervalMinutes)
 	}

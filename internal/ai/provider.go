@@ -12,6 +12,7 @@ import (
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
+	"charm.land/fantasy/providers/kronk"
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openaicompat"
 
@@ -62,6 +63,8 @@ func NewFantasyProvider(ctx context.Context, cfg FantasyProviderConfig) (*Fantas
 		provider, err = google.New(
 			google.WithGeminiAPIKey(cfg.APIKey),
 		)
+	case "kronk":
+		provider, err = kronk.New()
 	case "openai":
 		provider, err = openai.New(
 			openai.WithAPIKey(cfg.APIKey),
