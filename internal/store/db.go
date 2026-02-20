@@ -129,21 +129,17 @@ func (db *DB) migrateMemoryNormalized() error {
 	}
 
 	// Backfill existing rows.
-	stmt, _, err := db.conn.Prepare("SELECT id, fact FROM memory WHERE fact_normalized IS NULL OR TRIM(fact_normalized) = ''")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
 	type row struct {
 		id   int64
 		fact string
 	}
 	var rows []row
-	for stmt.Step() {
-		rows = append(rows, row{id: stmt.ColumnInt64(0), fact: stmt.ColumnText(1)})
-	}
-	if err := stmt.Close(); err != nil {
+	if err := withStmt(db.conn, "SELECT id, fact FROM memory WHERE fact_normalized IS NULL OR TRIM(fact_normalized) = ''", func(stmt *sqlite3.Stmt) error {
+		for stmt.Step() {
+			rows = append(rows, row{id: stmt.ColumnInt64(0), fact: stmt.ColumnText(1)})
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -151,47 +147,57 @@ func (db *DB) migrateMemoryNormalized() error {
 		return nil
 	}
 
-	if err := db.conn.Exec("BEGIN"); err != nil {
-		return err
-	}
-
-	update, _, err := db.conn.Prepare("UPDATE memory SET fact_normalized = ? WHERE id = ?")
-	if err != nil {
-		db.conn.Exec("ROLLBACK")
-		return err
-	}
-	defer update.Close()
-
-	for _, r := range rows {
-		update.BindText(1, NormalizeMemoryFact(r.fact))
-		update.BindInt64(2, r.id)
-		update.Step()
-		if err := update.Reset(); err != nil {
-			db.conn.Exec("ROLLBACK")
-			return err
-		}
-	}
-
-	return db.conn.Exec("COMMIT")
+	return db.withTx(func() error {
+		return withStmt(db.conn, "UPDATE memory SET fact_normalized = ? WHERE id = ?", func(stmt *sqlite3.Stmt) error {
+			for _, r := range rows {
+				stmt.BindText(1, NormalizeMemoryFact(r.fact))
+				stmt.BindInt64(2, r.id)
+				stmt.Step()
+				if err := stmt.Reset(); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	})
 }
 
 func (db *DB) hasColumn(table, column string) (bool, error) {
 	if !isValidIdentifier(table) {
 		return false, fmt.Errorf("invalid table name: %q", table)
 	}
-	stmt, _, err := db.conn.Prepare(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	found := false
+	err := withStmt(db.conn, fmt.Sprintf("PRAGMA table_info(%s)", table), func(stmt *sqlite3.Stmt) error {
+		for stmt.Step() {
+			name := stmt.ColumnText(1) // column index 1 is the name
+			if name == column {
+				found = true
+				break
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return false, err
 	}
-	defer stmt.Close()
+	return found, nil
+}
 
-	for stmt.Step() {
-		name := stmt.ColumnText(1) // column index 1 is the name
-		if name == column {
-			return true, nil
-		}
+func (db *DB) withTx(fn func() error) (err error) {
+	if err := db.conn.Exec("BEGIN"); err != nil {
+		return err
 	}
-	return false, nil
+
+	defer func() {
+		if err != nil {
+			_ = db.conn.Exec("ROLLBACK")
+		}
+	}()
+
+	if err = fn(); err != nil {
+		return err
+	}
+	return db.conn.Exec("COMMIT")
 }
 
 // isValidIdentifier returns true if s is a safe SQL identifier

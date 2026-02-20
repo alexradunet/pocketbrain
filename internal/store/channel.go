@@ -21,28 +21,27 @@ func (r *ChannelRepo) SaveLastChannel(channel, userID string) error {
 	if err != nil {
 		return err
 	}
-	stmt, _, err := r.conn.Prepare("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-	stmt.BindText(1, "last_channel")
-	stmt.BindText(2, string(value))
-	stmt.Step()
-	return stmt.Close()
+	return withStmt(r.conn, "INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", func(stmt *sqlite3.Stmt) error {
+		stmt.BindText(1, "last_channel")
+		stmt.BindText(2, string(value))
+		stmt.Step()
+		return nil
+	})
 }
 
 func (r *ChannelRepo) GetLastChannel() (*core.LastChannel, error) {
-	stmt, _, err := r.conn.Prepare("SELECT value FROM kv WHERE key = ?")
+	var raw string
+	err := withStmt(r.conn, "SELECT value FROM kv WHERE key = ?", func(stmt *sqlite3.Stmt) error {
+		stmt.BindText(1, "last_channel")
+		if !stmt.Step() {
+			return nil
+		}
+		raw = stmt.ColumnText(0)
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer stmt.Close()
-	stmt.BindText(1, "last_channel")
-	if !stmt.Step() {
-		return nil, nil
-	}
-	raw := stmt.ColumnText(0)
 	if raw == "" {
 		return nil, nil
 	}

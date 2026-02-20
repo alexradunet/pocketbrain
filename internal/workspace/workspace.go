@@ -6,6 +6,7 @@ package workspace
 
 import (
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -117,11 +118,32 @@ func (w *Workspace) WriteFile(relativePath, content string) bool {
 // AppendToFile appends content to a workspace-relative file. If the file does
 // not exist it is created. Returns false on failure.
 func (w *Workspace) AppendToFile(relativePath, content string) bool {
-	existing, ok := w.ReadFile(relativePath)
-	if ok {
-		return w.WriteFile(relativePath, existing+content)
+	filePath, ok := w.resolveWritablePath(relativePath)
+	if !ok {
+		return false
 	}
-	return w.WriteFile(relativePath, content)
+
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		w.log().Error("workspace append: mkdir failed", "error", err)
+		return false
+	}
+
+	if !w.isWritablePathSafe(filePath) {
+		return false
+	}
+
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		w.log().Error("workspace append: open failed", "error", err)
+		return false
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(content); err != nil {
+		w.log().Error("workspace append failed", "error", err)
+		return false
+	}
+	return true
 }
 
 // ListFiles lists the direct children of a workspace-relative folder. Pass an
@@ -266,22 +288,60 @@ func (w *Workspace) GetStats() (*WorkspaceStats, error) {
 // ---------------------------------------------------------------------------
 
 func (w *Workspace) listFilesRecursive(folder string) ([]WorkspaceFile, error) {
+	return w.walkFiles(folder)
+}
+
+func (w *Workspace) walkFiles(folder string) ([]WorkspaceFile, error) {
+	startPath, ok := w.resolveExistingPath(folder, true)
+	if !ok {
+		return nil, nil
+	}
+
 	var all []WorkspaceFile
-	items, err := w.ListFiles(folder)
+	err := filepath.WalkDir(startPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if path == startPath {
+			return nil
+		}
+
+		if strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return nil
+		}
+
+		rel, relErr := filepath.Rel(w.rootPath, path)
+		if relErr != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return nil
+		}
+
+		all = append(all, WorkspaceFile{
+			Path:        rel,
+			Name:        d.Name(),
+			Size:        info.Size(),
+			Modified:    info.ModTime(),
+			IsDirectory: d.IsDir(),
+		})
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	for _, item := range items {
-		all = append(all, item)
-		if item.IsDirectory {
-			children, err := w.listFilesRecursive(item.Path)
-			if err != nil {
-				return nil, err
-			}
-			all = append(all, children...)
-		}
-	}
 	return all, nil
 }
 

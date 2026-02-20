@@ -12,14 +12,14 @@ func NewWhitelistRepo(db *DB) *WhitelistRepo {
 }
 
 func (r *WhitelistRepo) IsWhitelisted(channel, userID string) (bool, error) {
-	stmt, _, err := r.conn.Prepare("SELECT 1 FROM whitelist WHERE channel = ? AND user_id = ?")
-	if err != nil {
-		return false, err
-	}
-	defer stmt.Close()
-	stmt.BindText(1, channel)
-	stmt.BindText(2, userID)
-	return stmt.Step(), nil
+	whitelisted := false
+	err := withStmt(r.conn, "SELECT 1 FROM whitelist WHERE channel = ? AND user_id = ?", func(stmt *sqlite3.Stmt) error {
+		stmt.BindText(1, channel)
+		stmt.BindText(2, userID)
+		whitelisted = stmt.Step()
+		return nil
+	})
+	return whitelisted, err
 }
 
 func (r *WhitelistRepo) AddToWhitelist(channel, userID string) (bool, error) {
@@ -31,27 +31,22 @@ func (r *WhitelistRepo) AddToWhitelist(channel, userID string) (bool, error) {
 		return false, nil
 	}
 
-	stmt, _, err := r.conn.Prepare("INSERT OR IGNORE INTO whitelist (channel, user_id) VALUES (?, ?)")
-	if err != nil {
-		return false, err
-	}
-	defer stmt.Close()
-	stmt.BindText(1, channel)
-	stmt.BindText(2, userID)
-	stmt.Step()
-	return true, stmt.Close()
+	err = withStmt(r.conn, "INSERT OR IGNORE INTO whitelist (channel, user_id) VALUES (?, ?)", func(stmt *sqlite3.Stmt) error {
+		stmt.BindText(1, channel)
+		stmt.BindText(2, userID)
+		stmt.Step()
+		return nil
+	})
+	return err == nil, err
 }
 
 func (r *WhitelistRepo) RemoveFromWhitelist(channel, userID string) (bool, error) {
-	stmt, _, err := r.conn.Prepare("DELETE FROM whitelist WHERE channel = ? AND user_id = ?")
-	if err != nil {
-		return false, err
-	}
-	defer stmt.Close()
-	stmt.BindText(1, channel)
-	stmt.BindText(2, userID)
-	stmt.Step()
-	if err := stmt.Close(); err != nil {
+	if err := withStmt(r.conn, "DELETE FROM whitelist WHERE channel = ? AND user_id = ?", func(stmt *sqlite3.Stmt) error {
+		stmt.BindText(1, channel)
+		stmt.BindText(2, userID)
+		stmt.Step()
+		return nil
+	}); err != nil {
 		return false, err
 	}
 	return r.conn.Changes() > 0, nil

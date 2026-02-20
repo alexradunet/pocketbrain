@@ -17,10 +17,10 @@ import (
 
 // stubWAClient implements WAClient for tests.
 type stubWAClient struct {
-	mu          sync.Mutex
-	connected   bool
-	connectErr  error
-	sendErr     error
+	mu           sync.Mutex
+	connected    bool
+	connectErr   error
+	sendErr      error
 	sentMessages []sentMsg
 }
 
@@ -253,7 +253,7 @@ func testLogger() *slog.Logger {
 // ---------------------------------------------------------------------------
 
 func TestWhatsAppAdapter_Name_ReturnsWhatsapp(t *testing.T) {
-	a := NewAdapter(&stubWAClient{}, newStubWhitelist(), testLogger())
+	a := NewAdapter(&stubWAClient{}, testLogger())
 	if got := a.Name(); got != "whatsapp" {
 		t.Errorf("Name() = %q; want %q", got, "whatsapp")
 	}
@@ -261,7 +261,7 @@ func TestWhatsAppAdapter_Name_ReturnsWhatsapp(t *testing.T) {
 
 func TestWhatsAppAdapter_Stop_Idempotent(t *testing.T) {
 	client := &stubWAClient{}
-	a := NewAdapter(client, newStubWhitelist(), testLogger())
+	a := NewAdapter(client, testLogger())
 
 	handler := func(userID, text string) (string, error) { return "ok", nil }
 	if err := a.Start(handler); err != nil {

@@ -12,27 +12,29 @@ func NewHeartbeatRepo(db *DB) *HeartbeatRepo {
 }
 
 func (r *HeartbeatRepo) GetTasks() ([]string, error) {
-	stmt, _, err := r.conn.Prepare("SELECT task FROM heartbeat_tasks WHERE enabled = 1 ORDER BY id")
+	var tasks []string
+	err := withStmt(r.conn, "SELECT task FROM heartbeat_tasks WHERE enabled = 1 ORDER BY id", func(stmt *sqlite3.Stmt) error {
+		for stmt.Step() {
+			tasks = append(tasks, stmt.ColumnText(0))
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	defer stmt.Close()
-
-	var tasks []string
-	for stmt.Step() {
-		tasks = append(tasks, stmt.ColumnText(0))
 	}
 	return tasks, nil
 }
 
 func (r *HeartbeatRepo) GetTaskCount() (int, error) {
-	stmt, _, err := r.conn.Prepare("SELECT COUNT(*) FROM heartbeat_tasks WHERE enabled = 1")
+	count := 0
+	err := withStmt(r.conn, "SELECT COUNT(*) FROM heartbeat_tasks WHERE enabled = 1", func(stmt *sqlite3.Stmt) error {
+		if stmt.Step() {
+			count = stmt.ColumnInt(0)
+		}
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}
-	defer stmt.Close()
-	if stmt.Step() {
-		return stmt.ColumnInt(0), nil
-	}
-	return 0, nil
+	return count, nil
 }

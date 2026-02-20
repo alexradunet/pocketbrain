@@ -20,35 +20,25 @@ type Config struct {
 	APIKey   string
 
 	// Heartbeat / scheduler
-	HeartbeatIntervalMinutes   int
-	HeartbeatBaseDelayMs       int
-	HeartbeatMaxDelayMs        int
+	HeartbeatIntervalMinutes     int
+	HeartbeatBaseDelayMs         int
+	HeartbeatMaxDelayMs          int
 	HeartbeatNotifyAfterFailures int
 
 	// WhatsApp channel
-	EnableWhatsApp bool
+	EnableWhatsApp  bool
 	WhatsAppAuthDir string
 
-	// Message delivery
-	MessageMaxLength    int
-	MessageChunkDelayMs int
-	MessageRateLimitMs  int
-
 	// Outbox (message queue)
-	OutboxIntervalMs      int
-	OutboxMaxRetries      int
-	OutboxRetryBaseDelayMs int
-
-	// Connection
-	ConnectionTimeoutMs      int
-	ConnectionReconnectDelayMs int
+	OutboxIntervalMs int
+	OutboxMaxRetries int
 
 	// WhatsApp pairing security
-	WhitelistPairToken         string
-	WhatsAppPairMaxFailures    int
-	WhatsAppPairFailureWindowMs  int
-	WhatsAppPairBlockDurationMs  int
-	WhatsAppWhitelistNumbers   []string
+	WhitelistPairToken          string
+	WhatsAppPairMaxFailures     int
+	WhatsAppPairFailureWindowMs int
+	WhatsAppPairBlockDurationMs int
+	WhatsAppWhitelistNumbers    []string
 
 	// Taildrive
 	TaildriveEnabled   bool
@@ -115,16 +105,8 @@ func Load() (*Config, error) {
 		EnableWhatsApp:  envBool("ENABLE_WHATSAPP", false),
 		WhatsAppAuthDir: waAuthDir,
 
-		MessageMaxLength:    3500,
-		MessageChunkDelayMs: 500,
-		MessageRateLimitMs:  1000,
-
-		OutboxIntervalMs:       60_000,
-		OutboxMaxRetries:       3,
-		OutboxRetryBaseDelayMs: 60_000,
-
-		ConnectionTimeoutMs:        20_000,
-		ConnectionReconnectDelayMs: 3000,
+		OutboxIntervalMs: 60_000,
+		OutboxMaxRetries: 3,
 
 		WhitelistPairToken:          strings.TrimSpace(os.Getenv("WHITELIST_PAIR_TOKEN")),
 		WhatsAppPairMaxFailures:     envInt("WHATSAPP_PAIR_MAX_FAILURES", 5),

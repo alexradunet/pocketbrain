@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pocketbrain/pocketbrain/internal/core"
+	"github.com/pocketbrain/pocketbrain/internal/retry"
 )
 
 // OutboxProcessor delivers pending outbox messages via the WAClient.
@@ -91,9 +92,8 @@ func (p *OutboxProcessor) scheduleRetry(msg core.OutboxMessage) {
 	}
 
 	// Exponential backoff: 60s, 120s, 240s, ...
-	backoffMs := 60_000 * (1 << (nextRetry - 1))
-	nextRetryAt := time.Now().Add(time.Duration(backoffMs) * time.Millisecond).
-		Format(time.RFC3339)
+	backoff := retry.ExponentialDelay(60*time.Second, 0, nextRetry)
+	nextRetryAt := time.Now().Add(backoff).Format(time.RFC3339)
 
 	if err := p.outboxRepo.MarkRetry(msg.ID, nextRetry, nextRetryAt); err != nil {
 		p.logger.Error("failed to mark retry",

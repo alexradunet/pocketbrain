@@ -29,21 +29,19 @@ type SessionStarter interface {
 
 // Adapter implements core.ChannelAdapter for WhatsApp.
 type Adapter struct {
-	client    WAClient
-	handler   core.MessageHandler
-	whitelist core.WhitelistRepository
-	logger    *slog.Logger
+	client  WAClient
+	handler core.MessageHandler
+	logger  *slog.Logger
 
 	mu      sync.Mutex
 	stopped bool
 }
 
 // NewAdapter creates a new WhatsApp adapter.
-func NewAdapter(client WAClient, whitelist core.WhitelistRepository, logger *slog.Logger) *Adapter {
+func NewAdapter(client WAClient, logger *slog.Logger) *Adapter {
 	return &Adapter{
-		client:    client,
-		whitelist: whitelist,
-		logger:    logger,
+		client: client,
+		logger: logger,
 	}
 }
 

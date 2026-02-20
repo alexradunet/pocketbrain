@@ -50,8 +50,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.TaildriveShareName != "workspace" {
 		t.Errorf("TaildriveShareName = %q, want %q", cfg.TaildriveShareName, "workspace")
 	}
-	if cfg.MessageMaxLength != 3500 {
-		t.Errorf("MessageMaxLength = %d, want 3500", cfg.MessageMaxLength)
+	if cfg.OutboxIntervalMs != 60_000 {
+		t.Errorf("OutboxIntervalMs = %d, want 60000", cfg.OutboxIntervalMs)
 	}
 	if cfg.OutboxMaxRetries != 3 {
 		t.Errorf("OutboxMaxRetries = %d, want 3", cfg.OutboxMaxRetries)

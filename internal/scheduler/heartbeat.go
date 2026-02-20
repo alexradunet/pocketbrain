@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pocketbrain/pocketbrain/internal/core"
+	"github.com/pocketbrain/pocketbrain/internal/retry"
 )
 
 // HeartbeatConfig holds tuning parameters for the heartbeat scheduler.
@@ -182,10 +183,7 @@ func (s *HeartbeatScheduler) executeWithRetry(ctx context.Context) (string, erro
 		}
 
 		// Exponential backoff: base * 2^(attempt-1), capped at maxDelay.
-		delay := baseDelay * (1 << uint(attempt-1))
-		if delay > maxDelay {
-			delay = maxDelay
-		}
+		delay := retry.ExponentialDelay(baseDelay, maxDelay, attempt)
 
 		select {
 		case <-time.After(delay):

@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
+	"time"
 
 	"charm.land/fantasy"
 
 	"github.com/pocketbrain/pocketbrain/internal/ai"
-	"github.com/pocketbrain/pocketbrain/internal/channel"
 	"github.com/pocketbrain/pocketbrain/internal/channel/whatsapp"
 	"github.com/pocketbrain/pocketbrain/internal/config"
 	"github.com/pocketbrain/pocketbrain/internal/core"
@@ -189,9 +190,6 @@ func Run(headless bool) error {
 		Logger:        logger,
 	})
 
-	// Create channel manager.
-	channelMgr := channel.NewManager(logger)
-
 	if workspaceService != nil {
 		shutdown.addCloser(func() { _ = workspaceService.Stop() })
 	}
@@ -258,7 +256,7 @@ func Run(headless bool) error {
 			logger,
 		)
 
-		waAdapter := whatsapp.NewAdapter(waClient, whitelistRepo, logger)
+		waAdapter := whatsapp.NewAdapter(waClient, logger)
 
 		processor := whatsapp.NewMessageProcessor(whitelistRepo, cmdRouter,
 			func(userID, text string) (string, error) {
@@ -287,12 +285,42 @@ func Run(headless bool) error {
 			return fmt.Errorf("whatsapp start: %w", err)
 		}
 
-		channelMgr.Register(waAdapter)
+		outboxProcessor := whatsapp.NewOutboxProcessor(outboxRepo, waClient, logger)
+		if err := outboxProcessor.ProcessPending(); err != nil {
+			logger.Error("initial outbox processing failed", "error", err)
+		}
+
+		outboxInterval := time.Duration(cfg.OutboxIntervalMs) * time.Millisecond
+		if outboxInterval <= 0 {
+			outboxInterval = time.Minute
+		}
+
+		outboxStop := make(chan struct{})
+		var outboxStopOnce sync.Once
+		go func() {
+			ticker := time.NewTicker(outboxInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-outboxStop:
+					return
+				case <-ticker.C:
+					if err := outboxProcessor.ProcessPending(); err != nil {
+						logger.Error("outbox processing failed", "error", err)
+					}
+				}
+			}
+		}()
+
+		shutdown.addCloser(func() {
+			outboxStopOnce.Do(func() { close(outboxStop) })
+		})
 		shutdown.addCloser(func() { _ = waAdapter.Stop(); _ = waClient.Close() })
 
 		logger.Info("whatsapp adapter ready")
 	}
-	_ = channelMgr
 
 	// Register signal handlers.
 	shutdown.handleSignals()
