@@ -1,68 +1,86 @@
-﻿---
+---
 name: add-telegram
 description: Add Telegram as a channel. Can replace WhatsApp entirely or run alongside it. Also configurable as a control-only channel (triggers actions) or passive channel (receives notifications only).
 ---
 
 # Add Telegram Channel
 
-This skill adds Telegram support to NanoClaw using the skills engine for deterministic code changes, then walks through interactive setup.
+This skill adds Telegram support to PocketBrain. Read the existing codebase first, then apply the changes below.
 
 ## Phase 1: Pre-flight
-
-### Check if already applied
-
-Read `.nanoclaw/state.yaml`. If `telegram` is in `applied_skills`, skip to Phase 3 (Setup). The code changes are already in place.
 
 ### Ask the user
 
 1. **Mode**: Replace WhatsApp or add alongside it?
-   - Replace â†’ will set `TELEGRAM_ONLY=true`
-   - Alongside â†’ both channels active (default)
+   - Replace → will set `TELEGRAM_ONLY=true`
+   - Alongside → both channels active (default)
 
 2. **Do they already have a bot token?** If yes, collect it now. If no, we'll create one in Phase 3.
 
 ## Phase 2: Apply Code Changes
 
-Run the skills engine to apply this skill's code package. The package files are in this directory alongside this SKILL.md.
+Read `src/channels/whatsapp.ts` and `src/types.ts` to understand the `Channel` interface, then apply these changes:
 
-### Initialize skills system (if needed)
-
-If `.nanoclaw/` directory doesn't exist yet:
+### Install dependency
 
 ```bash
-bun scripts/apply-skill.ts --init
+bun add grammy
 ```
 
-Or call `initSkillsSystem()` from `skills-engine/migrate.ts`.
+### Create `src/channels/telegram.ts`
 
-### Apply the skill
+Implement a `TelegramChannel` class following the same `Channel` interface as `WhatsAppChannel`:
+
+- Import `Bot` from `grammy`
+- Constructor: accept `token: string`, `db: Database` (SQLite)
+- `connect()` — start the bot with `bot.start()` (non-blocking, use `bot.start({ onStart: resolve })`)
+- `disconnect()` — call `bot.stop()`
+- `sendMessage(jid: string, text: string)` — parse `tg:<chatId>` JID format, call `bot.api.sendMessage(chatId, text)` with message splitting for messages over 4096 chars
+- `ownsJid(jid: string)` — return `jid.startsWith('tg:')`
+- Handle incoming messages: on `bot.on('message:text')`, store in SQLite `messages` table and `chats` table (same schema as WhatsApp uses), then trigger the group queue
+- For group messages, sender name comes from `ctx.from?.first_name`
+- JID format: `tg:<chatId>` for private chats, `tg:<groupId>` for groups
+
+### Modify `src/index.ts`
+
+Add TelegramChannel alongside WhatsApp:
+
+```typescript
+import { TelegramChannel } from './channels/telegram.js';
+
+// After WhatsApp init:
+if (TELEGRAM_BOT_TOKEN) {
+  const telegram = new TelegramChannel(TELEGRAM_BOT_TOKEN, db);
+  channels.push(telegram);
+  await telegram.connect();
+}
+```
+
+Check how `findChannel()` in `src/router.ts` works to ensure the channel routing handles `tg:` prefixed JIDs correctly.
+
+### Add to `src/config.ts`
+
+```typescript
+export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+export const TELEGRAM_ONLY = process.env.TELEGRAM_ONLY === 'true';
+```
+
+If `TELEGRAM_ONLY=true`, skip initializing WhatsApp in `src/index.ts`.
+
+### Update `.env.example`
 
 ```bash
-bun scripts/apply-skill.ts .opencode/skills/add-telegram
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_ONLY=false
 ```
 
-This deterministically:
-- Adds `src/channels/telegram.ts` (TelegramChannel class implementing Channel interface)
-- Adds `src/channels/telegram.test.ts` (46 unit tests)
-- Three-way merges Telegram support into `src/index.ts` (multi-channel support, findChannel routing)
-- Three-way merges Telegram config into `src/config.ts` (TELEGRAM_BOT_TOKEN, TELEGRAM_ONLY exports)
-- Three-way merges updated routing tests into `src/routing.test.ts`
-- Installs the `grammy` npm dependency
-- Updates `.env.example` with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ONLY`
-- Records the application in `.nanoclaw/state.yaml`
-
-If the apply reports merge conflicts, read the intent files:
-- `modify/src/index.ts.intent.md` â€” what changed and invariants for index.ts
-- `modify/src/config.ts.intent.md` â€” what changed for config.ts
-
-### Validate code changes
+### Validate changes
 
 ```bash
-npm test
-npm run build
+bun test
 ```
 
-All tests must pass (including the new telegram tests) and build must be clean before proceeding.
+All existing tests must pass before proceeding.
 
 ## Phase 3: Setup
 
@@ -94,14 +112,6 @@ If they chose to replace WhatsApp:
 TELEGRAM_ONLY=true
 ```
 
-Sync to container environment:
-
-```bash
-mkdir -p data/env && cp .env data/env/env
-```
-
-The container reads environment from `data/env/env`, not `.env` directly.
-
 ### Disable Group Privacy (for group chats)
 
 Tell the user:
@@ -117,8 +127,8 @@ Tell the user:
 ### Build and restart
 
 ```bash
-npm run build
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+bun run docker:build
+bun run docker:up
 ```
 
 ## Phase 4: Registration
@@ -128,14 +138,14 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw
 Tell the user:
 
 > 1. Open your bot in Telegram (search for its username)
-> 2. Send `/chatid` â€” it will reply with the chat ID
+> 2. Send `/chatid` — it will reply with the chat ID
 > 3. For groups: add the bot to the group first, then send `/chatid` in the group
 
-Wait for the user to provide the chat ID (format: `tg:123456789` or `tg:-1001234567890`).
+Wait for the user to provide the chat ID.
 
 ### Register the chat
 
-Use the IPC register flow or register directly. The chat ID, name, and folder name are needed.
+Use the `register_group` MCP tool or add directly to SQLite. The JID format is `tg:<chatId>`.
 
 For a main chat (responds to all messages, uses the `main` folder):
 
@@ -176,17 +186,17 @@ Tell the user:
 ### Check logs if needed
 
 ```bash
-tail -f logs/nanoclaw.log
+bun run docker:logs
 ```
 
 ## Troubleshooting
 
 ### Bot not responding
 
-1. Check `TELEGRAM_BOT_TOKEN` is set in `.env` AND synced to `data/env/env`
-2. Check chat is registered: `sqlite3 store/messages.db "SELECT * FROM registered_groups WHERE jid LIKE 'tg:%'"`
+1. Check `TELEGRAM_BOT_TOKEN` is set in `.env`
+2. Check chat is registered: look in SQLite `registered_groups` table for `tg:` prefixed JIDs
 3. For non-main chats: message must include trigger pattern
-4. Service is running: `launchctl list | grep nanoclaw`
+4. Check container logs: `bun run docker:logs`
 
 ### Bot only responds to @mentions in groups
 
@@ -198,11 +208,10 @@ Group Privacy is enabled (default). Fix:
 
 If `/chatid` doesn't work:
 - Verify token: `curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"`
-- Check bot is started: `tail -f logs/nanoclaw.log`
+- Check container logs: `bun run docker:logs`
 
 ## After Setup
 
 Ask the user:
 
 > Would you like to add Agent Swarm support? Each subagent appears as a different bot in the Telegram group. If interested, run `/add-telegram-swarm`.
-

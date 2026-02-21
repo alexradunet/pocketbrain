@@ -1,6 +1,6 @@
 # PocketBrain Specification
 
-A personal OpenCode assistant accessible via WhatsApp, with persistent memory per conversation, scheduled tasks, and email integration.
+A personal OpenCode assistant accessible via WhatsApp (and optionally Telegram/Discord), with persistent memory per conversation, scheduled tasks, and extensible channel support.
 
 ---
 
@@ -22,49 +22,46 @@ A personal OpenCode assistant accessible via WhatsApp, with persistent memory pe
 
 ## Architecture
 
+PocketBrain runs as a **single long-lived Bun process** inside a Docker container. The OpenCode SDK starts an embedded OpenCode server (port 4096) and manages per-group agent sessions in-process. There are no per-invocation containers.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        HOST (macOS)                                  │
-│                    (Main Bun Process)                                │
+│                    DOCKER CONTAINER (Debian)                         │
+│                    (Single Bun Process)                              │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  ┌──────────────┐                     ┌────────────────────┐        │
-│  │  WhatsApp    │────────────────────▶│   SQLite Database  │        │
-│  │  (baileys)   │◀────────────────────│   (messages.db)    │        │
-│  └──────────────┘   store/send        └─────────┬──────────┘        │
-│                                                  │                   │
-│         ┌────────────────────────────────────────┘                   │
-│         │                                                            │
+│  ┌──────────────┐    ┌──────────────────────────────────────────┐   │
+│  │  WhatsApp    │    │          SQLite Database                  │   │
+│  │  (baileys)   │◀──▶│          (store/messages.db)              │   │
+│  └──────────────┘    └─────────────────┬────────────────────────┘   │
+│                                        │                             │
+│         ┌──────────────────────────────┘                             │
 │         ▼                                                            │
 │  ┌──────────────────┐    ┌──────────────────┐    ┌───────────────┐  │
 │  │  Message Loop    │    │  Scheduler Loop  │    │  IPC Watcher  │  │
 │  │  (polls SQLite)  │    │  (checks tasks)  │    │  (file-based) │  │
-│  └────────┬─────────┘    └────────┬─────────┘    └───────────────┘  │
-│           │                       │                                  │
-│           └───────────┬───────────┘                                  │
-│                       │ spawns container                             │
-│                       ▼                                              │
-├─────────────────────────────────────────────────────────────────────┤
-│                     CONTAINER (Linux VM)                              │
-├─────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                    AGENT RUNNER                               │   │
-│  │                                                                │   │
-│  │  Working directory: /workspace/group (mounted from host)       │   │
-│  │  Volume mounts:                                                │   │
-│  │    • groups/{name}/ → /workspace/group                         │   │
-│  │    • groups/global/ → /workspace/global/ (non-main only)        │   │
-│  │    • data/sessions/{group}/.opencode/ → /home/node/.opencode/      │   │
-│  │    • Additional dirs → /workspace/extra/*                      │   │
-│  │                                                                │   │
-│  │  Tools (all groups):                                           │   │
-│  │    • Bash (safe - sandboxed in container!)                     │   │
-│  │    • Read, Write, Edit, Glob, Grep (file operations)           │   │
-│  │    • WebSearch, WebFetch (internet access)                     │   │
-│  │    • agent-browser (browser automation)                        │   │
-│  │    • mcp__pocketbrain__* (scheduler tools via IPC)                │   │
-│  │                                                                │   │
-│  └──────────────────────────────────────────────────────────────┘   │
+│  └────────┬─────────┘    └────────┬─────────┘    └───────┬───────┘  │
+│           │                       │                       │          │
+│           └───────────┬───────────┘                       │          │
+│                       ▼                                   │          │
+│  ┌─────────────────────────────────────────────────────┐  │          │
+│  │              OpenCode Manager                        │  │          │
+│  │  (src/opencode-manager.ts)                           │  │          │
+│  │                                                      │  │          │
+│  │  createOpencode() → OpenCode server on :4096         │  │          │
+│  │  Per-group sessions via client.session.*             │  │          │
+│  │  SSE event streaming for agent output                │◀─┘          │
+│  └─────────────────────┬───────────────────────────────┘            │
+│                        │ stdio                                        │
+│                        ▼                                             │
+│  ┌─────────────────────────────────────────────────────┐            │
+│  │          PocketBrain MCP Server                      │            │
+│  │  (dist/pocketbrain-mcp — stdio child process)        │            │
+│  │                                                      │            │
+│  │  Tools: send_message, schedule_task, list_tasks,     │            │
+│  │         pause_task, resume_task, cancel_task,         │            │
+│  │         register_group                               │            │
+│  └──────────────────────────────────────────────────────┘           │
 │                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -73,12 +70,11 @@ A personal OpenCode assistant accessible via WhatsApp, with persistent memory pe
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| WhatsApp Connection | Bun (@whiskeysockets/baileys) | Connect to WhatsApp, send/receive messages |
-| Message Storage | SQLite (bun:sqlite) | Store messages for polling |
-| Container Runtime | Containers (Linux VMs) | Isolated environments for agent execution |
-| Agent | @opencode-ai/sdk (0.2.29) | Run OpenCode with tools and MCP servers |
-| Browser Automation | agent-browser + Chromium | Web interaction and screenshots |
-| Runtime | Bun 1.x | Host process for routing and scheduling |
+| WhatsApp Connection | `@whiskeysockets/baileys` | Connect to WhatsApp, send/receive messages |
+| Message Storage | SQLite (`bun:sqlite`) | Store messages, sessions, tasks, groups |
+| Agent Engine | `@opencode-ai/sdk` (`createOpencode`) | Embedded OpenCode server + per-group sessions |
+| MCP Server | `@modelcontextprotocol/sdk` (stdio) | Custom tools for the agent (scheduler, messaging) |
+| Runtime | Bun 1.x inside Docker | Host process, container isolation |
 
 ---
 
@@ -86,180 +82,108 @@ A personal OpenCode assistant accessible via WhatsApp, with persistent memory pe
 
 ```
 pocketbrain/
-├── AGENTS.md                      # Project context for OpenCode CLI
+├── AGENTS.md                      # Project context for OpenCode
 ├── docs/
 │   ├── SPEC.md                    # This specification document
 │   ├── REQUIREMENTS.md            # Architecture decisions
-│   └── SECURITY.md                # Security model
+│   └── nanorepo-architecture.md   # Skills system design (historical)
 ├── README.md                      # User documentation
 ├── package.json                   # Bun-managed dependencies
 ├── tsconfig.json                  # TypeScript configuration
-├── .mcp.json                      # MCP server configuration (reference)
-├── .gitignore
+├── docker-compose.yml             # Container orchestration
 │
 ├── src/
-│   ├── index.ts                   # Orchestrator: state, message loop, agent invocation
+│   ├── index.ts                   # Orchestrator: message loop, group queue, agent invocation
+│   ├── opencode-manager.ts        # OpenCode SDK: boot, startSession, sendFollowUp, abortSession
+│   ├── mcp-tools.ts               # Stdio MCP server (agent tools: send_message, schedule_task, …)
 │   ├── channels/
-│   │   └── whatsapp.ts            # WhatsApp connection, auth, send/receive
-│   ├── ipc.ts                     # IPC watcher and task processing
-│   ├── router.ts                  # Message formatting and outbound routing
-│   ├── config.ts                  # Configuration constants
-│   ├── types.ts                   # TypeScript interfaces (includes Channel)
+│   │   └── whatsapp.ts            # Baileys WhatsApp connection, auth, send/receive
+│   ├── ipc.ts                     # File-based IPC: reads agent-written JSON from data/ipc/
+│   ├── router.ts                  # Message formatting, trigger matching, channel routing
+│   ├── config.ts                  # Configuration constants (paths, timeouts, env vars)
+│   ├── types.ts                   # TypeScript interfaces (Channel, RegisteredGroup, …)
 │   ├── logger.ts                  # Pino logger setup
-│   ├── db.ts                      # SQLite database initialization and queries
-│   ├── group-queue.ts             # Per-group queue with global concurrency limit
-│   ├── mount-security.ts          # Mount allowlist validation for containers
-│   ├── whatsapp-auth.ts           # Standalone WhatsApp authentication
+│   ├── db.ts                      # SQLite schema + query helpers
+│   ├── group-queue.ts             # Per-group concurrency with MAX_CONCURRENT_SESSIONS
 │   ├── task-scheduler.ts          # Runs scheduled tasks when due
-│   └── container-runner.ts        # Spawns agents in containers
-│
-├── container/
-│   ├── Dockerfile                 # Container image (runs as 'node' user, includes OpenCode CLI CLI)
-│   ├── build.sh                   # Build script for container image
-│   ├── agent-runner/              # Code that runs inside the container
-│   │   ├── package.json
-│   │   ├── tsconfig.json
-│   │   └── src/
-│   │       ├── index.ts           # Entry point (query loop, IPC polling, session resume)
-│   │       └── ipc-mcp-stdio.ts   # Stdio-based MCP server for host communication
-│   └── skills/
-│       └── agent-browser.md       # Browser automation skill
-│
-├── dist/                          # Compiled JavaScript (gitignored)
+│   ├── env.ts                     # .env file reader
+│   └── ipc.ts                     # IPC watcher and task processing
 │
 ├── .opencode/
 │   └── skills/
 │       ├── setup/SKILL.md              # /setup - First-time installation
 │       ├── customize/SKILL.md          # /customize - Add capabilities
-│       ├── debug/SKILL.md              # /debug - Container debugging
+│       ├── debug/SKILL.md              # /debug - Debugging guide
 │       ├── add-telegram/SKILL.md       # /add-telegram - Telegram channel
+│       ├── add-discord/SKILL.md        # /add-discord - Discord channel
 │       ├── add-gmail/SKILL.md          # /add-gmail - Gmail integration
-│       ├── add-voice-transcription/    # /add-voice-transcription - Whisper
-│       ├── x-integration/SKILL.md      # /x-integration - X/Twitter
-│       ├── convert-to-apple-container/  # /convert-to-apple-container - Apple Container runtime
-│       └── add-parallel/SKILL.md       # /add-parallel - Parallel agents
+│       ├── add-voice-transcription/    # /add-voice-transcription - Whisper ASR
+│       ├── add-parallel/SKILL.md       # /add-parallel - Parallel agent sessions
+│       ├── add-telegram-swarm/SKILL.md # /add-telegram-swarm - Multi-bot swarm
+│       └── x-integration/SKILL.md      # /x-integration - X/Twitter posting
 │
 ├── groups/
 │   ├── AGENTS.md                  # Global memory (all groups read this)
+│   ├── global/AGENTS.md           # Global instructions loaded at boot
 │   ├── main/                      # Self-chat (main control channel)
-│   │   ├── AGENTS.md              # Main channel memory
-│   │   └── logs/                  # Task execution logs
+│   │   └── AGENTS.md              # Main channel memory
 │   └── {Group Name}/              # Per-group folders (created on registration)
 │       ├── AGENTS.md              # Group-specific memory
-│       ├── logs/                  # Task logs for this group
 │       └── *.md                   # Files created by the agent
 │
 ├── store/                         # Local data (gitignored)
-│   ├── auth/                      # WhatsApp authentication state
-│   └── messages.db                # SQLite database (messages, chats, scheduled_tasks, task_run_logs, registered_groups, sessions, router_state)
+│   ├── auth/                      # WhatsApp authentication state (Baileys)
+│   └── messages.db                # SQLite: messages, chats, scheduled_tasks,
+│                                  #         task_run_logs, sessions, registered_groups,
+│                                  #         router_state
 │
 ├── data/                          # Application state (gitignored)
-│   ├── sessions/                  # Per-group session data (.opencode/ dirs with JSONL transcripts)
-│   ├── env/env                    # Copy of .env for container mounting
-│   └── ipc/                       # Container IPC (messages/, tasks/)
+│   └── ipc/                       # File-based IPC directories
+│       └── {groupFolder}/
+│           ├── messages/          # Agent → host: outbound messages
+│           ├── tasks/             # Agent → host: task operations
+│           ├── current_tasks.json # Snapshot: scheduled tasks visible to this group
+│           └── available_groups.json # Snapshot: registered groups (main only)
 │
-├── logs/                          # Runtime logs (gitignored)
-│   ├── pocketbrain.log               # Host stdout
-│   └── pocketbrain.error.log         # Host stderr
-│   # Note: Per-container logs are in groups/{folder}/logs/container-*.log
-│
-└── launchd/
-    └── com.pocketbrain.plist         # macOS service configuration
+└── logs/                          # Runtime logs (gitignored)
+    ├── pocketbrain.log
+    └── pocketbrain.error.log
 ```
 
 ---
 
 ## Configuration
 
-Configuration constants are in `src/config.ts`:
+Configuration constants are in `src/config.ts`. Key environment variables:
 
-```typescript
-import path from 'path';
+```bash
+# Authentication (set at least one)
+OPENCODE_API_KEY=sk-ant-api03-...       # Anthropic API key
+OPENCODE_MODEL=claude-sonnet-4-5        # Override default model
 
-export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Andy';
-export const POLL_INTERVAL = 2000;
-export const SCHEDULER_POLL_INTERVAL = 60000;
+# Identity
+ASSISTANT_NAME=Andy                     # Trigger word (@Andy in messages)
 
-// Paths are absolute (required for container mounts)
-const PROJECT_ROOT = process.cwd();
-export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
-export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
-export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
-
-// Container configuration
-export const CONTAINER_IMAGE = process.env.CONTAINER_IMAGE || 'pocketbrain-agent:latest';
-export const CONTAINER_TIMEOUT = parseInt(process.env.CONTAINER_TIMEOUT || '1800000', 10); // 30min default
-export const IPC_POLL_INTERVAL = 1000;
-export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min — keep container alive after last result
-export const MAX_CONCURRENT_CONTAINERS = Math.max(1, parseInt(process.env.MAX_CONCURRENT_CONTAINERS || '5', 10) || 5);
-
-export const TRIGGER_PATTERN = new RegExp(`^@${ASSISTANT_NAME}\\b`, 'i');
+# Tuning
+MAX_CONCURRENT_SESSIONS=3              # Max parallel group sessions
+POLL_INTERVAL=2000                     # Message poll interval (ms)
+SCHEDULER_POLL_INTERVAL=60000          # Task scheduler poll interval (ms)
+IDLE_TIMEOUT=1800000                   # Session idle timeout (ms, 30min)
 ```
 
-**Note:** Paths must be absolute for container volume mounts to work correctly.
-
-### Container Configuration
-
-Groups can have additional directories mounted via `containerConfig` in the SQLite `registered_groups` table (stored as JSON in the `container_config` column). Example registration:
-
-```typescript
-registerGroup("1234567890@g.us", {
-  name: "Dev Team",
-  folder: "dev-team",
-  trigger: "@Andy",
-  added_at: new Date().toISOString(),
-  containerConfig: {
-    additionalMounts: [
-      {
-        hostPath: "~/projects/webapp",
-        containerPath: "webapp",
-        readonly: false,
-      },
-    ],
-    timeout: 600000,
-  },
-});
-```
-
-Additional mounts appear at `/workspace/extra/{containerPath}` inside the container.
-
-**Mount syntax note:** Read-write mounts use `-v host:container`, but readonly mounts require `--mount "type=bind,source=...,target=...,readonly"` (the `:ro` suffix may not work on all runtimes).
+All environment variables are read from `.env` in the project root. The Docker container inherits them via `env_file` in `docker-compose.yml`.
 
 ### OpenCode Authentication
 
-Configure authentication in a `.env` file in the project root. Two options:
-
-**Option 1: OpenCode Subscription (OAuth token)**
 ```bash
-OPENCODE_OAUTH_TOKEN=sk-ant-oat01-...
-```
-The token can be extracted from `~/.opencode/.credentials.json` if you're logged in to OpenCode CLI.
-
-**Option 2: Pay-per-use API Key**
-```bash
+# Option 1: API key (pay-per-use)
 OPENCODE_API_KEY=sk-ant-api03-...
+
+# Option 2: Custom base URL (e.g. for OpenRouter)
+OPENCODE_BASE_URL=https://openrouter.ai/api/v1
+OPENCODE_API_KEY=sk-or-...
+OPENCODE_MODEL=anthropic/claude-sonnet-4-5
 ```
-
-Only the authentication variables (`OPENCODE_OAUTH_TOKEN` and `OPENCODE_API_KEY`) are extracted from `.env` and written to `data/env/env`, then mounted into the container at `/workspace/env-dir/env` and sourced by the entrypoint script. This ensures other environment variables in `.env` are not exposed to the agent. This workaround is needed because some container runtimes lose `-e` environment variables when using `-i` (interactive mode with piped stdin).
-
-### Changing the Assistant Name
-
-Set the `ASSISTANT_NAME` environment variable:
-
-```bash
-ASSISTANT_NAME=Bot bun run start
-```
-
-Or edit the default in `src/config.ts`. This changes:
-- The trigger pattern (messages must start with `@YourName`)
-- The response prefix (`YourName:` added automatically)
-
-### Placeholder Values in launchd
-
-Files with `{{PLACEHOLDER}}` values need to be configured:
-- `{{PROJECT_ROOT}}` - Absolute path to your pocketbrain installation
-- `{{BUN_PATH}}` - Path to node binary (detected via `which bun`)
-- `{{HOME}}` - User's home directory
 
 ---
 
@@ -271,41 +195,42 @@ PocketBrain uses a hierarchical memory system based on AGENTS.md files.
 
 | Level | Location | Read By | Written By | Purpose |
 |-------|----------|---------|------------|---------|
-| **Global** | `groups/AGENTS.md` | All groups | Main only | Preferences, facts, context shared across all conversations |
-| **Group** | `groups/{name}/AGENTS.md` | That group | That group | Group-specific context, conversation memory |
-| **Files** | `groups/{name}/*.md` | That group | That group | Notes, research, documents created during conversation |
+| **Global** | `groups/global/AGENTS.md` | All groups (via OpenCode instructions) | Main only | Preferences, facts shared across conversations |
+| **Group** | `groups/{name}/AGENTS.md` | That group (injected at session start) | That group | Group-specific context, conversation memory |
+| **Files** | `groups/{name}/*.md` | That group | That group | Notes, research, documents |
 
 ### How Memory Works
 
-1. **Agent Context Loading**
-   - Agent runs with `cwd` set to `groups/{group-name}/`
-   - OpenCode SDK with `settingSources: ['project']` automatically loads:
-     - `../AGENTS.md` (parent directory = global memory)
-     - `./AGENTS.md` (current directory = group memory)
+1. **Global context**: `groups/global/AGENTS.md` is passed to `createOpencode()` as an `instructions` path — OpenCode loads it automatically for every session.
 
-2. **Writing Memory**
-   - When user says "remember this", agent writes to `./AGENTS.md`
-   - When user says "remember this globally" (main channel only), agent writes to `../AGENTS.md`
-   - Agent can create files like `notes.md`, `research.md` in the group folder
+2. **Group context**: At the start of each new session, `buildGroupContext()` reads `groups/{name}/AGENTS.md` and injects it into the first prompt, along with the session's `pocketbrain_context` (chatJid, groupFolder, isMain).
 
-3. **Main Channel Privileges**
-   - Only the "main" group (self-chat) can write to global memory
-   - Main can manage registered groups and schedule tasks for any group
-   - Main can configure additional directory mounts for any group
-   - All groups have Bash access (safe because it runs inside container)
+3. **Writing memory**: Agent writes to `./AGENTS.md` for group memory, or uses the global file for cross-session facts.
+
+4. **Main channel privileges**: Only the "main" group can write to global memory and schedule tasks for other groups.
 
 ---
 
 ## Session Management
 
-Sessions enable conversation continuity - OpenCode remembers what you talked about.
+Sessions enable conversation continuity — OpenCode remembers the full conversation history.
 
 ### How Sessions Work
 
 1. Each group has a session ID stored in SQLite (`sessions` table, keyed by `group_folder`)
-2. Session ID is passed to OpenCode SDK's `resume` option
-3. OpenCode continues the conversation with full context
-4. Session transcripts are stored as JSONL files in `data/sessions/{group}/.opencode/`
+2. On new message: `startSession()` creates a new session or resumes the existing one via `client.session.get()`
+3. Follow-up messages from the same group (while session is active) are sent via `sendFollowUp()`
+4. Sessions remain open (blocking `startSession()`) until `abortSession()` is called or the host shuts down
+5. Session transcripts are stored by OpenCode in its working directory
+
+### Group Context
+
+Every new session starts with a `<pocketbrain_context>` block containing:
+- `chatJid` — the WhatsApp/Telegram/Discord JID for this chat
+- `groupFolder` — the folder name for IPC and file operations
+- `isMain` — whether this is the privileged main channel
+
+This context is also re-injected on follow-up prompts to survive session compaction.
 
 ---
 
@@ -327,32 +252,22 @@ Sessions enable conversation continuity - OpenCode remembers what you talked abo
    │
    ▼
 5. Router checks:
-   ├── Is chat_jid in registered groups (SQLite)? → No: ignore
+   ├── Is chat_jid in registered_groups? → No: ignore
    └── Does message match trigger pattern? → No: store but don't process
    │
    ▼
-6. Router catches up conversation:
-   ├── Fetch all messages since last agent interaction
-   ├── Format with timestamp and sender name
-   └── Build prompt with full conversation context
+6. GroupQueue serializes processing per group:
+   ├── If session active: sendFollowUp() with new messages
+   └── If no session: startSession() with full catch-up history
    │
    ▼
-7. Router invokes OpenCode SDK:
-   ├── cwd: groups/{group-name}/
-   ├── prompt: conversation history + current message
-   ├── resume: session_id (for continuity)
-   └── mcpServers: pocketbrain (scheduler)
-   │
-   ▼
-8. OpenCode processes message:
+7. OpenCode processes message:
    ├── Reads AGENTS.md files for context
-   └── Uses tools as needed (search, email, etc.)
+   ├── Uses tools (search, file ops, MCP tools)
+   └── Streams output via SSE events
    │
    ▼
-9. Router prefixes response with assistant name and sends via WhatsApp
-   │
-   ▼
-10. Router updates last agent timestamp and saves session ID
+8. Output sent via WhatsApp, session ID saved to SQLite
 ```
 
 ### Trigger Word Matching
@@ -365,7 +280,7 @@ Messages must start with the trigger pattern (default: `@Andy`):
 
 ### Conversation Catch-Up
 
-When a triggered message arrives, the agent receives all messages since its last interaction in that chat. Each message is formatted with timestamp and sender name:
+When a triggered message arrives, the agent receives all messages since its last interaction in that chat:
 
 ```
 [Jan 31 2:32 PM] John: hey everyone, should we do pizza tonight?
@@ -373,39 +288,33 @@ When a triggered message arrives, the agent receives all messages since its last
 [Jan 31 2:35 PM] John: @Andy what toppings do you recommend?
 ```
 
-This allows the agent to understand the conversation context even if it wasn't mentioned in every message.
-
 ---
 
 ## Commands
 
-### Commands Available in Any Group
+### Available in Any Group
 
-| Command | Example | Effect |
-|---------|---------|--------|
-| `@Assistant [message]` | `@Andy what's the weather?` | Talk to OpenCode |
+| Command | Effect |
+|---------|--------|
+| `@Andy [message]` | Talk to the agent |
+| `@Andy list my scheduled tasks` | View this group's tasks |
+| `@Andy pause/resume/cancel task [id]` | Manage tasks |
 
-### Commands Available in Main Channel Only
+### Available in Main Channel Only
 
-| Command | Example | Effect |
-|---------|---------|--------|
-| `@Assistant add group "Name"` | `@Andy add group "Family Chat"` | Register a new group |
-| `@Assistant remove group "Name"` | `@Andy remove group "Work Team"` | Unregister a group |
-| `@Assistant list groups` | `@Andy list groups` | Show registered groups |
-| `@Assistant remember [fact]` | `@Andy remember I prefer dark mode` | Add to global memory |
+| Command | Effect |
+|---------|--------|
+| `@Andy add group "Name"` | Register a new group |
+| `@Andy remove group "Name"` | Unregister a group |
+| `@Andy list groups` | Show registered groups |
+| `@Andy list all tasks` | View tasks from all groups |
+| `@Andy schedule task for "Group": [prompt]` | Schedule for another group |
 
 ---
 
 ## Scheduled Tasks
 
-PocketBrain has a built-in scheduler that runs tasks as full agents in their group's context.
-
-### How Scheduling Works
-
-1. **Group Context**: Tasks created in a group run with that group's working directory and memory
-2. **Full Agent Capabilities**: Scheduled tasks have access to all tools (WebSearch, file operations, etc.)
-3. **Optional Messaging**: Tasks can send messages to their group using the `send_message` tool, or complete silently
-4. **Main Channel Privileges**: The main channel can schedule tasks for any group and view all tasks
+The scheduler runs tasks as full agent sessions in their group's context.
 
 ### Schedule Types
 
@@ -420,40 +329,12 @@ PocketBrain has a built-in scheduler that runs tasks as full agents in their gro
 ```
 User: @Andy remind me every Monday at 9am to review the weekly metrics
 
-OpenCode: [calls mcp__pocketbrain__schedule_task]
-        {
-          "prompt": "Send a reminder to review weekly metrics. Be encouraging!",
-          "schedule_type": "cron",
-          "schedule_value": "0 9 * * 1"
-        }
+Agent: [calls mcp__pocketbrain__schedule_task]
+       { "prompt": "Send a reminder to review weekly metrics.",
+         "schedule_type": "cron", "schedule_value": "0 9 * * 1" }
 
-OpenCode: Done! I'll remind you every Monday at 9am.
+Agent: Done! I'll remind you every Monday at 9am.
 ```
-
-### One-Time Tasks
-
-```
-User: @Andy at 5pm today, send me a summary of today's emails
-
-OpenCode: [calls mcp__pocketbrain__schedule_task]
-        {
-          "prompt": "Search for today's emails, summarize the important ones, and send the summary to the group.",
-          "schedule_type": "once",
-          "schedule_value": "2024-01-31T17:00:00Z"
-        }
-```
-
-### Managing Tasks
-
-From any group:
-- `@Andy list my scheduled tasks` - View tasks for this group
-- `@Andy pause task [id]` - Pause a task
-- `@Andy resume task [id]` - Resume a paused task
-- `@Andy cancel task [id]` - Delete a task
-
-From main channel:
-- `@Andy list all tasks` - View tasks from all groups
-- `@Andy schedule task for "Family Chat": [prompt]` - Schedule for another group
 
 ---
 
@@ -461,139 +342,95 @@ From main channel:
 
 ### PocketBrain MCP (built-in)
 
-The `pocketbrain` MCP server is created dynamically per agent call with the current group's context.
+The `pocketbrain` MCP server runs as a stdio child process of the OpenCode server, started once at boot.
 
 **Available Tools:**
+
 | Tool | Purpose |
 |------|---------|
+| `send_message` | Send a message to the group (via IPC → WhatsApp) |
 | `schedule_task` | Schedule a recurring or one-time task |
 | `list_tasks` | Show tasks (group's tasks, or all if main) |
-| `get_task` | Get task details and run history |
-| `update_task` | Modify task prompt or schedule |
 | `pause_task` | Pause a task |
 | `resume_task` | Resume a paused task |
 | `cancel_task` | Delete a task |
-| `send_message` | Send a WhatsApp message to the group |
+| `register_group` | Register a new chat as a group |
+
+### IPC Flow
+
+The MCP tools write JSON files to `data/ipc/{groupFolder}/` using atomic temp-file-then-rename writes. The IPC watcher (`src/ipc.ts`) polls these directories and processes the commands on the host side.
 
 ---
 
 ## Deployment
 
-PocketBrain runs as a single macOS launchd service.
+PocketBrain runs via Docker Compose.
 
 ### Startup Sequence
 
-When PocketBrain starts, it:
-1. **Ensures container runtime is running** - Automatically starts it if needed; kills orphaned PocketBrain containers from previous runs
-2. Initializes the SQLite database (migrates from JSON files if they exist)
-3. Loads state from SQLite (registered groups, sessions, router state)
-4. Connects to WhatsApp (on `connection.open`):
-   - Starts the scheduler loop
-   - Starts the IPC watcher for container messages
-   - Sets up the per-group queue with `processGroupMessages`
-   - Recovers any unprocessed messages from before shutdown
-   - Starts the message polling loop
+When PocketBrain starts:
+1. Reads secrets from `.env`
+2. Calls `createOpencode()` to start the embedded OpenCode server on port 4096
+3. Syncs skills from `container/skills/` to `.opencode/skills/` (if present)
+4. Initializes SQLite and migrates schema
+5. Connects to WhatsApp via Baileys
+6. On `connection.open`: starts message loop, scheduler, and IPC watcher
 
-### Service: com.pocketbrain
-
-**launchd/com.pocketbrain.plist:**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "...">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.pocketbrain</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{{BUN_PATH}}</string>
-        <string>{{PROJECT_ROOT}}/dist/index.js</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>{{PROJECT_ROOT}}</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>{{HOME}}/.local/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <key>HOME</key>
-        <string>{{HOME}}</string>
-        <key>ASSISTANT_NAME</key>
-        <string>Andy</string>
-    </dict>
-    <key>StandardOutPath</key>
-    <string>{{PROJECT_ROOT}}/logs/pocketbrain.log</string>
-    <key>StandardErrorPath</key>
-    <string>{{PROJECT_ROOT}}/logs/pocketbrain.error.log</string>
-</dict>
-</plist>
-```
-
-### Managing the Service
+### Docker Compose Commands
 
 ```bash
-# Install service
-cp launchd/com.pocketbrain.plist ~/Library/LaunchAgents/
+bun run docker:build   # Build the Docker image
+bun run docker:up      # Start container detached
+bun run docker:down    # Stop container
+bun run docker:logs    # Tail container logs
+bun run docker:test    # Run tests in container
+```
 
-# Start service
-launchctl load ~/Library/LaunchAgents/com.pocketbrain.plist
+### Development
 
-# Stop service
-launchctl unload ~/Library/LaunchAgents/com.pocketbrain.plist
-
-# Check status
-launchctl list | grep pocketbrain
-
-# View logs
-tail -f logs/pocketbrain.log
+```bash
+bun run dev            # Run dev container with interactive terminal
 ```
 
 ---
 
 ## Security Considerations
 
-### Container Isolation
+### Isolation Model
 
-All agents run inside containers (lightweight Linux VMs), providing:
-- **Filesystem isolation**: Agents can only access mounted directories
-- **Safe Bash access**: Commands run inside the container, not on your Mac
-- **Network isolation**: Can be configured per-container if needed
+PocketBrain runs inside a Docker container (Linux). The Docker container provides:
+- **Filesystem isolation**: Host filesystem is not accessible unless explicitly mounted
 - **Process isolation**: Container processes can't affect the host
-- **Non-root user**: Container runs as unprivileged `node` user (uid 1000)
+- **Network isolation**: Configurable via Docker networks
+
+The agent (OpenCode) runs **inside the same container** as the host process. It has access to the container's filesystem. This is safe for personal use but means the agent can read/write any file within the container.
 
 ### Prompt Injection Risk
 
-WhatsApp messages could contain malicious instructions attempting to manipulate OpenCode's behavior.
+WhatsApp messages could contain malicious instructions attempting to manipulate the agent's behavior.
 
 **Mitigations:**
-- Container isolation limits blast radius
 - Only registered groups are processed
 - Trigger word required (reduces accidental processing)
-- Agents can only access their group's mounted directories
-- Main can configure additional directories per group
 - OpenCode's built-in safety training
+- Docker container limits filesystem and network access
 
 **Recommendations:**
-- Only register trusted groups
-- Review additional directory mounts carefully
+- Only register trusted groups/chats
 - Review scheduled tasks periodically
 - Monitor logs for unusual activity
 
 ### Credential Storage
 
-| Credential | Storage Location | Notes |
-|------------|------------------|-------|
-| OpenCode CLI Auth | data/sessions/{group}/.opencode/ | Per-group isolation, mounted to /home/node/.opencode/ |
-| WhatsApp Session | store/auth/ | Auto-created, persists ~20 days |
+| Credential | Storage Location |
+|------------|------------------|
+| API keys | `.env` file (gitignored) |
+| WhatsApp session | `store/auth/` (gitignored) |
+| Session transcripts | OpenCode's working directory |
 
-### File Permissions
-
-The groups/ folder contains personal memory and should be protected:
 ```bash
-chmod 700 groups/
+# Protect sensitive directories
+chmod 700 store/ groups/ data/
 ```
 
 ---
@@ -604,26 +441,21 @@ chmod 700 groups/
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| No response to messages | Service not running | Check `launchctl list | grep pocketbrain` |
-| "OpenCode CLI process exited with code 1" | Container runtime failed to start | Check logs; PocketBrain auto-starts container runtime but may fail |
-| "OpenCode CLI process exited with code 1" | Session mount path wrong | Ensure mount is to `/home/node/.opencode/` not `/root/.opencode/` |
-| Session not continuing | Session ID not saved | Check SQLite: `sqlite3 store/messages.db "SELECT * FROM sessions"` |
-| Session not continuing | Mount path mismatch | Container user is `node` with HOME=/home/node; sessions must be at `/home/node/.opencode/` |
-| "QR code expired" | WhatsApp session expired | Delete store/auth/ and restart |
+| No response to messages | Container not running | `bun run docker:logs` to check; `bun run docker:up` to start |
+| Agent not responding | Session error | Check logs for OpenCode errors |
+| "QR code expired" | WhatsApp session expired | Delete `store/auth/` and restart |
 | "No groups registered" | Haven't added groups | Use `@Andy add group "Name"` in main |
+| Context lost after long session | Session compaction | Context is re-injected on each follow-up |
 
 ### Log Location
 
-- `logs/pocketbrain.log` - stdout
-- `logs/pocketbrain.error.log` - stderr
+```bash
+bun run docker:logs          # Live container logs
+bun run docker:logs | grep ERROR   # Filter errors
+```
 
 ### Debug Mode
 
-Run manually for verbose output:
 ```bash
-bun run dev
-# or
-bun dist/index.js
+bun run dev    # Interactive dev container with verbose output
 ```
-
-

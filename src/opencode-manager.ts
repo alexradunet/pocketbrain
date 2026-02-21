@@ -46,6 +46,8 @@ interface ActiveSession {
   onOutput: (output: AgentOutput) => Promise<void>;
   resolveEnd: () => void;
   busy: boolean;
+  /** pocketbrain_context block re-injected on every follow-up to survive compaction */
+  contextPrefix: string;
 }
 
 let opencodeInstance: OpencodeClient | null = null;
@@ -201,12 +203,16 @@ export async function startSession(
     resolveEnd = r;
   });
 
+  // Build the context prefix once — re-injected on every follow-up to survive compaction
+  const contextPrefix = buildContextPrefix(group, input);
+
   // Register active session
   activeSessions.set(input.groupFolder, {
     sessionId,
     onOutput,
     resolveEnd,
     busy: false,
+    contextPrefix,
   });
 
   // Build prompt
@@ -264,7 +270,11 @@ export async function sendFollowUp(
   const { client } = opencodeInstance;
   session.busy = true;
   try {
-    const result = await runPrompt(client, session.sessionId, text);
+    // Re-inject context prefix on every follow-up so it survives session compaction
+    const promptText = session.contextPrefix
+      ? `${session.contextPrefix}\n\n${text}`
+      : text;
+    const result = await runPrompt(client, session.sessionId, promptText);
     await session.onOutput(result);
     if (result.status === 'error') return true;
     await session.onOutput({
@@ -483,10 +493,13 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function buildGroupContext(group: RegisteredGroup, input: AgentInput): string {
-  const parts: string[] = [];
-
-  parts.push(`<pocketbrain_context>
+/**
+ * Build the pocketbrain_context XML block for this session.
+ * This is re-injected on every prompt (including follow-ups) so it survives
+ * session compaction.
+ */
+function buildContextPrefix(group: RegisteredGroup, input: AgentInput): string {
+  return `<pocketbrain_context>
 chatJid: ${input.chatJid}
 groupFolder: ${input.groupFolder}
 isMain: ${input.isMain}
@@ -495,9 +508,13 @@ When using PocketBrain MCP tools (send_message, schedule_task, list_tasks, pause
 - chatJid: "${input.chatJid}"
 - groupFolder: "${input.groupFolder}"
 - isMain: ${input.isMain}
-</pocketbrain_context>`);
+</pocketbrain_context>`;
+}
 
-  // Per-group AGENTS.md
+function buildGroupContext(group: RegisteredGroup, input: AgentInput): string {
+  const parts: string[] = [buildContextPrefix(group, input)];
+
+  // Per-group AGENTS.md — injected only on new sessions (not follow-ups)
   const groupInstructionsPath = path.join(GROUPS_DIR, group.folder, 'AGENTS.md');
   if (fs.existsSync(groupInstructionsPath)) {
     parts.push(fs.readFileSync(groupInstructionsPath, 'utf-8'));

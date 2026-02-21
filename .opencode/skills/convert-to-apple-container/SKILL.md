@@ -1,176 +1,32 @@
-﻿---
+---
 name: convert-to-apple-container
-description: Switch from Docker to Apple Container for macOS-native container isolation. Use when the user wants Apple Container instead of Docker, or is setting up on macOS and prefers the native runtime. Triggers on "apple container", "convert to apple container", "switch to apple container", or "use apple container".
+description: ARCHIVED - This skill was designed for a container-per-invocation architecture that has been superseded. PocketBrain now runs as a single Bun process inside Docker; the Docker container IS the isolation. This skill is no longer applicable.
 ---
 
-# Convert to Apple Container
+# Convert to Apple Container (Archived)
 
-This skill switches NanoClaw's container runtime from Docker to Apple Container (macOS-only). It uses the skills engine for deterministic code changes, then walks through verification.
+> **Note**: This skill was designed for an older container-per-invocation architecture where PocketBrain would spawn a new container for each agent session. That architecture has been replaced.
+>
+> **Current architecture**: PocketBrain runs as a single long-lived Bun process inside a Docker container. The OpenCode SDK (`@opencode-ai/sdk`) manages agent sessions in-process. The Docker container itself provides isolation — there are no per-invocation containers to switch runtimes on.
+>
+> If you want to switch the Docker container runtime (e.g. from Docker Desktop to OrbStack or Podman on macOS), that's a host-level configuration change, not a code change.
 
-**What this changes:**
-- Container runtime binary: `docker` â†’ `container`
-- Mount syntax: `-v path:path:ro` â†’ `--mount type=bind,source=...,target=...,readonly`
-- Startup check: `docker info` â†’ `container system status` (with auto-start)
-- Orphan detection: `docker ps --filter` â†’ `container ls --format json`
-- Build script default: `docker` â†’ `container`
+## If you want to use a different container runtime on macOS
 
-**What stays the same:**
-- Dockerfile (shared by both runtimes)
-- Container runner code (`src/container-runner.ts`)
-- Mount security/allowlist validation
-- All other functionality
+PocketBrain uses Docker Compose for building and running the container. The `docker compose` commands in `package.json` work with:
 
-## Prerequisites
+- **Docker Desktop** — the default
+- **OrbStack** — drop-in Docker Desktop replacement, faster on Apple Silicon; install OrbStack and it automatically replaces the `docker` CLI
+- **Rancher Desktop** — another Docker Desktop alternative with containerd backend
 
-Verify Apple Container is installed:
+No code changes are needed for any of these — they all implement the Docker CLI interface.
 
-```bash
-container --version && echo "Apple Container ready" || echo "Install Apple Container first"
-```
+## If you want native macOS container execution (Apple Container framework)
 
-If not installed:
-- Download from https://github.com/apple/container/releases
-- Install the `.pkg` file
-- Verify: `container --version`
+Apple's native container framework (`container` CLI) is incompatible with Docker Compose and uses a different image format. Migrating to it would require:
 
-Apple Container requires macOS. It does not work on Linux.
+1. Rewriting `docker-compose.yml` → custom build/run scripts using `container` CLI
+2. Rebuilding the image with `container build`
+3. Rewriting all `package.json` scripts
 
-## Phase 1: Pre-flight
-
-### Check if already applied
-
-Read `.nanoclaw/state.yaml`. If `convert-to-apple-container` is in `applied_skills`, skip to Phase 3 (Verify). The code changes are already in place.
-
-### Check current runtime
-
-```bash
-grep "CONTAINER_RUNTIME_BIN" src/container-runtime.ts
-```
-
-If it already shows `'container'`, the runtime is already Apple Container. Skip to Phase 3.
-
-## Phase 2: Apply Code Changes
-
-Run the skills engine to apply this skill's code package. The package files are in this directory alongside this SKILL.md.
-
-### Initialize skills system (if needed)
-
-If `.nanoclaw/` directory doesn't exist yet:
-
-```bash
-bun scripts/apply-skill.ts --init
-```
-
-Or call `initSkillsSystem()` from `skills-engine/migrate.ts`.
-
-### Apply the skill
-
-```bash
-bun scripts/apply-skill.ts .opencode/skills/convert-to-apple-container
-```
-
-This deterministically:
-- Replaces `src/container-runtime.ts` with the Apple Container implementation
-- Replaces `src/container-runtime.test.ts` with Apple Container-specific tests
-- Updates `container/build.sh` to default to `container` runtime
-- Records the application in `.nanoclaw/state.yaml`
-
-If the apply reports merge conflicts, read the intent files:
-- `modify/src/container-runtime.ts.intent.md` â€” what changed and invariants
-- `modify/container/build.sh.intent.md` â€” what changed for build script
-
-### Validate code changes
-
-```bash
-npm test
-npm run build
-```
-
-All tests must pass and build must be clean before proceeding.
-
-## Phase 3: Verify
-
-### Ensure Apple Container runtime is running
-
-```bash
-container system status || container system start
-```
-
-### Build the container image
-
-```bash
-./container/build.sh
-```
-
-### Test basic execution
-
-```bash
-echo '{}' | container run -i --entrypoint /bin/echo nanoclaw-agent:latest "Container OK"
-```
-
-### Test readonly mounts
-
-```bash
-mkdir -p /tmp/test-ro && echo "test" > /tmp/test-ro/file.txt
-container run --rm --entrypoint /bin/bash \
-  --mount type=bind,source=/tmp/test-ro,target=/test,readonly \
-  nanoclaw-agent:latest \
-  -c "cat /test/file.txt && touch /test/new.txt 2>&1 || echo 'Write blocked (expected)'"
-rm -rf /tmp/test-ro
-```
-
-Expected: Read succeeds, write fails with "Read-only file system".
-
-### Test read-write mounts
-
-```bash
-mkdir -p /tmp/test-rw
-container run --rm --entrypoint /bin/bash \
-  -v /tmp/test-rw:/test \
-  nanoclaw-agent:latest \
-  -c "echo 'test write' > /test/new.txt && cat /test/new.txt"
-cat /tmp/test-rw/new.txt && rm -rf /tmp/test-rw
-```
-
-Expected: Both operations succeed.
-
-### Full integration test
-
-```bash
-npm run build
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
-```
-
-Send a message via WhatsApp and verify the agent responds.
-
-## Troubleshooting
-
-**Apple Container not found:**
-- Download from https://github.com/apple/container/releases
-- Install the `.pkg` file
-- Verify: `container --version`
-
-**Runtime won't start:**
-```bash
-container system start
-container system status
-```
-
-**Image build fails:**
-```bash
-# Clean rebuild â€” Apple Container caches aggressively
-container builder stop && container builder rm && container builder start
-./container/build.sh
-```
-
-**Container can't write to mounted directories:**
-Check directory permissions on the host. The container runs as uid 1000.
-
-## Summary of Changed Files
-
-| File | Type of Change |
-|------|----------------|
-| `src/container-runtime.ts` | Full replacement â€” Docker â†’ Apple Container API |
-| `src/container-runtime.test.ts` | Full replacement â€” tests for Apple Container behavior |
-| `container/build.sh` | Default runtime: `docker` â†’ `container` |
-
+This is a significant undertaking and not covered by a simple skill. Consult the Apple Container documentation and plan carefully before attempting it.

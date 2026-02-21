@@ -1,63 +1,81 @@
-﻿# Add Discord Channel
+# Add Discord Channel
 
-This skill adds Discord support to NanoClaw using the skills engine for deterministic code changes, then walks through interactive setup.
+This skill adds Discord support to PocketBrain. Read the existing codebase first, then apply the changes below.
 
 ## Phase 1: Pre-flight
-
-### Check if already applied
-
-Read `.nanoclaw/state.yaml`. If `discord` is in `applied_skills`, skip to Phase 3 (Setup). The code changes are already in place.
 
 ### Ask the user
 
 1. **Mode**: Replace WhatsApp or add alongside it?
-   - Replace â†’ will set `DISCORD_ONLY=true`
-   - Alongside â†’ both channels active (default)
+   - Replace → will set `DISCORD_ONLY=true`
+   - Alongside → both channels active (default)
 
 2. **Do they already have a bot token?** If yes, collect it now. If no, we'll create one in Phase 3.
 
 ## Phase 2: Apply Code Changes
 
-Run the skills engine to apply this skill's code package. The package files are in this directory alongside this SKILL.md.
+Read `src/channels/whatsapp.ts` and `src/types.ts` to understand the `Channel` interface, then apply these changes:
 
-### Initialize skills system (if needed)
-
-If `.nanoclaw/` directory doesn't exist yet:
+### Install dependency
 
 ```bash
-bun scripts/apply-skill.ts --init
+bun add discord.js
 ```
 
-Or call `initSkillsSystem()` from `skills-engine/migrate.ts`.
+### Create `src/channels/discord.ts`
 
-### Apply the skill
+Implement a `DiscordChannel` class following the same `Channel` interface as `WhatsAppChannel`:
+
+- Import `Client`, `GatewayIntentBits`, `Events` from `discord.js`
+- Constructor: accept `token: string`, `db: Database` (SQLite)
+- `connect()` — log in with `client.login(token)`, resolve when `Events.ClientReady` fires
+- `disconnect()` — call `client.destroy()`
+- `sendMessage(jid: string, text: string)` — parse `dc:<channelId>` JID format, fetch channel, send (split messages over 2000 chars)
+- `ownsJid(jid: string)` — return `jid.startsWith('dc:')`
+- Required intents: `Guilds`, `GuildMessages`, `MessageContent`, `DirectMessages`
+- Handle incoming messages: on `Events.MessageCreate`, skip bot messages, store in SQLite `messages` and `chats` tables, then trigger the group queue
+- JID format: `dc:<channelId>` for text channels and DMs
+
+### Modify `src/index.ts`
+
+Add DiscordChannel alongside WhatsApp:
+
+```typescript
+import { DiscordChannel } from './channels/discord.js';
+
+// After WhatsApp init:
+if (DISCORD_BOT_TOKEN) {
+  const discord = new DiscordChannel(DISCORD_BOT_TOKEN, db);
+  channels.push(discord);
+  await discord.connect();
+}
+```
+
+Check how `findChannel()` in `src/router.ts` handles JID routing to ensure `dc:` prefixed JIDs are correctly routed.
+
+### Add to `src/config.ts`
+
+```typescript
+export const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
+export const DISCORD_ONLY = process.env.DISCORD_ONLY === 'true';
+```
+
+If `DISCORD_ONLY=true`, skip initializing WhatsApp in `src/index.ts`.
+
+### Update `.env.example`
 
 ```bash
-bun scripts/apply-skill.ts .opencode/skills/add-discord
+DISCORD_BOT_TOKEN=
+DISCORD_ONLY=false
 ```
 
-This deterministically:
-- Adds `src/channels/discord.ts` (DiscordChannel class implementing Channel interface)
-- Adds `src/channels/discord.test.ts` (unit tests with discord.js mock)
-- Three-way merges Discord support into `src/index.ts` (multi-channel support, findChannel routing)
-- Three-way merges Discord config into `src/config.ts` (DISCORD_BOT_TOKEN, DISCORD_ONLY exports)
-- Three-way merges updated routing tests into `src/routing.test.ts`
-- Installs the `discord.js` npm dependency
-- Updates `.env.example` with `DISCORD_BOT_TOKEN` and `DISCORD_ONLY`
-- Records the application in `.nanoclaw/state.yaml`
-
-If the apply reports merge conflicts, read the intent files:
-- `modify/src/index.ts.intent.md` â€” what changed and invariants for index.ts
-- `modify/src/config.ts.intent.md` â€” what changed for config.ts
-
-### Validate code changes
+### Validate changes
 
 ```bash
-npm test
-npm run build
+bun test
 ```
 
-All tests must pass (including the new Discord tests) and build must be clean before proceeding.
+All existing tests must pass before proceeding.
 
 ## Phase 3: Setup
 
@@ -70,7 +88,7 @@ If the user doesn't have a bot token, tell them:
 > 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
 > 2. Click **New Application** and give it a name (e.g., "Andy Assistant")
 > 3. Go to the **Bot** tab on the left sidebar
-> 4. Click **Reset Token** to generate a new bot token â€” copy it immediately (you can only see it once)
+> 4. Click **Reset Token** to generate a new bot token — copy it immediately (you can only see it once)
 > 5. Under **Privileged Gateway Intents**, enable:
 >    - **Message Content Intent** (required to read message text)
 >    - **Server Members Intent** (optional, for member display names)
@@ -95,19 +113,11 @@ If they chose to replace WhatsApp:
 DISCORD_ONLY=true
 ```
 
-Sync to container environment:
-
-```bash
-cp .env data/env/env
-```
-
-The container reads environment from `data/env/env`, not `.env` directly.
-
 ### Build and restart
 
 ```bash
-npm run build
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+bun run docker:build
+bun run docker:up
 ```
 
 ## Phase 4: Registration
@@ -124,11 +134,11 @@ Tell the user:
 >
 > The channel ID will be a long number like `1234567890123456`.
 
-Wait for the user to provide the channel ID (format: `dc:1234567890123456`).
+Wait for the user to provide the channel ID (JID format: `dc:<channelId>`).
 
 ### Register the channel
 
-Use the IPC register flow or register directly. The channel ID, name, and folder name are needed.
+Use the `register_group` MCP tool or add directly to SQLite.
 
 For a main channel (responds to all messages, uses the `main` folder):
 
@@ -169,17 +179,17 @@ Tell the user:
 ### Check logs if needed
 
 ```bash
-tail -f logs/nanoclaw.log
+bun run docker:logs
 ```
 
 ## Troubleshooting
 
 ### Bot not responding
 
-1. Check `DISCORD_BOT_TOKEN` is set in `.env` AND synced to `data/env/env`
-2. Check channel is registered: `sqlite3 store/messages.db "SELECT * FROM registered_groups WHERE jid LIKE 'dc:%'"`
+1. Check `DISCORD_BOT_TOKEN` is set in `.env`
+2. Check channel is registered: look in SQLite `registered_groups` table for `dc:` prefixed JIDs
 3. For non-main channels: message must include trigger pattern (@mention the bot)
-4. Service is running: `launchctl list | grep nanoclaw`
+4. Check container logs: `bun run docker:logs`
 5. Verify the bot has been invited to the server (check OAuth2 URL was used)
 
 ### Bot only responds to @mentions
@@ -194,7 +204,7 @@ If the bot connects but can't read messages, ensure:
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Select your application > **Bot** tab
 3. Under **Privileged Gateway Intents**, enable **Message Content Intent**
-4. Restart NanoClaw
+4. Restart PocketBrain: `bun run docker:up`
 
 ### Getting Channel ID
 
@@ -208,7 +218,5 @@ The Discord bot supports:
 - Text messages in registered channels
 - Attachment descriptions (images, videos, files shown as placeholders)
 - Reply context (shows who the user is replying to)
-- @mention translation (Discord `<@botId>` â†’ NanoClaw trigger format)
+- @mention translation (Discord `<@botId>` → trigger format)
 - Message splitting for responses over 2000 characters
-- Typing indicators while the agent processes
-
