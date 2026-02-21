@@ -1,4 +1,14 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+
+// Mock config to use a temp DATA_DIR so mkdirSync doesn't hit permission errors
+const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-om-test-'));
+vi.mock('./config.js', () => ({
+  DATA_DIR: TEST_DATA_DIR,
+  WORKSPACE_DIR: TEST_DATA_DIR,
+}));
 
 import {
   abortSession,
@@ -9,17 +19,18 @@ import {
   _clearActiveSessions,
   _setTestOpencodeInstance,
 } from './opencode-manager.js';
-import type { RegisteredGroup } from './types.js';
+import type { ChatConfig } from './types.js';
 
-const MOCK_GROUP: RegisteredGroup = {
-  name: 'Test Group',
-  folder: 'test-group',
-  added_at: '2024-01-01T00:00:00.000Z',
+const MOCK_CHAT: ChatConfig = {
+  jid: 'test@g.us',
+  name: 'Test Chat',
+  folder: 'test-chat',
+  addedAt: '2024-01-01T00:00:00.000Z',
 };
 
 const BASE_INPUT = {
   prompt: 'hello',
-  groupFolder: 'test-group',
+  chatFolder: 'test-chat',
   chatJid: 'test@g.us',
 };
 
@@ -49,8 +60,7 @@ function makeMockInstance(sessionOverrides: Record<string, unknown> = {}) {
 
 /**
  * Factory: creates a mock OpenCode instance whose event stream yields the given
- * events in order. `messageResult` controls what client.session.message() returns
- * (the canonical fetch after stream ends). Pass `null` to simulate a timeout/no-data.
+ * events in order. `messageResult` controls what client.session.message() returns.
  */
 function makeStreamingMock(
   events: object[],
@@ -84,7 +94,7 @@ function makeStreamingMock(
 function makeAutoAbortOnOutput() {
   return async (output: { newSessionId?: string; result: unknown }) => {
     if (output.newSessionId && !output.result) {
-      abortSession('test-group');
+      abortSession('test-chat');
     }
   };
 }
@@ -107,7 +117,7 @@ describe('startSession — session.create null data', () => {
       }),
     );
 
-    const result = await startSession(MOCK_GROUP, BASE_INPUT, async () => {});
+    const result = await startSession(MOCK_CHAT, BASE_INPUT, async () => {});
 
     expect(result.status).toBe('error');
     expect(result.error).toMatch(/no session ID/i);
@@ -131,7 +141,7 @@ describe('startSession — stale session recovery', () => {
     );
 
     const result = await startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       { ...BASE_INPUT, sessionId: 'stale-id' },
       makeAutoAbortOnOutput(),
     );
@@ -155,7 +165,7 @@ describe('startSession — stale session recovery', () => {
     );
 
     const result = await startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       { ...BASE_INPUT, sessionId: 'existing-session' },
       makeAutoAbortOnOutput(),
     );
@@ -182,7 +192,7 @@ describe('startSession — stale session recovery', () => {
     );
 
     const result = await startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       { ...BASE_INPUT, sessionId: 'stale-id' },
       makeAutoAbortOnOutput(),
     );
@@ -206,7 +216,7 @@ describe('startSession — stale session recovery', () => {
     );
 
     const result = await startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       { ...BASE_INPUT, sessionId: 'stale-id' },
       async () => {},
     );
@@ -217,19 +227,9 @@ describe('startSession — stale session recovery', () => {
 });
 
 describe('runPrompt — via startSession — SSE event processing', () => {
-  /**
-   * To test runPrompt's event loop, we need to know the messageID it generates
-   * (via crypto.randomUUID) and the sessionID. Since the messageID is random,
-   * we set up events that use the WRONG sessionID or messageID, then rely on the
-   * canonical fetch (client.session.message) to provide the final text.
-   *
-   * For delta accumulation, we need matching sessionID + messageID.
-   * We intercept promptAsync to capture the messageID.
-   */
-
   it('returns canonical text from session.message after stream ends', async () => {
     const mock = makeStreamingMock(
-      [], // no SSE events — rely purely on canonical fetch
+      [],
       { data: { info: null, parts: [{ type: 'text', text: 'hello from canonical' }] } },
     );
 
@@ -237,40 +237,29 @@ describe('runPrompt — via startSession — SSE event processing', () => {
 
     const outputs: Array<{ status: string; result: string | null }> = [];
     const result = await startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       BASE_INPUT,
       async (output) => {
         outputs.push(output);
         if (output.newSessionId && !output.result) {
-          abortSession('test-group');
+          abortSession('test-chat');
         }
       },
     );
 
     expect(result.status).toBe('success');
-    // The first output call carries the prompt result
     const promptOutput = outputs.find((o) => o.result !== null);
     expect(promptOutput?.result).toBe('hello from canonical');
   });
 
   it('accumulates text parts via delta events for the correct messageID', async () => {
     let capturedMessageId: string | undefined;
-
-    // We need to intercept promptAsync to get the messageID, then inject events
-    // that reference it. Use a deferred approach: promptAsync resolves after we
-    // set up the stream. Because makeStreamingMock uses a static gen(), we need
-    // to build the events dynamically.
-
-    // Strategy: use a passthrough async generator that waits for promptAsync to
-    // fire, then yields events with the captured messageID.
     const SESSION_ID = 'sess-1';
     let emitEvents!: (events: object[]) => void;
     const eventQueue: object[] = [];
     let resolveStream!: () => void;
-    const streamDone = new Promise<void>((r) => { resolveStream = r; });
 
     async function* dynamicStream() {
-      // Wait until promptAsync has been called (so we have the messageID)
       await new Promise<void>((r) => { emitEvents = (evs) => { eventQueue.push(...evs); r(); }; });
       for (const e of eventQueue) yield e;
       resolveStream();
@@ -285,7 +274,6 @@ describe('runPrompt — via startSession — SSE event processing', () => {
           promptAsync: vi.fn().mockImplementation(
             async (opts: { body: { messageID: string } }) => {
               capturedMessageId = opts.body.messageID;
-              // Emit matching events now that we have the messageID
               emitEvents([
                 {
                   type: 'message.part.updated',
@@ -345,21 +333,19 @@ describe('runPrompt — via startSession — SSE event processing', () => {
 
     const outputs: Array<{ status: string; result: string | null }> = [];
     const result = await startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       BASE_INPUT,
       async (output) => {
         outputs.push(output);
         if (output.newSessionId && !output.result) {
-          abortSession('test-group');
+          abortSession('test-chat');
         }
       },
     );
 
     expect(result.status).toBe('success');
     const promptOutput = outputs.find((o) => o.result !== null);
-    // Canonical fetch returns the assembled text
     expect(promptOutput?.result).toBe('Hello World');
-    // session.message was called for the canonical fetch
     expect(mock.client.session.message).toHaveBeenCalled();
   });
 
@@ -368,8 +354,6 @@ describe('runPrompt — via startSession — SSE event processing', () => {
     const SESSION_ID = 'sess-1';
 
     async function* errorStream() {
-      // Yield nothing until promptAsync fires; we use a simple approach:
-      // promptAsync is synchronous enough that we can yield after a tick
       await Promise.resolve();
       yield {
         type: 'message.updated',
@@ -417,17 +401,16 @@ describe('runPrompt — via startSession — SSE event processing', () => {
 
     const outputs: Array<{ status: string; result: string | null; error?: string }> = [];
     await startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       BASE_INPUT,
       async (output) => {
         outputs.push(output);
         if (output.newSessionId && !output.result) {
-          abortSession('test-group');
+          abortSession('test-chat');
         }
       },
     );
 
-    // The canonical fetch detects the error in info.error
     const errorOutput = outputs.find((o) => o.status === 'error');
     expect(errorOutput).toBeDefined();
     expect(errorOutput?.error).toMatch(/ProviderError/i);
@@ -438,13 +421,10 @@ describe('runPrompt — via startSession — SSE event processing', () => {
     const WRONG_SESSION_ID = 'sess-other';
 
     async function* wrongIdleStream() {
-      // Emit session.idle for a different session — should be ignored
       yield {
         type: 'session.idle',
         properties: { sessionID: WRONG_SESSION_ID },
       };
-      // Stream ends naturally without matching idle — runPrompt falls through to
-      // canonical fetch
     }
 
     const mock = {
@@ -469,21 +449,19 @@ describe('runPrompt — via startSession — SSE event processing', () => {
 
     const outputs: Array<{ status: string; result: string | null }> = [];
     const result = await startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       BASE_INPUT,
       async (output) => {
         outputs.push(output);
         if (output.newSessionId && !output.result) {
-          abortSession('test-group');
+          abortSession('test-chat');
         }
       },
     );
 
     expect(result.status).toBe('success');
-    // Canonical fetch still provides the text even without matching session.idle
     const promptOutput = outputs.find((o) => o.result !== null);
     expect(promptOutput?.result).toBe('correct reply');
-    // session.message WAS called (canonical fetch always runs)
     expect(mock.client.session.message).toHaveBeenCalled();
   });
 
@@ -494,8 +472,8 @@ describe('runPrompt — via startSession — SSE event processing', () => {
 
     _setTestOpencodeInstance(mock);
 
-    await startSession(MOCK_GROUP, BASE_INPUT, async (output) => {
-      if (output.newSessionId && !output.result) abortSession('test-group');
+    await startSession(MOCK_CHAT, BASE_INPUT, async (output) => {
+      if (output.newSessionId && !output.result) abortSession('test-chat');
     });
 
     expect(mock.client.session.message).toHaveBeenCalledTimes(1);
@@ -505,14 +483,13 @@ describe('runPrompt — via startSession — SSE event processing', () => {
 describe('sendFollowUp', () => {
   it('returns false when opencode is not booted', async () => {
     _setTestOpencodeInstance(null);
-    const sent = await sendFollowUp('test-group', 'hello again');
+    const sent = await sendFollowUp('test-chat', 'hello again');
     expect(sent).toBe(false);
   });
 
-  it('returns false when no active session exists for the group', async () => {
+  it('returns false when no active session exists for the chat', async () => {
     _setTestOpencodeInstance(makeMockInstance());
-    // No startSession called — no active session
-    const sent = await sendFollowUp('test-group', 'hello again');
+    const sent = await sendFollowUp('test-chat', 'hello again');
     expect(sent).toBe(false);
   });
 
@@ -524,19 +501,14 @@ describe('sendFollowUp', () => {
 
     const outputs: Array<{ status: string; result: string | null; newSessionId?: string }> = [];
 
-    // Start a session so there is an active session
     const sessionDone = startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       BASE_INPUT,
       async (output) => {
         outputs.push(output);
-        // Don't abort immediately — let follow-up run first
       },
     );
 
-    // Wait for the first prompt to complete (session enters wait state)
-    // The first output with result !== null is the first prompt result.
-    // The second output with newSessionId && !result is the session-update marker.
     await new Promise<void>((resolve) => {
       const check = setInterval(() => {
         const hasMarker = outputs.some((o) => o.newSessionId && !o.result);
@@ -547,15 +519,12 @@ describe('sendFollowUp', () => {
       }, 10);
     });
 
-    // Now send a follow-up
-    const sent = await sendFollowUp('test-group', 'follow-up question');
+    const sent = await sendFollowUp('test-chat', 'follow-up question');
     expect(sent).toBe(true);
 
-    // Abort and wait for session to complete
-    abortSession('test-group');
+    abortSession('test-chat');
     await sessionDone;
 
-    // There should be a follow-up result in outputs
     const followUpOutput = outputs.filter((o) => o.result === 'follow-up reply');
     expect(followUpOutput.length).toBeGreaterThan(0);
   });
@@ -563,7 +532,6 @@ describe('sendFollowUp', () => {
   it('prepends context prefix to follow-up prompt', async () => {
     const promptCalls: Array<{ body: { parts: Array<{ text: string }> } }> = [];
 
-    // Use a fresh stream for each subscribe call
     let callCount = 0;
     const mock = {
       client: {
@@ -592,11 +560,10 @@ describe('sendFollowUp', () => {
     _setTestOpencodeInstance(mock);
 
     const outputs: Array<{ newSessionId?: string; result: unknown }> = [];
-    const sessionDone = startSession(MOCK_GROUP, BASE_INPUT, async (output) => {
+    const sessionDone = startSession(MOCK_CHAT, BASE_INPUT, async (output) => {
       outputs.push(output);
     });
 
-    // Wait for session marker
     await new Promise<void>((resolve) => {
       const check = setInterval(() => {
         if (outputs.some((o) => o.newSessionId && !o.result)) {
@@ -606,11 +573,10 @@ describe('sendFollowUp', () => {
       }, 10);
     });
 
-    await sendFollowUp('test-group', 'my follow-up');
-    abortSession('test-group');
+    await sendFollowUp('test-chat', 'my follow-up');
+    abortSession('test-chat');
     await sessionDone;
 
-    // The second promptAsync call (follow-up) should have context prefix prepended
     expect(promptCalls.length).toBeGreaterThanOrEqual(2);
     const followUpText = promptCalls[1].body.parts[0].text;
     expect(followUpText).toContain('<pocketbrain_context>');
@@ -620,8 +586,7 @@ describe('sendFollowUp', () => {
 
 describe('abortSession', () => {
   it('is a no-op when no active session exists', () => {
-    // Should not throw
-    expect(() => abortSession('nonexistent-group')).not.toThrow();
+    expect(() => abortSession('nonexistent-chat')).not.toThrow();
   });
 
   it('resolves the session end promise so startSession returns', async () => {
@@ -633,12 +598,11 @@ describe('abortSession', () => {
     let sessionResolved = false;
 
     const sessionDone = startSession(
-      MOCK_GROUP,
+      MOCK_CHAT,
       BASE_INPUT,
       async (output) => {
-        // Abort once we see the session-update marker
         if (output.newSessionId && !output.result) {
-          abortSession('test-group');
+          abortSession('test-chat');
         }
       },
     ).then((r) => {
@@ -656,56 +620,52 @@ describe('abortSession', () => {
     });
     _setTestOpencodeInstance(mock);
 
-    const sessionDone = startSession(MOCK_GROUP, BASE_INPUT, async (output) => {
+    const sessionDone = startSession(MOCK_CHAT, BASE_INPUT, async (output) => {
       if (output.newSessionId && !output.result) {
-        abortSession('test-group');
+        abortSession('test-chat');
       }
     });
 
     await sessionDone;
-    // After session ends, hasActiveSession should return false
-    expect(hasActiveSession('test-group')).toBe(false);
+    expect(hasActiveSession('test-chat')).toBe(false);
   });
 
   it('calls client.session.abort when session is busy', async () => {
-    // This is hard to test without racing; verify abort is callable without errors
     const mock = makeStreamingMock([], {
       data: { info: null, parts: [{ type: 'text', text: 'hi' }] },
     });
     _setTestOpencodeInstance(mock);
 
-    // Start session and abort immediately from onOutput (session.busy = false after runPrompt)
-    // so session.abort won't be called here (busy=false). That's correct behavior.
-    const sessionDone = startSession(MOCK_GROUP, BASE_INPUT, async (output) => {
+    const sessionDone = startSession(MOCK_CHAT, BASE_INPUT, async (output) => {
       if (output.newSessionId && !output.result) {
-        abortSession('test-group');
+        abortSession('test-chat');
       }
     });
 
     await sessionDone;
-    expect(hasActiveSession('test-group')).toBe(false);
+    expect(hasActiveSession('test-chat')).toBe(false);
   });
 });
 
 describe('buildContextPrefix', () => {
   it('contains the chatJid', () => {
-    const prefix = _buildContextPrefix(MOCK_GROUP, { ...BASE_INPUT, chatJid: 'abc@g.us' });
+    const prefix = _buildContextPrefix(MOCK_CHAT, { ...BASE_INPUT, chatJid: 'abc@g.us' });
     expect(prefix).toContain('abc@g.us');
   });
 
-  it('contains the groupFolder', () => {
-    const prefix = _buildContextPrefix(MOCK_GROUP, { ...BASE_INPUT, groupFolder: 'my-folder' });
+  it('contains the chatFolder', () => {
+    const prefix = _buildContextPrefix(MOCK_CHAT, { ...BASE_INPUT, chatFolder: 'my-folder' });
     expect(prefix).toContain('my-folder');
   });
 
   it('returns a non-empty string', () => {
-    const prefix = _buildContextPrefix(MOCK_GROUP, BASE_INPUT);
+    const prefix = _buildContextPrefix(MOCK_CHAT, BASE_INPUT);
     expect(typeof prefix).toBe('string');
     expect(prefix.length).toBeGreaterThan(0);
   });
 
   it('contains pocketbrain_context XML tags', () => {
-    const prefix = _buildContextPrefix(MOCK_GROUP, BASE_INPUT);
+    const prefix = _buildContextPrefix(MOCK_CHAT, BASE_INPUT);
     expect(prefix).toContain('<pocketbrain_context>');
     expect(prefix).toContain('</pocketbrain_context>');
   });

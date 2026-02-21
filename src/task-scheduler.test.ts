@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi, mock } from 'bun:test';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 // Mock opencode-manager before importing task-scheduler so that startSession
 // and writeTasksSnapshot are replaced with controllable stubs.
@@ -8,27 +11,24 @@ mock.module('./opencode-manager.js', () => ({
   writeTasksSnapshot: vi.fn(),
 }));
 
-// Mock config constants that hit the filesystem
+// Mock config constants
 mock.module('./config.js', () => ({
-  GROUPS_DIR: '/tmp/test-groups',
+  DATA_DIR: '/tmp/test-data',
   IDLE_TIMEOUT: 30000,
-  MAIN_GROUP_FOLDER: 'main',
   SCHEDULER_POLL_INTERVAL: 60000,
   TIMEZONE: 'UTC',
 }));
 
 import {
-  _initTestDatabase,
   createTask,
   getTaskById,
-  logTaskRun,
   updateTask,
-  setSession,
-  getAllSessions,
-  setRegisteredGroup,
-} from './db.js';
-import { GroupQueue } from './group-queue.js';
-import { RegisteredGroup, ScheduledTask } from './types.js';
+  getAllTasks,
+  _setTestDataDir,
+  _resetDataDir,
+} from './store.js';
+import { SessionQueue } from './session-queue.js';
+import { ChatConfig, ScheduledTask } from './types.js';
 import {
   runTask,
   startSchedulerLoop,
@@ -44,47 +44,48 @@ import * as opencodeManager from './opencode-manager.js';
 const NOW_ISO = new Date().toISOString();
 const PAST_ISO = '2020-01-01T00:00:00.000Z';
 
-function makeGroup(folder: string): RegisteredGroup {
+let tmpDir: string;
+
+function makeChat(folder: string): ChatConfig {
   return {
-    name: `Group ${folder}`,
+    jid: 'test@g.us',
+    name: `Chat ${folder}`,
     folder,
-    added_at: NOW_ISO,
+    addedAt: NOW_ISO,
   };
 }
 
 /** Returns a minimal ScheduledTask with sensible defaults. */
-function makeTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
+function makeTask(overrides: Partial<ScheduledTask> = {}): Omit<ScheduledTask, 'last_run' | 'last_result'> {
   return {
     id: 'task-1',
-    group_folder: 'test-group',
+    chatFolder: 'test-chat',
     chat_jid: 'test@g.us',
     prompt: 'do something',
     schedule_type: 'once',
     schedule_value: '2030-01-01T00:00:00.000Z',
     context_mode: 'isolated',
     next_run: '2030-01-01T00:00:00.000Z',
-    last_run: null,
-    last_result: null,
     status: 'active',
     created_at: NOW_ISO,
     ...overrides,
   };
 }
 
-/** Inserts a task into the DB and returns the full object. */
+/** Inserts a task into the store and returns the full object. */
 function seedTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
   const task = makeTask(overrides);
   createTask(task);
-  return task;
+  return { ...task, last_run: null, last_result: null };
 }
 
 /** A SchedulerDependencies factory with controllable stubs. */
 function makeSchedulerDeps(
   overrides: Partial<SchedulerDependencies> = {},
 ): SchedulerDependencies {
-  const queue = new GroupQueue();
+  const queue = new SessionQueue();
   return {
-    registeredGroups: vi.fn(() => ({})),
+    chats: vi.fn(() => ({})),
     getSessions: vi.fn(() => ({})),
     queue,
     sendMessage: vi.fn(async () => {}),
@@ -95,7 +96,11 @@ function makeSchedulerDeps(
 // ---- setup ----
 
 beforeEach(() => {
-  _initTestDatabase();
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scheduler-test-'));
+  _setTestDataDir(tmpDir);
+  fs.mkdirSync(path.join(tmpDir, 'chats'), { recursive: true });
+  fs.mkdirSync(path.join(tmpDir, 'logs'), { recursive: true });
+
   _resetSchedulerState();
 
   // Default: startSession resolves with a success result
@@ -110,17 +115,19 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  _resetDataDir();
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 // ---- runTask — basic execution ----
 
 describe('runTask — basic execution', () => {
   it('calls startSession with isScheduledTask: true and logs a success run', async () => {
-    const group = makeGroup('test-group');
+    const chat = makeChat('test-chat');
     const task = seedTask();
 
     const deps = makeSchedulerDeps({
-      registeredGroups: vi.fn(() => ({ 'test@g.us': group })),
+      chats: vi.fn(() => ({ 'test@g.us': chat })),
     });
 
     await runTask(task, deps);
@@ -131,22 +138,22 @@ describe('runTask — basic execution', () => {
     expect(callArg.isScheduledTask).toBe(true);
     expect(callArg.prompt).toBe('do something');
 
-    // DB should reflect success (updateTaskAfterRun sets last_result)
+    // Store should reflect success (updateTaskAfterRun sets last_result)
     const updated = getTaskById('task-1');
     expect(updated).toBeDefined();
     expect(updated!.last_result).toContain('Task output');
   });
 });
 
-// ---- runTask — group not found ----
+// ---- runTask — chat not found ----
 
-describe('runTask — group not found', () => {
+describe('runTask — chat not found', () => {
   it('logs an error task run and does not call startSession', async () => {
-    const task = seedTask({ group_folder: 'nonexistent-folder' });
+    const task = seedTask({ chatFolder: 'nonexistent-folder' });
 
-    // No group registered that has folder === 'nonexistent-folder'
+    // No chat registered that has folder === 'nonexistent-folder'
     const deps = makeSchedulerDeps({
-      registeredGroups: vi.fn(() => ({})),
+      chats: vi.fn(() => ({})),
     });
 
     await runTask(task, deps);
@@ -154,9 +161,6 @@ describe('runTask — group not found', () => {
     // startSession must NOT have been called
     expect(opencodeManager.startSession).not.toHaveBeenCalled();
 
-    // The task DB row should not show a successful run (last_result stays null for a run-log-only error)
-    // But a task_run_log error row should have been created — verify via DB directly by checking
-    // that the task record itself is untouched (updateTaskAfterRun not called, status still active)
     const task1 = getTaskById('task-1');
     expect(task1).toBeDefined();
     // last_result is null because updateTaskAfterRun was never called
@@ -168,16 +172,12 @@ describe('runTask — group not found', () => {
 
 describe('runTask — context_mode=group', () => {
   it('passes the stored sessionId to startSession when context_mode is group', async () => {
-    const group = makeGroup('test-group');
-
-    // Persist a session in the DB and expose it via getSessions
-    setSession('test-group', 'existing-session-id');
-
+    const chat = makeChat('test-chat');
     const task = seedTask({ context_mode: 'group' });
 
     const deps = makeSchedulerDeps({
-      registeredGroups: vi.fn(() => ({ 'test@g.us': group })),
-      getSessions: vi.fn(() => ({ 'test-group': 'existing-session-id' })),
+      chats: vi.fn(() => ({ 'test@g.us': chat })),
+      getSessions: vi.fn(() => ({ 'test-chat': 'existing-session-id' })),
     });
 
     await runTask(task, deps);
@@ -191,14 +191,13 @@ describe('runTask — context_mode=group', () => {
 
 describe('runTask — context_mode=isolated', () => {
   it('passes undefined sessionId to startSession when context_mode is isolated', async () => {
-    const group = makeGroup('test-group');
-
+    const chat = makeChat('test-chat');
     const task = seedTask({ context_mode: 'isolated' });
 
     const deps = makeSchedulerDeps({
-      registeredGroups: vi.fn(() => ({ 'test@g.us': group })),
+      chats: vi.fn(() => ({ 'test@g.us': chat })),
       // Even if a session exists in the map, isolated mode must ignore it
-      getSessions: vi.fn(() => ({ 'test-group': 'should-not-be-used' })),
+      getSessions: vi.fn(() => ({ 'test-chat': 'should-not-be-used' })),
     });
 
     await runTask(task, deps);
@@ -212,7 +211,7 @@ describe('runTask — context_mode=isolated', () => {
 
 describe('runTask — cron next-run', () => {
   it('advances next_run to the next cron occurrence after running', async () => {
-    const group = makeGroup('test-group');
+    const chat = makeChat('test-chat');
 
     // Every minute cron
     const task = seedTask({
@@ -222,7 +221,7 @@ describe('runTask — cron next-run', () => {
     });
 
     const deps = makeSchedulerDeps({
-      registeredGroups: vi.fn(() => ({ 'test@g.us': group })),
+      chats: vi.fn(() => ({ 'test@g.us': chat })),
     });
 
     const before = Date.now();
@@ -240,7 +239,7 @@ describe('runTask — cron next-run', () => {
 
 describe('runTask — interval drift-prevention', () => {
   it('computes next_run from next_run anchor, not from Date.now()', async () => {
-    const group = makeGroup('test-group');
+    const chat = makeChat('test-chat');
 
     // Interval of 60 seconds (60000 ms)
     const intervalMs = 60000;
@@ -255,7 +254,7 @@ describe('runTask — interval drift-prevention', () => {
     });
 
     const deps = makeSchedulerDeps({
-      registeredGroups: vi.fn(() => ({ 'test@g.us': group })),
+      chats: vi.fn(() => ({ 'test@g.us': chat })),
     });
 
     await runTask(task, deps);
@@ -271,9 +270,6 @@ describe('runTask — interval drift-prevention', () => {
     expect(actualNextRun).toBeLessThanOrEqual(expectedNextRun + 2000);
 
     // Critically: it must NOT be anchored from Date.now().
-    // If it were, next_run would be ~60 seconds from now (anchorMs + 30s + 60s).
-    // The drift-anchored value is ~30 seconds from now (anchorMs + 60s).
-    // Verify: actual is less than what a naive Date.now() + interval would give.
     const naiveNextRun = Date.now() + intervalMs;
     expect(actualNextRun).toBeLessThan(naiveNextRun);
   });
@@ -286,7 +282,7 @@ describe('startSchedulerLoop — deduplication skips paused tasks', () => {
     // Create a task that is due now
     seedTask({
       id: 'dup-task',
-      group_folder: 'test-group',
+      chatFolder: 'test-chat',
       next_run: PAST_ISO,
       status: 'active',
     });
@@ -294,22 +290,20 @@ describe('startSchedulerLoop — deduplication skips paused tasks', () => {
     // Pause it so the re-check in startSchedulerLoop finds it paused
     updateTask('dup-task', { status: 'paused' });
 
-    const group = makeGroup('test-group');
+    const chat = makeChat('test-chat');
     const enqueueSpy = vi.fn();
 
     const fakeQueue = {
       enqueueTask: enqueueSpy,
       registerSession: vi.fn(),
-    } as unknown as GroupQueue;
+    } as unknown as SessionQueue;
 
     const deps = makeSchedulerDeps({
-      registeredGroups: vi.fn(() => ({ 'test@g.us': group })),
+      chats: vi.fn(() => ({ 'test@g.us': chat })),
       queue: fakeQueue,
     });
 
     // Run one iteration of the scheduler
-    // We call startSchedulerLoop but it uses setTimeout internally for looping.
-    // Since the task is paused the re-check should skip it — enqueueTask must NOT be called.
     startSchedulerLoop(deps);
 
     // Allow the synchronous first iteration to complete (it's async internally)
@@ -326,7 +320,7 @@ describe('startSchedulerLoop — processes due tasks', () => {
     // Seed an active, past-due task
     seedTask({
       id: 'due-task',
-      group_folder: 'test-group',
+      chatFolder: 'test-chat',
       next_run: PAST_ISO,
       status: 'active',
     });
@@ -335,10 +329,10 @@ describe('startSchedulerLoop — processes due tasks', () => {
     const fakeQueue = {
       enqueueTask: enqueueSpy,
       registerSession: vi.fn(),
-    } as unknown as GroupQueue;
+    } as unknown as SessionQueue;
 
     const deps = makeSchedulerDeps({
-      registeredGroups: vi.fn(() => ({})),
+      chats: vi.fn(() => ({})),
       queue: fakeQueue,
     });
 

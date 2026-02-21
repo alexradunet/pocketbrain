@@ -1,16 +1,16 @@
-# OpenCode Plugin Architecture Plan for PocketBrain
+# OpenCode Plugin Architecture Plan for PocketBrain (Option A Only)
 
 ## Goal
-Explore a deep, production‑grade path to move PocketBrain’s core runtime (especially WhatsApp I/O) into an OpenCode plugin, while preserving current behavior.
+Define a decision‑complete, production‑grade path to move PocketBrain’s core runtime (especially WhatsApp I/O) into a single OpenCode plugin, while preserving current behavior.
 
 ## Scope
 - Primary: WhatsApp channel as plugin‑owned long‑running connection.
 - Secondary: Orchestration (queueing, routing, session lifecycle).
-- Optional: Scheduling strategy (internal scheduler vs. opencode‑scheduler).
+- Scheduling: Internal scheduler parity with current PocketBrain.
 
 ## Non‑Goals
 - Refactoring existing PocketBrain to multiple channels.
-- Replacing SQLite with a different DB.
+- Redesigning the existing SQLite schema (parity required in final phase).
 - Rewriting OpenCode SDK or OpenCode core.
 
 ---
@@ -29,46 +29,60 @@ Explore a deep, production‑grade path to move PocketBrain’s core runtime (es
 - OpenCode plugin runs inside OpenCode process and remains alive while OpenCode is running.
 - OpenCode is started in a persistent mode (e.g. `opencode serve`) so the plugin can maintain the WhatsApp socket.
 - Plugin API allows hooks + SDK access, but does not provide built‑in channel abstractions.
-- WhatsApp auth material must be persisted somewhere under `.opencode/` or another durable path.
+- WhatsApp auth material must be persisted under a durable plugin data path (default below).
 
 ---
 
-## Architecture Options
+## Deep Analysis (Option A Only)
 
-### Option A: Full Plugin (Single Process)
-**Description**: Implement WhatsApp connection, routing, session orchestration, queueing, scheduling inside a plugin.
+### Process Model and Lifecycle
+- The plugin is loaded at OpenCode startup and runs inside the OpenCode process.
+- The WhatsApp socket must remain resident for real‑time messaging.
+- **Operational requirement**: OpenCode must run in a persistent server mode (`opencode serve` or equivalent) for the socket to remain active.
 
-**Pros**
-- Single runtime process (OpenCode).
-- Unified configuration and packaging.
-- No external “wrapper” process.
+### In‑Process Risk
+- Any unhandled error in the plugin can affect OpenCode.
+- Mitigation: strict error boundaries, backoff‑driven reconnects, and circuit breakers for repeated failures.
 
-**Cons**
-- Largest rewrite surface.
-- Plugin lifecycle tied to OpenCode server uptime.
-- Need to recreate PocketBrain orchestration (queue, DB, scheduler) in plugin context.
+### Data Flow (End‑to‑End)
+1. WhatsApp message arrives → plugin inbound handler.
+2. Per‑chat queue serializes processing.
+3. Session lookup (chatJid → sessionId) or session creation via SDK.
+4. Prompt formatting and OpenCode SDK prompt call.
+5. Streaming output to WhatsApp via plugin.
 
-**When to choose**: Strong desire for “pure plugin” architecture and willingness to rebuild internal runtime.
+### State and Persistence
+- **Phase 1–3**: JSON files for speed of iteration.
+- **Phase 4**: SQLite parity using existing PocketBrain schema.
+- **Default data root**: `.opencode/data/pocketbrain/`
 
----
-
-### Option B: Hybrid Bridge + Plugin
-**Description**: Keep a slim external WhatsApp bridge that speaks to OpenCode server via SDK; plugin provides tools / scheduling / UX enhancements.
-
-**Pros**
-- Much smaller rewrite.
-- Can preserve current PocketBrain behavior with minimal changes.
-- WhatsApp remains isolated from OpenCode runtime.
-
-**Cons**
-- Not “all inside OpenCode.”
-- Two services to manage.
-
-**When to choose**: Need production stability quickly with minimal risk.
+### Security & Authorization
+- Auth state must be persisted with atomic writes.
+- All session and task operations are scoped to the originating chat JID.
+- No cross‑chat message delivery without explicit authorization.
 
 ---
 
-## Deep Spike Plan (Full Plugin)
+## Architecture Overview (Single Plugin)
+
+Components (plugin‑internal modules):
+- **WhatsAppAdapter**: Baileys socket, auth persistence, reconnect, outbound queue.
+- **SessionManager**: chatJid ↔ sessionId mapping, context prefix, session recovery.
+- **GroupQueue**: per‑chat serialization, global concurrency cap.
+- **Router**: format inbound XML, strip internal tags, format outbound.
+- **Scheduler**: internal loop for tasks.
+- **StateStore**: JSON store in early phases → SQLite adapter for parity.
+
+Textual flow:
+```
+WhatsApp → WhatsAppAdapter → GroupQueue → SessionManager → OpenCode SDK
+                                   ↘ Router ↗
+OpenCode SDK → SessionManager → WhatsAppAdapter → WhatsApp
+```
+
+---
+
+## Implementation Plan (Option A)
 
 ### Phase 0 — Discovery & Validation
 1. **Confirm OpenCode plugin API surface**
@@ -86,10 +100,10 @@ Explore a deep, production‑grade path to move PocketBrain’s core runtime (es
 
 ### Phase 1 — Minimal WhatsApp Plugin Spike
 1. **Plugin scaffold**
-   - Create a plugin package (local or npm) with a single entry.
-   - Register on startup to initialize WhatsApp socket.
+   - Create a **local repo plugin** under `.opencode/plugins/pocketbrain/`.
+   - Single entry that initializes WhatsApp socket on plugin startup.
 2. **Auth persistence**
-   - Persist Baileys auth state under `.opencode/` or configurable path.
+   - Persist Baileys auth under `.opencode/data/pocketbrain/auth/`.
 3. **Inbound flow**
    - On WhatsApp message, create or resume an OpenCode session via SDK.
    - Send prompt with a simple format (no DB yet).
@@ -107,7 +121,7 @@ Explore a deep, production‑grade path to move PocketBrain’s core runtime (es
 
 ### Phase 2 — Orchestration Parity
 1. **Session mapping**
-   - Map `chatJid` -> `sessionId` with a durable store.
+   - Map `chatJid` -> `sessionId` with JSON store under `.opencode/data/pocketbrain/state/`.
 2. **Concurrency control**
    - Port `GroupQueue` or equivalent per‑chat locking to prevent overlap.
 3. **Routing & formatting**
@@ -121,17 +135,11 @@ Explore a deep, production‑grade path to move PocketBrain’s core runtime (es
 
 ---
 
-### Phase 3 — Scheduling Strategy
-Choose one:
-
-**A. Internal Scheduler (Plugin‑owned)**
+### Phase 3 — Internal Scheduling (Parity)
 - Port `task-scheduler.ts` to plugin.
-- Use the same DB schema to track tasks and next run.
-- Reuse MCP‑style tool surfaces inside plugin.
-
-**B. External opencode‑scheduler Integration**
-- Use opencode‑scheduler for OS‑level scheduling.
-- On each scheduled run, the prompt is executed and the result is sent to WhatsApp by the plugin.
+- Track tasks in JSON store initially.
+- Provide tool‑level APIs (plugin hooks) to schedule, pause, resume, cancel tasks.
+- Ensure scheduled runs deliver output to WhatsApp (same behavior as current scheduler).
 
 **Exit Criteria**
 - Scheduled jobs work and can message the user reliably.
@@ -139,12 +147,11 @@ Choose one:
 ---
 
 ### Phase 4 — Persistence & Storage
-- Decide between SQLite in plugin context or simplified JSON state.
-- Migrate data model:
-  - groups
-  - sessions
-  - messages
-  - scheduled tasks
+- Replace JSON store with SQLite using existing PocketBrain schema.
+- Migration plan:
+  - export JSON state to SQLite tables
+  - verify parity for sessions, messages, and tasks
+- Maintain compatibility with existing database consumers (if any).
 
 **Exit Criteria**
 - Data survives restarts.
@@ -152,12 +159,20 @@ Choose one:
 
 ---
 
-## Design Decisions to Resolve
-- **Plugin packaging**: local repo plugin vs. npm package.
-- **State storage**: SQLite vs. JSON for spike phase.
-- **Scheduling**: internal vs. `opencode-scheduler`.
-- **Auth path**: `.opencode/` vs. user‑defined path.
-- **Session compaction strategy**: port current context‑prefix scheme or adopt a different prompt context strategy.
+## Public Interfaces and APIs
+- **Plugin entrypoint**: `.opencode/plugins/pocketbrain/index.ts`
+- **Module layout**:
+  - `.opencode/plugins/pocketbrain/whatsapp.ts`
+  - `.opencode/plugins/pocketbrain/session-manager.ts`
+  - `.opencode/plugins/pocketbrain/group-queue.ts`
+  - `.opencode/plugins/pocketbrain/router.ts`
+  - `.opencode/plugins/pocketbrain/scheduler.ts`
+  - `.opencode/plugins/pocketbrain/state-store.ts`
+- **OpenCode SDK usage**:
+  - `client.session.create`
+  - `client.session.get`
+  - `client.session.promptAsync`
+  - `client.session.abort`
 
 ---
 
@@ -188,8 +203,6 @@ All changes follow repository TDD rules:
 
 ---
 
-## Open Questions
-1. Should the spike be a **local plugin** in this repo or a **separate npm package**?
-2. For the spike phase, should we use **SQLite** (parity) or **JSON** (speed)?
-3. Scheduling: internal port vs. external `opencode-scheduler`?
-
+## Open Questions (Decision Required)
+1. Should auth data be encrypted at rest in `.opencode/data/pocketbrain/auth/`?
+2. Should we support a configurable data root path via env var?

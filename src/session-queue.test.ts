@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 
-import { GroupQueue } from './group-queue.js';
+import { SessionQueue } from './session-queue.js';
 
 async function advanceTimersByTimeAsync(ms: number): Promise<void> {
   vi.advanceTimersByTime(ms);
@@ -24,25 +24,25 @@ vi.mock('./logger.js', () => ({
   },
 }));
 
-describe('GroupQueue', () => {
-  let queue: GroupQueue;
+describe('SessionQueue', () => {
+  let queue: SessionQueue;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    queue = new GroupQueue();
+    queue = new SessionQueue();
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  // --- Single group at a time ---
+  // --- Single chat at a time ---
 
-  it('only runs one session per group at a time', async () => {
+  it('only runs one session per chat at a time', async () => {
     let concurrentCount = 0;
     let maxConcurrent = 0;
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (chatJid: string) => {
       concurrentCount++;
       maxConcurrent = Math.max(maxConcurrent, concurrentCount);
       // Simulate async work
@@ -53,9 +53,9 @@ describe('GroupQueue', () => {
 
     queue.setProcessMessagesFn(processMessages);
 
-    // Enqueue two messages for the same group
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.enqueueMessageCheck('group1@g.us');
+    // Enqueue two messages for the same chat
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
 
     // Advance timers to let the first process complete
     await advanceTimersByTimeAsync(200);
@@ -71,7 +71,7 @@ describe('GroupQueue', () => {
     let maxActive = 0;
     const completionCallbacks: Array<() => void> = [];
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (chatJid: string) => {
       activeCount++;
       maxActive = Math.max(maxActive, activeCount);
       await new Promise<void>((resolve) => completionCallbacks.push(resolve));
@@ -81,10 +81,10 @@ describe('GroupQueue', () => {
 
     queue.setProcessMessagesFn(processMessages);
 
-    // Enqueue 3 groups (limit is 2)
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.enqueueMessageCheck('group2@g.us');
-    queue.enqueueMessageCheck('group3@g.us');
+    // Enqueue 3 chats (limit is 2)
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
+    queue.enqueueMessageCheck('chat2@s.whatsapp.net');
+    queue.enqueueMessageCheck('chat3@s.whatsapp.net');
 
     // Let promises settle
     await advanceTimersByTimeAsync(10);
@@ -102,11 +102,11 @@ describe('GroupQueue', () => {
 
   // --- Tasks prioritized over messages ---
 
-  it('drains tasks before messages for same group', async () => {
+  it('drains tasks before messages for same chat', async () => {
     const executionOrder: string[] = [];
     let resolveFirst: () => void;
 
-    const processMessages = vi.fn(async (groupJid: string) => {
+    const processMessages = vi.fn(async (chatJid: string) => {
       if (executionOrder.length === 0) {
         // First call: block until we release it
         await new Promise<void>((resolve) => {
@@ -120,15 +120,15 @@ describe('GroupQueue', () => {
     queue.setProcessMessagesFn(processMessages);
 
     // Start processing messages (takes the active slot)
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
     await advanceTimersByTimeAsync(10);
 
     // While active, enqueue both a task and pending messages
     const taskFn = vi.fn(async () => {
       executionOrder.push('task');
     });
-    queue.enqueueTask('group1@g.us', 'task-1', taskFn);
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueTask('chat1@s.whatsapp.net', 'task-1', taskFn);
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
 
     // Release the first processing
     resolveFirst!();
@@ -137,7 +137,6 @@ describe('GroupQueue', () => {
     // Task should have run before the second message check
     expect(executionOrder[0]).toBe('messages'); // first call
     expect(executionOrder[1]).toBe('task'); // task runs first in drain
-    // Messages would run after task completes
   });
 
   // --- Retry with backoff on failure ---
@@ -151,7 +150,7 @@ describe('GroupQueue', () => {
     });
 
     queue.setProcessMessagesFn(processMessages);
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
 
     // First call happens immediately
     await advanceTimersByTimeAsync(10);
@@ -176,7 +175,7 @@ describe('GroupQueue', () => {
 
     await queue.shutdown(1000);
 
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
     await advanceTimersByTimeAsync(100);
 
     expect(processMessages).not.toHaveBeenCalled();
@@ -193,7 +192,7 @@ describe('GroupQueue', () => {
     });
 
     queue.setProcessMessagesFn(processMessages);
-    queue.enqueueMessageCheck('group1@g.us');
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
 
     // Run through all 5 retries (MAX_RETRIES = 5)
     // Initial call
@@ -213,7 +212,7 @@ describe('GroupQueue', () => {
     expect(callCount).toBe(countAfterMaxRetries);
   });
 
-  // --- sendMessage returns false when follow-up is rejected (C1 bug) ---
+  // --- sendMessage returns false when follow-up is rejected ---
 
   it('sendMessage returns false when sendFollowUp returns false (session busy)', async () => {
     let releaseProcess: () => void;
@@ -227,12 +226,12 @@ describe('GroupQueue', () => {
     queue.setSendFollowUpFn(sendFollowUp);
 
     // Start a session (makes state.active = true)
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.registerSession('group1@g.us', 'folder1');
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
+    queue.registerSession('chat1@s.whatsapp.net', 'folder1');
     await advanceTimersByTimeAsync(10);
 
     // sendFollowUp returns false (session busy) — sendMessage must propagate that
-    const result = await queue.sendMessage('group1@g.us', 'hello');
+    const result = await queue.sendMessage('chat1@s.whatsapp.net', 'hello');
     expect(result).toBe(false);
 
     releaseProcess!();
@@ -248,11 +247,11 @@ describe('GroupQueue', () => {
     });
 
     // Start the task running
-    queue.enqueueTask('group1@g.us', 'task-abc', taskFn);
+    queue.enqueueTask('chat1@s.whatsapp.net', 'task-abc', taskFn);
     await advanceTimersByTimeAsync(10);
 
     // While task is active, try to enqueue it again with the same ID
-    queue.enqueueTask('group1@g.us', 'task-abc', taskFn);
+    queue.enqueueTask('chat1@s.whatsapp.net', 'task-abc', taskFn);
     await advanceTimersByTimeAsync(10);
 
     // Release the running task
@@ -265,7 +264,7 @@ describe('GroupQueue', () => {
 
   // --- closeStdin aborts active session ---
 
-  it('closeStdin calls abortSessionFn when group has active session', async () => {
+  it('closeStdin calls abortSessionFn when chat has active session', async () => {
     let releaseProcess: () => void;
     const processMessages = vi.fn(async () => {
       await new Promise<void>((r) => { releaseProcess = r; });
@@ -276,27 +275,27 @@ describe('GroupQueue', () => {
     const abortSessionFn = vi.fn();
     queue.setAbortSessionFn(abortSessionFn);
 
-    // Start a session and register the group folder
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.registerSession('group1@g.us', 'folder1');
+    // Start a session and register the chat folder
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
+    queue.registerSession('chat1@s.whatsapp.net', 'folder1');
     await advanceTimersByTimeAsync(10);
 
-    // closeStdin should invoke abortSessionFn with the group folder
-    queue.closeStdin('group1@g.us');
+    // closeStdin should invoke abortSessionFn with the chat folder
+    queue.closeStdin('chat1@s.whatsapp.net');
     expect(abortSessionFn).toHaveBeenCalledWith('folder1');
 
     releaseProcess!();
     await advanceTimersByTimeAsync(10);
   });
 
-  // --- Waiting groups get drained when slots free up ---
+  // --- Waiting chats get drained when slots free up ---
 
-  it('drains waiting groups when active slots free up', async () => {
+  it('drains waiting chats when active slots free up', async () => {
     const processed: string[] = [];
     const completionCallbacks: Array<() => void> = [];
 
-    const processMessages = vi.fn(async (groupJid: string) => {
-      processed.push(groupJid);
+    const processMessages = vi.fn(async (chatJid: string) => {
+      processed.push(chatJid);
       await new Promise<void>((resolve) => completionCallbacks.push(resolve));
       return true;
     });
@@ -304,21 +303,21 @@ describe('GroupQueue', () => {
     queue.setProcessMessagesFn(processMessages);
 
     // Fill both slots
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.enqueueMessageCheck('group2@g.us');
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
+    queue.enqueueMessageCheck('chat2@s.whatsapp.net');
     await advanceTimersByTimeAsync(10);
 
     // Queue a third
-    queue.enqueueMessageCheck('group3@g.us');
+    queue.enqueueMessageCheck('chat3@s.whatsapp.net');
     await advanceTimersByTimeAsync(10);
 
-    expect(processed).toEqual(['group1@g.us', 'group2@g.us']);
+    expect(processed).toEqual(['chat1@s.whatsapp.net', 'chat2@s.whatsapp.net']);
 
     // Free up a slot
     completionCallbacks[0]();
     await advanceTimersByTimeAsync(10);
 
-    expect(processed).toContain('group3@g.us');
+    expect(processed).toContain('chat3@s.whatsapp.net');
   });
 
   // --- Shutdown with zero grace period warns about active sessions ---
@@ -334,13 +333,10 @@ describe('GroupQueue', () => {
     queue.setProcessMessagesFn(processMessages);
 
     // Start a long-running session
-    queue.enqueueMessageCheck('group1@g.us');
-    queue.registerSession('group1@g.us', 'folder1');
+    queue.enqueueMessageCheck('chat1@s.whatsapp.net');
+    queue.registerSession('chat1@s.whatsapp.net', 'folder1');
     await advanceTimersByTimeAsync(10);
 
-    // shutdown(0) — grace period is 0ms, should not wait
-    // With fake timers active, Bun.sleep is never reached because
-    // deadline = Date.now() + 0 means while condition is false immediately
     await queue.shutdown(0);
 
     // The warning must have been logged since activeCount > 0
@@ -353,5 +349,3 @@ describe('GroupQueue', () => {
     await advanceTimersByTimeAsync(10);
   });
 });
-
-

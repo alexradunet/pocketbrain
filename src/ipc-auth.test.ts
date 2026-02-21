@@ -1,42 +1,57 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 import {
-  _initTestDatabase,
   createTask,
   getAllTasks,
   getTaskById,
-} from './db.js';
+  _setTestDataDir,
+  _resetDataDir,
+} from './store.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
-import { RegisteredGroup } from './types.js';
+import { ChatConfig } from './types.js';
 
 // Two registered 1-on-1 chats for authorization tests
-const CHAT_A: RegisteredGroup = {
+const CHAT_A: ChatConfig = {
+  jid: 'chat-a@s.whatsapp.net',
   name: 'Chat A',
   folder: 'chat-a',
-  added_at: '2024-01-01T00:00:00.000Z',
+  addedAt: '2024-01-01T00:00:00.000Z',
 };
 
-const CHAT_B: RegisteredGroup = {
+const CHAT_B: ChatConfig = {
+  jid: 'chat-b@s.whatsapp.net',
   name: 'Chat B',
   folder: 'chat-b',
-  added_at: '2024-01-01T00:00:00.000Z',
+  addedAt: '2024-01-01T00:00:00.000Z',
 };
 
-let groups: Record<string, RegisteredGroup>;
+let chats: Record<string, ChatConfig>;
 let deps: IpcDeps;
+let tmpDir: string;
 
 beforeEach(() => {
-  _initTestDatabase();
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ipc-auth-test-'));
+  _setTestDataDir(tmpDir);
+  fs.mkdirSync(path.join(tmpDir, 'chats'), { recursive: true });
+  fs.mkdirSync(path.join(tmpDir, 'logs'), { recursive: true });
 
-  groups = {
+  chats = {
     'chat-a@s.whatsapp.net': CHAT_A,
     'chat-b@s.whatsapp.net': CHAT_B,
   };
 
   deps = {
     sendMessage: async () => {},
-    registeredGroups: () => groups,
+    chats: () => chats,
   };
+});
+
+afterEach(() => {
+  _resetDataDir();
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 // --- schedule_task authorization ---
@@ -57,7 +72,7 @@ describe('schedule_task authorization', () => {
 
     const allTasks = getAllTasks();
     expect(allTasks.length).toBe(1);
-    expect(allTasks[0].group_folder).toBe('chat-a');
+    expect(allTasks[0].chatFolder).toBe('chat-a');
   });
 
   it('chat cannot schedule for another chat', async () => {
@@ -101,7 +116,7 @@ describe('pause_task authorization', () => {
   beforeEach(() => {
     createTask({
       id: 'task-a',
-      group_folder: 'chat-a',
+      chatFolder: 'chat-a',
       chat_jid: 'chat-a@s.whatsapp.net',
       prompt: 'task for chat-a',
       schedule_type: 'once',
@@ -113,7 +128,7 @@ describe('pause_task authorization', () => {
     });
     createTask({
       id: 'task-b',
-      group_folder: 'chat-b',
+      chatFolder: 'chat-b',
       chat_jid: 'chat-b@s.whatsapp.net',
       prompt: 'task for chat-b',
       schedule_type: 'once',
@@ -142,7 +157,7 @@ describe('resume_task authorization', () => {
   beforeEach(() => {
     createTask({
       id: 'task-paused-a',
-      group_folder: 'chat-a',
+      chatFolder: 'chat-a',
       chat_jid: 'chat-a@s.whatsapp.net',
       prompt: 'paused task',
       schedule_type: 'once',
@@ -154,7 +169,7 @@ describe('resume_task authorization', () => {
     });
     createTask({
       id: 'task-paused-b',
-      group_folder: 'chat-b',
+      chatFolder: 'chat-b',
       chat_jid: 'chat-b@s.whatsapp.net',
       prompt: 'paused task b',
       schedule_type: 'once',
@@ -183,7 +198,7 @@ describe('cancel_task authorization', () => {
   it('chat can cancel its own task', async () => {
     createTask({
       id: 'task-own',
-      group_folder: 'chat-a',
+      chatFolder: 'chat-a',
       chat_jid: 'chat-a@s.whatsapp.net',
       prompt: 'my task',
       schedule_type: 'once',
@@ -201,7 +216,7 @@ describe('cancel_task authorization', () => {
   it('chat cannot cancel another chat\'s task', async () => {
     createTask({
       id: 'task-foreign',
-      group_folder: 'chat-b',
+      chatFolder: 'chat-b',
       chat_jid: 'chat-b@s.whatsapp.net',
       prompt: 'not yours',
       schedule_type: 'once',
@@ -218,31 +233,28 @@ describe('cancel_task authorization', () => {
 });
 
 // --- IPC message authorization ---
-// Tests the authorization pattern from startIpcWatcher (ipc.ts).
-// The logic: targetGroup.folder === sourceGroup
 
 describe('IPC message authorization', () => {
-  // Replicate the exact check from the IPC watcher
   function isMessageAuthorized(
-    sourceGroup: string,
+    sourceFolder: string,
     targetChatJid: string,
-    registeredGroups: Record<string, RegisteredGroup>,
+    registeredChats: Record<string, ChatConfig>,
   ): boolean {
-    const targetGroup = registeredGroups[targetChatJid];
-    return !!targetGroup && targetGroup.folder === sourceGroup;
+    const targetChat = registeredChats[targetChatJid];
+    return !!targetChat && targetChat.folder === sourceFolder;
   }
 
   it('chat can send to its own JID', () => {
-    expect(isMessageAuthorized('chat-a', 'chat-a@s.whatsapp.net', groups)).toBe(true);
-    expect(isMessageAuthorized('chat-b', 'chat-b@s.whatsapp.net', groups)).toBe(true);
+    expect(isMessageAuthorized('chat-a', 'chat-a@s.whatsapp.net', chats)).toBe(true);
+    expect(isMessageAuthorized('chat-b', 'chat-b@s.whatsapp.net', chats)).toBe(true);
   });
 
   it('chat cannot send to another chat\'s JID', () => {
-    expect(isMessageAuthorized('chat-a', 'chat-b@s.whatsapp.net', groups)).toBe(false);
+    expect(isMessageAuthorized('chat-a', 'chat-b@s.whatsapp.net', chats)).toBe(false);
   });
 
   it('chat cannot send to unregistered JID', () => {
-    expect(isMessageAuthorized('chat-a', 'unknown@s.whatsapp.net', groups)).toBe(false);
+    expect(isMessageAuthorized('chat-a', 'unknown@s.whatsapp.net', chats)).toBe(false);
   });
 });
 
@@ -255,7 +267,7 @@ describe('schedule_task schedule types', () => {
         type: 'schedule_task',
         prompt: 'cron task',
         schedule_type: 'cron',
-        schedule_value: '0 9 * * *', // every day at 9am
+        schedule_value: '0 9 * * *',
         targetJid: 'chat-a@s.whatsapp.net',
       },
       'chat-a',
@@ -293,7 +305,7 @@ describe('schedule_task schedule types', () => {
         type: 'schedule_task',
         prompt: 'interval task',
         schedule_type: 'interval',
-        schedule_value: '3600000', // 1 hour
+        schedule_value: '3600000',
         targetJid: 'chat-a@s.whatsapp.net',
       },
       'chat-a',
@@ -454,7 +466,7 @@ describe('resume_task recomputes next_run', () => {
   it('recomputes next_run for paused cron task', async () => {
     createTask({
       id: 'cron-task',
-      group_folder: 'chat-a',
+      chatFolder: 'chat-a',
       chat_jid: 'chat-a@s.whatsapp.net',
       prompt: 'test',
       schedule_type: 'cron',
@@ -475,7 +487,7 @@ describe('resume_task recomputes next_run', () => {
   it('recomputes next_run for paused interval task', async () => {
     createTask({
       id: 'interval-task',
-      group_folder: 'chat-a',
+      chatFolder: 'chat-a',
       chat_jid: 'chat-a@s.whatsapp.net',
       prompt: 'test',
       schedule_type: 'interval',
@@ -498,7 +510,7 @@ describe('resume_task recomputes next_run', () => {
   it('leaves next_run unchanged for paused once task', async () => {
     createTask({
       id: 'once-task',
-      group_folder: 'chat-a',
+      chatFolder: 'chat-a',
       chat_jid: 'chat-a@s.whatsapp.net',
       prompt: 'test',
       schedule_type: 'once',

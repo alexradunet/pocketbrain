@@ -1,27 +1,22 @@
 /**
- * E2E database seeder.
+ * E2E data seeder.
  *
  * Called by scripts/e2e-entrypoint.sh before PocketBrain starts.
- * Uses the project's own DB helpers so the schema always matches production.
+ * Creates file-based chat config so the message loop recognises the mock JID.
  *
  * Seeds:
- *   - registered_groups: the mock test group (folder=main, requiresTrigger=false)
- *   - chats: FK-required row for the mock JID
+ *   - data/chats/main/config.json: the mock test chat
  */
-import { initDatabase, setRegisteredGroup, storeChatMetadata } from '../src/db.js';
+import { ensureDataDirs, saveChat } from '../src/store.js';
 import { MOCK_CHANNEL_JID } from '../src/channels/mock.js';
 
-initDatabase();
+ensureDataDirs();
 
-setRegisteredGroup(MOCK_CHANNEL_JID, {
-  name: 'E2E Test Group',
+saveChat({
+  jid: MOCK_CHANNEL_JID,
+  name: 'E2E Test Chat',
   folder: 'main',
-  trigger: '@bot',
-  added_at: new Date().toISOString(),
-  requiresTrigger: false, // no trigger word needed — every message goes to the agent
+  addedAt: new Date().toISOString(),
 });
 
-// Seed the chats row so messages FK constraint is satisfied before connect()
-storeChatMetadata(MOCK_CHANNEL_JID, new Date().toISOString(), 'E2E Test Group', 'mock', true);
-
-console.log(`[e2e-seed] seeded group ${MOCK_CHANNEL_JID} → folder=main`);
+console.log(`[e2e-seed] seeded chat ${MOCK_CHANNEL_JID} → folder=main`);
