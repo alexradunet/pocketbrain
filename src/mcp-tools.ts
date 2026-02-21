@@ -3,6 +3,15 @@
  * Runs as a child process of the OpenCode server.
  * Tools accept chatJid/groupFolder/isMain as parameters (no env var context).
  * IPC directory comes from POCKETBRAIN_IPC_DIR environment variable.
+ *
+ * Server-side identity validation:
+ * - MCP_GROUP_FOLDER: authoritative group folder set by parent process at spawn time.
+ *   When set, the agent-provided groupFolder is IGNORED — the env var value is used instead.
+ * - MCP_MAIN_GROUP_FOLDER: the canonical main group folder name, set by parent process.
+ *   When set, isMain is derived from comparing MCP_GROUP_FOLDER to MCP_MAIN_GROUP_FOLDER;
+ *   the agent-provided isMain is IGNORED.
+ * If neither env var is set (backwards compat), the agent-provided values are used as-is
+ * (the IPC watcher still enforces server-side authorization on the receiving end).
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -13,6 +22,38 @@ import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
 
 const IPC_DIR = process.env.POCKETBRAIN_IPC_DIR || path.join(process.cwd(), 'data', 'ipc');
+
+/** Authoritative group identity from environment, set by parent process at spawn time */
+const ENV_GROUP_FOLDER: string | undefined = process.env.MCP_GROUP_FOLDER
+  ? path.basename(process.env.MCP_GROUP_FOLDER)
+  : undefined;
+const ENV_MAIN_GROUP_FOLDER: string | undefined = process.env.MCP_MAIN_GROUP_FOLDER
+  ? path.basename(process.env.MCP_MAIN_GROUP_FOLDER)
+  : undefined;
+
+/**
+ * Resolve the authoritative groupFolder for a tool call.
+ * If MCP_GROUP_FOLDER is set, it overrides the agent-provided value entirely.
+ * Falls back to safeFolder(agentFolder) for backwards compat.
+ */
+function resolveGroupFolder(agentFolder: string): string {
+  if (ENV_GROUP_FOLDER !== undefined) {
+    return ENV_GROUP_FOLDER;
+  }
+  return safeFolder(agentFolder);
+}
+
+/**
+ * Resolve the authoritative isMain for a tool call.
+ * If both MCP_GROUP_FOLDER and MCP_MAIN_GROUP_FOLDER are set, derive from env vars.
+ * Falls back to agent-provided value for backwards compat.
+ */
+function resolveIsMain(agentIsMain: boolean): boolean {
+  if (ENV_GROUP_FOLDER !== undefined && ENV_MAIN_GROUP_FOLDER !== undefined) {
+    return ENV_GROUP_FOLDER === ENV_MAIN_GROUP_FOLDER;
+  }
+  return agentIsMain;
+}
 
 /** Sanitize groupFolder to prevent path traversal */
 function safeFolder(folder: string): string {
@@ -52,13 +93,14 @@ server.tool(
     sender: z.string().optional().describe('Your role/identity name (e.g. "Researcher"). When set, messages appear from a dedicated bot in Telegram.'),
   },
   async (args) => {
-    const messagesDir = path.join(IPC_DIR, safeFolder(args.groupFolder), 'messages');
+    const groupFolder = resolveGroupFolder(args.groupFolder);
+    const messagesDir = path.join(IPC_DIR, groupFolder, 'messages');
     const data: Record<string, string | undefined> = {
       type: 'message',
       chatJid: args.chatJid,
       text: args.text,
       sender: args.sender || undefined,
-      groupFolder: args.groupFolder,
+      groupFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -131,9 +173,11 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
     }
 
     // Non-main groups can only schedule for themselves
-    const targetJid = args.isMain && args.target_group_jid ? args.target_group_jid : args.chatJid;
+    const groupFolder = resolveGroupFolder(args.groupFolder);
+    const isMain = resolveIsMain(args.isMain);
+    const targetJid = isMain && args.target_group_jid ? args.target_group_jid : args.chatJid;
 
-    const tasksDir = path.join(IPC_DIR, safeFolder(args.groupFolder), 'tasks');
+    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'schedule_task',
       prompt: args.prompt,
@@ -141,7 +185,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
       schedule_value: args.schedule_value,
       context_mode: args.context_mode || 'group',
       targetJid,
-      createdBy: args.groupFolder,
+      createdBy: groupFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -161,7 +205,9 @@ server.tool(
     isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
-    const tasksFile = path.join(IPC_DIR, safeFolder(args.groupFolder), 'current_tasks.json');
+    const groupFolder = resolveGroupFolder(args.groupFolder);
+    const isMain = resolveIsMain(args.isMain);
+    const tasksFile = path.join(IPC_DIR, groupFolder, 'current_tasks.json');
 
     try {
       if (!fs.existsSync(tasksFile)) {
@@ -170,9 +216,9 @@ server.tool(
 
       const allTasks = JSON.parse(fs.readFileSync(tasksFile, 'utf-8'));
 
-      const tasks = args.isMain
+      const tasks = isMain
         ? allTasks
-        : allTasks.filter((t: { groupFolder: string }) => t.groupFolder === args.groupFolder);
+        : allTasks.filter((t: { groupFolder: string }) => t.groupFolder === groupFolder);
 
       if (tasks.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No scheduled tasks found.' }] };
@@ -203,12 +249,14 @@ server.tool(
     isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
-    const tasksDir = path.join(IPC_DIR, safeFolder(args.groupFolder), 'tasks');
+    const groupFolder = resolveGroupFolder(args.groupFolder);
+    const isMain = resolveIsMain(args.isMain);
+    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'pause_task',
       taskId: args.task_id,
-      groupFolder: args.groupFolder,
-      isMain: args.isMain,
+      groupFolder,
+      isMain,
       timestamp: new Date().toISOString(),
     };
 
@@ -227,12 +275,14 @@ server.tool(
     isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
-    const tasksDir = path.join(IPC_DIR, safeFolder(args.groupFolder), 'tasks');
+    const groupFolder = resolveGroupFolder(args.groupFolder);
+    const isMain = resolveIsMain(args.isMain);
+    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'resume_task',
       taskId: args.task_id,
-      groupFolder: args.groupFolder,
-      isMain: args.isMain,
+      groupFolder,
+      isMain,
       timestamp: new Date().toISOString(),
     };
 
@@ -251,12 +301,14 @@ server.tool(
     isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
-    const tasksDir = path.join(IPC_DIR, safeFolder(args.groupFolder), 'tasks');
+    const groupFolder = resolveGroupFolder(args.groupFolder);
+    const isMain = resolveIsMain(args.isMain);
+    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'cancel_task',
       taskId: args.task_id,
-      groupFolder: args.groupFolder,
-      isMain: args.isMain,
+      groupFolder,
+      isMain,
       timestamp: new Date().toISOString(),
     };
 
@@ -280,14 +332,16 @@ Use available_groups.json to find the JID for a group. The folder name should be
     isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
-    if (!args.isMain) {
+    const groupFolder = resolveGroupFolder(args.groupFolder);
+    const isMain = resolveIsMain(args.isMain);
+    if (!isMain) {
       return {
         content: [{ type: 'text' as const, text: 'Only the main group can register new groups.' }],
         isError: true,
       };
     }
 
-    const tasksDir = path.join(IPC_DIR, safeFolder(args.groupFolder), 'tasks');
+    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'register_group',
       jid: args.jid,

@@ -19,6 +19,7 @@ import { logger } from '../logger.js';
 import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_OUTGOING_QUEUE_SIZE = 100;
 
 export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
@@ -213,7 +214,7 @@ export class WhatsAppChannel implements Channel {
       : `${ASSISTANT_NAME}: ${text}`;
 
     if (!this.connected) {
-      this.outgoingQueue.push({ jid, text: prefixed });
+      this.enqueueOutgoing({ jid, text: prefixed });
       logger.info({ jid, length: prefixed.length, queueSize: this.outgoingQueue.length }, 'WA disconnected, message queued');
       return;
     }
@@ -222,7 +223,7 @@ export class WhatsAppChannel implements Channel {
       logger.info({ jid, length: prefixed.length }, 'Message sent');
     } catch (err) {
       // If send fails, queue it for retry on reconnect
-      this.outgoingQueue.push({ jid, text: prefixed });
+      this.enqueueOutgoing({ jid, text: prefixed });
       logger.warn({ jid, err, queueSize: this.outgoingQueue.length }, 'Failed to send, message queued');
     }
   }
@@ -311,6 +312,14 @@ export class WhatsAppChannel implements Channel {
     }
 
     return jid;
+  }
+
+  private enqueueOutgoing(item: { jid: string; text: string }): void {
+    if (this.outgoingQueue.length >= MAX_OUTGOING_QUEUE_SIZE) {
+      this.outgoingQueue.shift();
+      logger.warn({ queueSize: MAX_OUTGOING_QUEUE_SIZE }, 'outgoingQueue full, dropping oldest message');
+    }
+    this.outgoingQueue.push(item);
   }
 
   private async flushOutgoingQueue(): Promise<void> {

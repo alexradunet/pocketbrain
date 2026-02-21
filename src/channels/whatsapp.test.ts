@@ -888,6 +888,35 @@ describe('WhatsAppChannel', () => {
       expect(fakeSocket.sendMessage).toHaveBeenNthCalledWith(2, 'test@g.us', { text: 'Andy: Second' });
       expect(fakeSocket.sendMessage).toHaveBeenNthCalledWith(3, 'test@g.us', { text: 'Andy: Third' });
     });
+
+    it('caps queue at MAX_OUTGOING_QUEUE_SIZE=100 and drops oldest on overflow', async () => {
+      const { logger } = await import('../logger.js');
+      const opts = createTestOpts();
+      const channel = new WhatsAppChannel(opts);
+
+      // Push 101 messages while disconnected
+      for (let i = 1; i <= 101; i++) {
+        await channel.sendMessage('test@g.us', `Message ${i}`);
+      }
+
+      const queue: Array<{ jid: string; text: string }> = (channel as any).outgoingQueue;
+
+      // Queue must be capped at 100
+      expect(queue.length).toBe(100);
+
+      // The oldest message (Message 1) should have been dropped;
+      // the first entry should now be Message 2
+      expect(queue[0].text).toBe('Andy: Message 2');
+
+      // The newest message (Message 101) should still be present
+      expect(queue[99].text).toBe('Andy: Message 101');
+
+      // A warning must have been logged when the overflow occurred
+      expect(logger.warn).toHaveBeenCalledWith(
+        { queueSize: 100 },
+        'outgoingQueue full, dropping oldest message',
+      );
+    });
   });
 
   // --- Group metadata sync ---

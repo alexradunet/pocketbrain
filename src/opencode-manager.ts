@@ -235,6 +235,17 @@ export async function startSession(
         if (!newId) throw new Error('session.create returned no session ID');
         sessionId = newId;
         logger.info({ sessionId, group: group.name }, 'New session created (recovered stale session)');
+        // The old session ID is now permanently abandoned — delete it to avoid accumulation.
+        // Non-fatal: a failed delete is logged as a warning and does not block recovery.
+        // Optional chaining guards against SDK versions where delete is unavailable.
+        client.session
+          .delete?.({ path: { id: input.sessionId } })
+          ?.catch((err) =>
+            logger.warn(
+              { err, sessionId: input.sessionId },
+              'Failed to delete stale session (non-fatal)',
+            ),
+          );
       }
     } else {
       logger.debug({ group: group.name }, 'Creating new session');
@@ -394,6 +405,11 @@ async function runPrompt(
     signal: signal.signal,
   });
 
+  // AbortController (signal) is aborted on ALL exit paths:
+  //   - Normal exit (session.idle received): finally block below calls signal.abort()
+  //   - promptAsync error: explicit signal.abort() before returning
+  //   - Timeout: signal.abort() in the Promise.race timeout branch
+  // This ensures the SSE connection is always closed when runPrompt returns.
   const streamDone = (async () => {
     try {
       for await (const rawEvent of eventStream.stream) {

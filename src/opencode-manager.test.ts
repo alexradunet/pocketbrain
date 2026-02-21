@@ -32,6 +32,7 @@ function makeMockInstance(sessionOverrides: Record<string, unknown> = {}) {
       session: {
         get: async () => ({ data: { id: 'existing-session' } }),
         create: async () => ({ data: { id: 'new-session-id' } }),
+        delete: async () => ({}),
         abort: async () => ({}),
         promptAsync: async () => ({}),
         message: async () => ({ data: { info: null, parts: [] } }),
@@ -164,6 +165,34 @@ describe('startSession — stale session recovery', () => {
     expect(result.status).toBe('success');
     expect(result.newSessionId).toBe('existing-session');
     expect(createCallCount).toBe(0);
+  });
+
+  it('calls session.delete on the stale session ID when falling back to a new session', async () => {
+    const deletedIds: string[] = [];
+
+    _setTestOpencodeInstance(
+      makeMockInstance({
+        get: async () => {
+          throw new Error('session not found');
+        },
+        create: async () => ({ data: { id: 'recovery-session' } }),
+        delete: async (opts: { path: { id: string } }) => {
+          deletedIds.push(opts.path.id);
+          return {};
+        },
+      }),
+    );
+
+    const result = await startSession(
+      MOCK_GROUP,
+      { ...BASE_INPUT, sessionId: 'stale-id' },
+      makeAutoAbortOnOutput(),
+    );
+
+    expect(result.status).toBe('success');
+    // Give the fire-and-forget delete a tick to complete
+    await new Promise<void>((r) => setTimeout(r, 50));
+    expect(deletedIds).toContain('stale-id');
   });
 
   it('returns error when both session.get and recovery session.create fail', async () => {
