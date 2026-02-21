@@ -11,14 +11,11 @@ const envConfig = readEnvFile([
 
 export const ASSISTANT_HAS_OWN_NUMBER =
   (process.env.ASSISTANT_HAS_OWN_NUMBER || envConfig.ASSISTANT_HAS_OWN_NUMBER) === 'true';
-export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
 
 const PROJECT_ROOT = process.cwd();
 export const WORKSPACE_DIR = process.env.WORKSPACE_DIR || PROJECT_ROOT;
 
-export const STORE_DIR = path.resolve(WORKSPACE_DIR, 'store');
-export const GROUPS_DIR = path.resolve(WORKSPACE_DIR, 'groups');
 export const DATA_DIR = path.resolve(WORKSPACE_DIR, 'data');
 
 export const IPC_POLL_INTERVAL = 1000;

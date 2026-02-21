@@ -1,12 +1,12 @@
 /**
  * Stdio MCP Server for PocketBrain
  * Runs as a child process of the OpenCode server.
- * Tools accept chatJid/groupFolder as parameters (no env var context).
+ * Tools accept chatJid/chatFolder as parameters (no env var context).
  * IPC directory comes from POCKETBRAIN_IPC_DIR environment variable.
  *
  * Server-side identity validation:
- * - MCP_GROUP_FOLDER: authoritative group folder set by parent process at spawn time.
- *   When set, the agent-provided groupFolder is IGNORED — the env var value is used instead.
+ * - MCP_CHAT_FOLDER: authoritative chat folder set by parent process at spawn time.
+ *   When set, the agent-provided chatFolder is IGNORED — the env var value is used instead.
  * If not set (backwards compat), the agent-provided value is used as-is
  * (the IPC watcher still enforces server-side authorization on the receiving end).
  */
@@ -20,28 +20,28 @@ import { CronExpressionParser } from 'cron-parser';
 
 const IPC_DIR = process.env.POCKETBRAIN_IPC_DIR || path.join(process.cwd(), 'data', 'ipc');
 
-/** Authoritative group identity from environment, set by parent process at spawn time */
-const ENV_GROUP_FOLDER: string | undefined = process.env.MCP_GROUP_FOLDER
-  ? path.basename(process.env.MCP_GROUP_FOLDER)
+/** Authoritative chat identity from environment, set by parent process at spawn time */
+const ENV_CHAT_FOLDER: string | undefined = process.env.MCP_CHAT_FOLDER
+  ? path.basename(process.env.MCP_CHAT_FOLDER)
   : undefined;
 
 /**
- * Resolve the authoritative groupFolder for a tool call.
- * If MCP_GROUP_FOLDER is set, it overrides the agent-provided value entirely.
+ * Resolve the authoritative chatFolder for a tool call.
+ * If MCP_CHAT_FOLDER is set, it overrides the agent-provided value entirely.
  * Falls back to safeFolder(agentFolder) for backwards compat.
  */
-function resolveGroupFolder(agentFolder: string): string {
-  if (ENV_GROUP_FOLDER !== undefined) {
-    return ENV_GROUP_FOLDER;
+function resolveChatFolder(agentFolder: string): string {
+  if (ENV_CHAT_FOLDER !== undefined) {
+    return ENV_CHAT_FOLDER;
   }
   return safeFolder(agentFolder);
 }
 
-/** Sanitize groupFolder to prevent path traversal */
+/** Sanitize chatFolder to prevent path traversal */
 function safeFolder(folder: string): string {
   const sanitized = path.basename(folder);
   if (!sanitized || sanitized === '.' || sanitized === '..') {
-    throw new Error(`Invalid group folder: "${folder}"`);
+    throw new Error(`Invalid chat folder: "${folder}"`);
   }
   return sanitized;
 }
@@ -71,18 +71,18 @@ server.tool(
   {
     text: z.string().describe('The message text to send'),
     chatJid: z.string().describe('The chat JID to send to (from your pocketbrain_context)'),
-    groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
+    chatFolder: z.string().describe('The chat folder name (from your pocketbrain_context)'),
     sender: z.string().optional().describe('Your role/identity name (e.g. "Researcher"). When set, messages appear from a dedicated bot in Telegram.'),
   },
   async (args) => {
-    const groupFolder = resolveGroupFolder(args.groupFolder);
-    const messagesDir = path.join(IPC_DIR, groupFolder, 'messages');
+    const chatFolder = resolveChatFolder(args.chatFolder);
+    const messagesDir = path.join(IPC_DIR, chatFolder, 'messages');
     const data: Record<string, string | undefined> = {
       type: 'message',
       chatJid: args.chatJid,
       text: args.text,
       sender: args.sender || undefined,
-      groupFolder,
+      chatFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -121,7 +121,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
     schedule_value: z.string().describe('cron: "*/5 * * * *" | interval: milliseconds like "300000" | once: local timestamp like "2026-02-01T15:30:00" (no Z suffix!)'),
     context_mode: z.enum(['group', 'isolated']).default('group').describe('group=runs with chat history and memory, isolated=fresh session (include context in prompt)'),
     chatJid: z.string().describe('The chat JID (from your pocketbrain_context)'),
-    groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
+    chatFolder: z.string().describe('The chat folder name (from your pocketbrain_context)'),
   },
   async (args) => {
     // Validate schedule_value before writing IPC
@@ -152,8 +152,8 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
       }
     }
 
-    const groupFolder = resolveGroupFolder(args.groupFolder);
-    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
+    const chatFolder = resolveChatFolder(args.chatFolder);
+    const tasksDir = path.join(IPC_DIR, chatFolder, 'tasks');
     const data = {
       type: 'schedule_task',
       prompt: args.prompt,
@@ -161,7 +161,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
       schedule_value: args.schedule_value,
       context_mode: args.context_mode || 'group',
       targetJid: args.chatJid,
-      createdBy: groupFolder,
+      createdBy: chatFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -177,11 +177,11 @@ server.tool(
   'list_tasks',
   "List all scheduled tasks for the current chat.",
   {
-    groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
+    chatFolder: z.string().describe('The chat folder name (from your pocketbrain_context)'),
   },
   async (args) => {
-    const groupFolder = resolveGroupFolder(args.groupFolder);
-    const tasksFile = path.join(IPC_DIR, groupFolder, 'current_tasks.json');
+    const chatFolder = resolveChatFolder(args.chatFolder);
+    const tasksFile = path.join(IPC_DIR, chatFolder, 'current_tasks.json');
 
     try {
       if (!fs.existsSync(tasksFile)) {
@@ -215,15 +215,15 @@ server.tool(
   'Pause a scheduled task. It will not run until resumed.',
   {
     task_id: z.string().describe('The task ID to pause'),
-    groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
+    chatFolder: z.string().describe('The chat folder name (from your pocketbrain_context)'),
   },
   async (args) => {
-    const groupFolder = resolveGroupFolder(args.groupFolder);
-    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
+    const chatFolder = resolveChatFolder(args.chatFolder);
+    const tasksDir = path.join(IPC_DIR, chatFolder, 'tasks');
     const data = {
       type: 'pause_task',
       taskId: args.task_id,
-      groupFolder,
+      chatFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -238,15 +238,15 @@ server.tool(
   'Resume a paused task.',
   {
     task_id: z.string().describe('The task ID to resume'),
-    groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
+    chatFolder: z.string().describe('The chat folder name (from your pocketbrain_context)'),
   },
   async (args) => {
-    const groupFolder = resolveGroupFolder(args.groupFolder);
-    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
+    const chatFolder = resolveChatFolder(args.chatFolder);
+    const tasksDir = path.join(IPC_DIR, chatFolder, 'tasks');
     const data = {
       type: 'resume_task',
       taskId: args.task_id,
-      groupFolder,
+      chatFolder,
       timestamp: new Date().toISOString(),
     };
 
@@ -261,15 +261,15 @@ server.tool(
   'Cancel and delete a scheduled task.',
   {
     task_id: z.string().describe('The task ID to cancel'),
-    groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
+    chatFolder: z.string().describe('The chat folder name (from your pocketbrain_context)'),
   },
   async (args) => {
-    const groupFolder = resolveGroupFolder(args.groupFolder);
-    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
+    const chatFolder = resolveChatFolder(args.chatFolder);
+    const tasksDir = path.join(IPC_DIR, chatFolder, 'tasks');
     const data = {
       type: 'cancel_task',
       taskId: args.task_id,
-      groupFolder,
+      chatFolder,
       timestamp: new Date().toISOString(),
     };
 

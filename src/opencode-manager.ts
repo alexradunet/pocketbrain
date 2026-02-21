@@ -1,23 +1,23 @@
 /**
  * OpenCode Manager for PocketBrain
  * Runs one OpenCode server natively,
- * manages per-group sessions via the SDK client.
+ * manages per-chat sessions via the SDK client.
  */
 import fs from 'fs';
 import path from 'path';
 import { createOpencode } from '@opencode-ai/sdk';
 
-import { DATA_DIR, GROUPS_DIR } from './config.js';
+import { DATA_DIR } from './config.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
-import { RegisteredGroup } from './types.js';
+import { ChatConfig } from './types.js';
 
 // --- Public types ---
 
 export interface AgentInput {
   prompt: string;
   sessionId?: string;
-  groupFolder: string;
+  chatFolder: string;
   chatJid: string;
   isScheduledTask?: boolean;
 }
@@ -57,8 +57,8 @@ export function _clearActiveSessions(): void {
 }
 
 /** @internal - for tests only. Exposes buildContextPrefix. */
-export function _buildContextPrefix(group: RegisteredGroup, input: AgentInput): string {
-  return buildContextPrefix(group, input);
+export function _buildContextPrefix(chat: ChatConfig, input: AgentInput): string {
+  return buildContextPrefix(chat, input);
 }
 
 // --- Server lifecycle ---
@@ -103,7 +103,7 @@ export async function boot(): Promise<void> {
 
   // Build global instructions list
   const instructions: string[] = [];
-  const globalInstructionsPath = path.join(GROUPS_DIR, 'global', 'AGENTS.md');
+  const globalInstructionsPath = path.join(DATA_DIR, 'chats', 'global', 'AGENTS.md');
   if (fs.existsSync(globalInstructionsPath)) {
     instructions.push(globalInstructionsPath);
   }
@@ -167,8 +167,8 @@ export async function boot(): Promise<void> {
 
 export async function shutdown(): Promise<void> {
   // Abort all active sessions
-  for (const [groupFolder, session] of activeSessions) {
-    logger.info({ groupFolder }, 'Aborting session on shutdown');
+  for (const [chatFolder, session] of activeSessions) {
+    logger.info({ chatFolder }, 'Aborting session on shutdown');
     session.resolveEnd();
   }
   activeSessions.clear();
@@ -183,23 +183,23 @@ export async function shutdown(): Promise<void> {
 // --- Session lifecycle ---
 
 /**
- * Start (or resume) an agent session for a group.
+ * Start (or resume) an agent session for a chat.
  * Runs the first prompt, calls onOutput with the result, then blocks
  * until the session is ended via abortSession(). Follow-ups arrive
  * through sendFollowUp() while the session is alive.
  */
 export async function startSession(
-  group: RegisteredGroup,
+  chat: ChatConfig,
   input: AgentInput,
   onOutput: (output: AgentOutput) => Promise<void>,
 ): Promise<AgentOutput> {
   if (!opencodeInstance) throw new Error('OpenCode server not booted');
   const { client } = opencodeInstance;
 
-  // Ensure IPC directories exist for this group
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', input.groupFolder);
-  fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
+  // Ensure IPC directories exist for this chat
+  const chatIpcDir = path.join(DATA_DIR, 'ipc', input.chatFolder);
+  fs.mkdirSync(path.join(chatIpcDir, 'messages'), { recursive: true });
+  fs.mkdirSync(path.join(chatIpcDir, 'tasks'), { recursive: true });
 
   // Create or resume session (with timeout to avoid hanging on a stalled server)
   const SESSION_INIT_TIMEOUT_MS = 15000;
@@ -218,7 +218,7 @@ export async function startSession(
         logger.warn({ sessionId: input.sessionId }, 'Stale session ID, creating new session');
         isNewSession = true;
         const resp = await Promise.race([
-          client.session.create({ body: { title: `PocketBrain: ${group.name}` } }),
+          client.session.create({ body: { title: `PocketBrain: ${chat.name}` } }),
           Bun.sleep(SESSION_INIT_TIMEOUT_MS).then(() => {
             throw new Error('session.create timed out');
           }),
@@ -226,10 +226,8 @@ export async function startSession(
         const newId = resp.data?.id;
         if (!newId) throw new Error('session.create returned no session ID');
         sessionId = newId;
-        logger.info({ sessionId, group: group.name }, 'New session created (recovered stale session)');
+        logger.info({ sessionId, chat: chat.name }, 'New session created (recovered stale session)');
         // The old session ID is now permanently abandoned — delete it to avoid accumulation.
-        // Non-fatal: a failed delete is logged as a warning and does not block recovery.
-        // Optional chaining guards against SDK versions where delete is unavailable.
         client.session
           .delete?.({ path: { id: input.sessionId } })
           ?.catch((err) =>
@@ -240,9 +238,9 @@ export async function startSession(
           );
       }
     } else {
-      logger.debug({ group: group.name }, 'Creating new session');
+      logger.debug({ chat: chat.name }, 'Creating new session');
       const resp = await Promise.race([
-        client.session.create({ body: { title: `PocketBrain: ${group.name}` } }),
+        client.session.create({ body: { title: `PocketBrain: ${chat.name}` } }),
         Bun.sleep(SESSION_INIT_TIMEOUT_MS).then(() => {
           throw new Error('session.create timed out');
         }),
@@ -250,11 +248,11 @@ export async function startSession(
       const newId = resp.data?.id;
       if (!newId) throw new Error('session.create returned no session ID');
       sessionId = newId;
-      logger.info({ sessionId, group: group.name }, 'New session created');
+      logger.info({ sessionId, chat: chat.name }, 'New session created');
     }
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    logger.error({ group: group.name, error }, 'Failed to create/resume session');
+    logger.error({ chat: chat.name, error }, 'Failed to create/resume session');
     return { status: 'error', result: null, error };
   }
 
@@ -265,10 +263,10 @@ export async function startSession(
   });
 
   // Build the context prefix once — re-injected on every follow-up to survive compaction
-  const contextPrefix = buildContextPrefix(group, input);
+  const contextPrefix = buildContextPrefix(chat, input);
 
   // Register active session
-  activeSessions.set(input.groupFolder, {
+  activeSessions.set(input.chatFolder, {
     sessionId,
     onOutput,
     resolveEnd,
@@ -281,28 +279,28 @@ export async function startSession(
   if (input.isScheduledTask) {
     prompt = `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or group.]\n\n${prompt}`;
   }
-  // Prepend group context for new sessions (including recovered stale sessions)
+  // Prepend chat context for new sessions (including recovered stale sessions)
   if (isNewSession) {
-    prompt = buildGroupContext(group, input) + '\n\n' + prompt;
+    prompt = buildChatContext(chat, input) + '\n\n' + prompt;
   }
 
   // Run first prompt
-  const session = activeSessions.get(input.groupFolder)!;
+  const session = activeSessions.get(input.chatFolder)!;
   session.busy = true;
   try {
     const result = await runPrompt(client, sessionId, prompt);
     await onOutput(result);
     if (result.status === 'error') {
-      activeSessions.delete(input.groupFolder);
+      activeSessions.delete(input.chatFolder);
       return result;
     }
     // Emit session-update marker so host can track session ID
     await onOutput({ status: 'success', result: null, newSessionId: sessionId });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    logger.error({ group: group.name, error }, 'Prompt error');
+    logger.error({ chat: chat.name, error }, 'Prompt error');
     await onOutput({ status: 'error', result: null, error });
-    activeSessions.delete(input.groupFolder);
+    activeSessions.delete(input.chatFolder);
     return { status: 'error', result: null, error };
   } finally {
     session.busy = false;
@@ -310,9 +308,9 @@ export async function startSession(
 
   // Wait for session to end (via abortSession or shutdown)
   await endPromise;
-  activeSessions.delete(input.groupFolder);
+  activeSessions.delete(input.chatFolder);
 
-  logger.info({ group: group.name, sessionId }, 'Session ended');
+  logger.info({ chat: chat.name, sessionId }, 'Session ended');
   return { status: 'success', result: null, newSessionId: sessionId };
 }
 
@@ -321,11 +319,11 @@ export async function startSession(
  * Returns true if the prompt was sent, false if no active session.
  */
 export async function sendFollowUp(
-  groupFolder: string,
+  chatFolder: string,
   text: string,
 ): Promise<boolean> {
   if (!opencodeInstance) return false;
-  const session = activeSessions.get(groupFolder);
+  const session = activeSessions.get(chatFolder);
   if (!session || session.busy) return false;
 
   const { client } = opencodeInstance;
@@ -345,7 +343,7 @@ export async function sendFollowUp(
     });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    logger.error({ groupFolder, error }, 'Follow-up error');
+    logger.error({ chatFolder, error }, 'Follow-up error');
     await session.onOutput({ status: 'error', result: null, error });
   } finally {
     session.busy = false;
@@ -356,11 +354,11 @@ export async function sendFollowUp(
 /**
  * Abort an active session. Resolves the startSession() promise.
  */
-export function abortSession(groupFolder: string): void {
-  const session = activeSessions.get(groupFolder);
+export function abortSession(chatFolder: string): void {
+  const session = activeSessions.get(chatFolder);
   if (!session) return;
 
-  logger.debug({ groupFolder, sessionId: session.sessionId }, 'Aborting session');
+  logger.debug({ chatFolder, sessionId: session.sessionId }, 'Aborting session');
 
   // Abort the running prompt if busy
   if (session.busy && opencodeInstance) {
@@ -373,10 +371,10 @@ export function abortSession(groupFolder: string): void {
 }
 
 /**
- * Check if a group has an active session.
+ * Check if a chat has an active session.
  */
-export function hasActiveSession(groupFolder: string): boolean {
-  return activeSessions.has(groupFolder);
+export function hasActiveSession(chatFolder: string): boolean {
+  return activeSessions.has(chatFolder);
 }
 
 // --- Internal helpers ---
@@ -397,11 +395,6 @@ async function runPrompt(
     signal: signal.signal,
   });
 
-  // AbortController (signal) is aborted on ALL exit paths:
-  //   - Normal exit (session.idle received): finally block below calls signal.abort()
-  //   - promptAsync error: explicit signal.abort() before returning
-  //   - Timeout: signal.abort() in the Promise.race timeout branch
-  // This ensures the SSE connection is always closed when runPrompt returns.
   const streamDone = (async () => {
     try {
       for await (const rawEvent of eventStream.stream) {
@@ -488,7 +481,6 @@ async function runPrompt(
   ]);
 
   // Ensure we always have a canonical final snapshot, even if events were partial
-  // or the stream disconnected. Cap with a timeout to avoid hanging indefinitely.
   const MESSAGE_FETCH_TIMEOUT_MS = 30000;
   const messageRespData = await Promise.race([
     client.session.message({ path: { id: sessionId, messageID: messageId } })
@@ -567,24 +559,24 @@ function asString(value: unknown): string | null {
  * This is re-injected on every prompt (including follow-ups) so it survives
  * session compaction.
  */
-function buildContextPrefix(group: RegisteredGroup, input: AgentInput): string {
+function buildContextPrefix(chat: ChatConfig, input: AgentInput): string {
   return `<pocketbrain_context>
 chatJid: ${input.chatJid}
-groupFolder: ${input.groupFolder}
+chatFolder: ${input.chatFolder}
 
 When using PocketBrain MCP tools (send_message, schedule_task, list_tasks, pause_task, resume_task, cancel_task), you MUST pass these values as parameters:
 - chatJid: "${input.chatJid}"
-- groupFolder: "${input.groupFolder}"
+- chatFolder: "${input.chatFolder}"
 </pocketbrain_context>`;
 }
 
-function buildGroupContext(group: RegisteredGroup, input: AgentInput): string {
-  const parts: string[] = [buildContextPrefix(group, input)];
+function buildChatContext(chat: ChatConfig, input: AgentInput): string {
+  const parts: string[] = [buildContextPrefix(chat, input)];
 
-  // Per-group AGENTS.md — injected only on new sessions (not follow-ups)
-  const groupInstructionsPath = path.join(GROUPS_DIR, group.folder, 'AGENTS.md');
-  if (fs.existsSync(groupInstructionsPath)) {
-    parts.push(fs.readFileSync(groupInstructionsPath, 'utf-8'));
+  // Per-chat AGENTS.md — injected only on new sessions (not follow-ups)
+  const chatInstructionsPath = path.join(DATA_DIR, 'chats', chat.folder, 'AGENTS.md');
+  if (fs.existsSync(chatInstructionsPath)) {
+    parts.push(fs.readFileSync(chatInstructionsPath, 'utf-8'));
   }
 
   return parts.join('\n\n');
@@ -593,10 +585,10 @@ function buildGroupContext(group: RegisteredGroup, input: AgentInput): string {
 // --- Snapshot helpers ---
 
 export function writeTasksSnapshot(
-  groupFolder: string,
+  chatFolder: string,
   tasks: Array<{
     id: string;
-    groupFolder: string;
+    chatFolder: string;
     prompt: string;
     schedule_type: string;
     schedule_value: string;
@@ -604,13 +596,11 @@ export function writeTasksSnapshot(
     next_run: string | null;
   }>,
 ): void {
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
+  const chatIpcDir = path.join(DATA_DIR, 'ipc', chatFolder);
+  fs.mkdirSync(chatIpcDir, { recursive: true });
 
-  const filteredTasks = tasks.filter((t) => t.groupFolder === groupFolder);
+  const filteredTasks = tasks.filter((t) => t.chatFolder === chatFolder);
 
-  const tasksFile = path.join(groupIpcDir, 'current_tasks.json');
+  const tasksFile = path.join(chatIpcDir, 'current_tasks.json');
   fs.writeFileSync(tasksFile, JSON.stringify(filteredTasks, null, 2));
 }
-
-

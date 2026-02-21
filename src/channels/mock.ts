@@ -13,17 +13,16 @@
  * instantiate MockChannel instead of WhatsAppChannel.
  */
 import { logger } from '../logger.js';
-import type { Channel, NewMessage, OnChatMetadata, OnInboundMessage, RegisteredGroup } from '../types.js';
+import type { Channel, ChatConfig, NewMessage, OnInboundMessage } from '../types.js';
 
-/** JID used for the mock test group. Must match the seeded registered_groups row. */
+/** JID used for the mock test group. Must match the seeded chat config. */
 export const MOCK_CHANNEL_JID = 'e2e-test@mock.test';
 
 const DEFAULT_PORT = parseInt(process.env.MOCK_CHANNEL_PORT || '3456', 10);
 
 export interface MockChannelOpts {
   onMessage: OnInboundMessage;
-  onChatMetadata: OnChatMetadata;
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  chats: () => Record<string, ChatConfig>;
   port?: number;
 }
 
@@ -49,16 +48,6 @@ export class MockChannel implements Channel {
 
   async connect(): Promise<void> {
     this._connected = true;
-
-    // Announce chat metadata so storeChatMetadata() populates the chats table.
-    // This creates the FK-required row before any messages are injected.
-    this.opts.onChatMetadata(
-      MOCK_CHANNEL_JID,
-      new Date().toISOString(),
-      'E2E Test Group',
-      'mock',
-      true,
-    );
 
     this.server = Bun.serve({
       port: this.port,
@@ -95,7 +84,7 @@ export class MockChannel implements Channel {
           is_bot_message: false,
         };
 
-        // Deliver to PocketBrain's message pipeline (stores in SQLite)
+        // Deliver to PocketBrain's message pipeline
         this.opts.onMessage(msg.chat_jid, msg);
         logger.debug({ jid: msg.chat_jid, content: body.content }, 'MockChannel: message injected');
 

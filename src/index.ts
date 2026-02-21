@@ -1,6 +1,5 @@
 import {
   IDLE_TIMEOUT,
-  POLL_INTERVAL,
 } from './config.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import {
@@ -13,68 +12,87 @@ import {
   writeTasksSnapshot,
 } from './opencode-manager.js';
 import {
-  getAllRegisteredGroups,
-  getAllSessions,
+  ensureDataDirs,
   getAllTasks,
-  getMessagesSince,
-  getNewMessages,
-  getRouterState,
-  initDatabase,
-  setRouterState,
-  setSession,
-  storeChatMetadata,
-  storeMessage,
-} from './db.js';
-import { GroupQueue } from './group-queue.js';
+  loadAllChats,
+  saveChat,
+  loadState,
+  saveState,
+} from './store.js';
+import { SessionQueue } from './session-queue.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
-import { Channel, NewMessage, RegisteredGroup } from './types.js';
+import { Channel, ChatConfig, NewMessage } from './types.js';
 import { logger } from './logger.js';
 
 
-let lastTimestamp = '';
-let sessions: Record<string, string> = {};
-let registeredGroups: Record<string, RegisteredGroup> = {};
-let lastAgentTimestamp: Record<string, string> = {};
-let messageLoopRunning = false;
+// --- In-memory state ---
 
-let whatsapp: WhatsAppChannel;
+/** Chats keyed by JID. Loaded from data/chats/*/config.json at startup. */
+let chats: Record<string, ChatConfig> = {};
+
+/** In-memory message buffer: new messages arrive here, drained on processing. */
+const messageBuffer = new Map<string, NewMessage[]>();
+
 const channels: Channel[] = [];
-const queue = new GroupQueue();
+const queue = new SessionQueue();
 
-function loadState(): void {
-  lastTimestamp = getRouterState('last_timestamp') || '';
-  const agentTs = getRouterState('last_agent_timestamp');
-  try {
-    lastAgentTimestamp = agentTs ? JSON.parse(agentTs) : {};
-  } catch {
-    logger.warn('Corrupted last_agent_timestamp in DB, resetting');
-    lastAgentTimestamp = {};
+// --- Chat helpers ---
+
+function getSessionId(chatFolder: string): string | undefined {
+  const chat = Object.values(chats).find((c) => c.folder === chatFolder);
+  return chat?.sessionId;
+}
+
+function setSessionId(chatFolder: string, sessionId: string): void {
+  const chat = Object.values(chats).find((c) => c.folder === chatFolder);
+  if (chat) {
+    chat.sessionId = sessionId;
+    saveChat(chat);
   }
-  sessions = getAllSessions();
-  registeredGroups = getAllRegisteredGroups();
-  logger.info(
-    { chatCount: Object.keys(registeredGroups).length },
-    'State loaded',
-  );
 }
 
-function saveState(): void {
-  setRouterState('last_timestamp', lastTimestamp);
-  setRouterState(
-    'last_agent_timestamp',
-    JSON.stringify(lastAgentTimestamp),
-  );
+function getSessions(): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const chat of Object.values(chats)) {
+    if (chat.sessionId) result[chat.folder] = chat.sessionId;
+  }
+  return result;
 }
+
+// --- Message buffer ---
+
+function bufferMessage(chatJid: string, msg: NewMessage): void {
+  const existing = messageBuffer.get(chatJid);
+  if (existing) {
+    existing.push(msg);
+  } else {
+    messageBuffer.set(chatJid, [msg]);
+  }
+}
+
+function drainMessages(chatJid: string): NewMessage[] {
+  const msgs = messageBuffer.get(chatJid) || [];
+  messageBuffer.delete(chatJid);
+  return msgs;
+}
+
+function reBufferMessages(chatJid: string, msgs: NewMessage[]): void {
+  const existing = messageBuffer.get(chatJid) || [];
+  // Prepend the re-buffered messages (they came first)
+  messageBuffer.set(chatJid, [...msgs, ...existing]);
+}
+
+// --- Message processing ---
 
 /**
  * Process all pending messages for a registered chat.
- * Called by the GroupQueue when it's this chat's turn.
+ * Called by the SessionQueue when it's this chat's turn.
  */
-async function processGroupMessages(chatJid: string): Promise<boolean> {
-  const group = registeredGroups[chatJid];
-  if (!group) return true;
+async function processChatMessages(chatJid: string): Promise<boolean> {
+  const chat = chats[chatJid];
+  if (!chat) return true;
 
   const channel = findChannel(channels, chatJid);
   if (!channel) {
@@ -82,22 +100,13 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     return true;
   }
 
-  const sinceTimestamp = lastAgentTimestamp[chatJid] || '';
-  const missedMessages = getMessagesSince(chatJid, sinceTimestamp);
+  const pendingMessages = drainMessages(chatJid);
+  if (pendingMessages.length === 0) return true;
 
-  if (missedMessages.length === 0) return true;
-
-  const prompt = formatMessages(missedMessages);
-
-  // Advance cursor so the piping path in startMessageLoop won't re-fetch
-  // these messages. Save the old cursor so we can roll back on error.
-  const previousCursor = lastAgentTimestamp[chatJid] || '';
-  lastAgentTimestamp[chatJid] =
-    missedMessages[missedMessages.length - 1].timestamp;
-  saveState();
+  const prompt = formatMessages(pendingMessages);
 
   logger.info(
-    { chat: group.name, messageCount: missedMessages.length },
+    { chat: chat.name, messageCount: pendingMessages.length },
     'Processing messages',
   );
 
@@ -107,7 +116,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const resetIdleTimer = () => {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
-      logger.debug({ chat: group.name }, 'Idle timeout, aborting session');
+      logger.debug({ chat: chat.name }, 'Idle timeout, aborting session');
       queue.closeStdin(chatJid);
     }, IDLE_TIMEOUT);
   };
@@ -116,13 +125,13 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let hadError = false;
   let outputSentToUser = false;
 
-  const output = await runAgent(group, prompt, chatJid, async (result) => {
+  const output = await runAgent(chat, prompt, chatJid, async (result) => {
     // Streaming output callback — called for each agent result
     if (result.result) {
       const raw = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
       // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ chat: group.name }, `Agent output: ${raw.slice(0, 200)}`);
+      logger.info({ chat: chat.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
         await channel.sendMessage(chatJid, text);
         outputSentToUser = true;
@@ -140,16 +149,15 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (idleTimer) clearTimeout(idleTimer);
 
   if (output === 'error' || hadError) {
-    // If we already sent output to the user, don't roll back the cursor —
+    // If we already sent output to the user, don't re-buffer —
     // the user got their response and re-processing would send duplicates.
     if (outputSentToUser) {
-      logger.warn({ chat: group.name }, 'Agent error after output was sent, skipping cursor rollback to prevent duplicates');
+      logger.warn({ chat: chat.name }, 'Agent error after output was sent, skipping re-buffer to prevent duplicates');
       return true;
     }
-    // Roll back cursor so retries can re-process these messages
-    lastAgentTimestamp[chatJid] = previousCursor;
-    saveState();
-    logger.warn({ chat: group.name }, 'Agent error, rolled back message cursor for retry');
+    // Re-buffer messages so retries can re-process them
+    reBufferMessages(chatJid, pendingMessages);
+    logger.warn({ chat: chat.name }, 'Agent error, re-buffered messages for retry');
     return false;
   }
 
@@ -157,20 +165,20 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 }
 
 async function runAgent(
-  group: RegisteredGroup,
+  chat: ChatConfig,
   prompt: string,
   chatJid: string,
   onOutput?: (output: AgentOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
-  const sessionId = sessions[group.folder];
+  const sessionId = getSessionId(chat.folder);
 
   // Update tasks snapshot for agent to read
   const tasks = getAllTasks();
   writeTasksSnapshot(
-    group.folder,
+    chat.folder,
     tasks.map((t) => ({
       id: t.id,
-      groupFolder: t.group_folder,
+      chatFolder: t.chatFolder,
       prompt: t.prompt,
       schedule_type: t.schedule_type,
       schedule_value: t.schedule_value,
@@ -183,8 +191,7 @@ async function runAgent(
   const wrappedOnOutput = onOutput
     ? async (output: AgentOutput) => {
         if (output.newSessionId) {
-          sessions[group.folder] = output.newSessionId;
-          setSession(group.folder, output.newSessionId);
+          setSessionId(chat.folder, output.newSessionId);
         }
         await onOutput(output);
       }
@@ -192,27 +199,26 @@ async function runAgent(
 
   try {
     // Register the session in the queue for follow-ups
-    queue.registerSession(chatJid, group.folder, sessionId);
+    queue.registerSession(chatJid, chat.folder, sessionId);
 
     const output = await startSession(
-      group,
+      chat,
       {
         prompt,
         sessionId,
-        groupFolder: group.folder,
+        chatFolder: chat.folder,
         chatJid,
       },
       wrappedOnOutput ?? (async () => {}),
     );
 
     if (output.newSessionId) {
-      sessions[group.folder] = output.newSessionId;
-      setSession(group.folder, output.newSessionId);
+      setSessionId(chat.folder, output.newSessionId);
     }
 
     if (output.status === 'error') {
       logger.error(
-        { chat: group.name, error: output.error },
+        { chat: chat.name, error: output.error },
         'Agent error',
       );
       return 'error';
@@ -220,113 +226,63 @@ async function runAgent(
 
     return 'success';
   } catch (err) {
-    logger.error({ chat: group.name, err }, 'Agent error');
+    logger.error({ chat: chat.name, err }, 'Agent error');
     return 'error';
   }
 }
 
-async function startMessageLoop(): Promise<void> {
-  if (messageLoopRunning) {
-    logger.debug('Message loop already running, skipping duplicate start');
-    return;
-  }
-  messageLoopRunning = true;
+// --- Inbound message handler (called directly by channel) ---
 
-  logger.info('PocketBrain running');
+function onInboundMessage(chatJid: string, msg: NewMessage): void {
+  // Only process messages for registered chats
+  if (!chats[chatJid]) return;
 
-  while (true) {
-    try {
-      const jids = Object.keys(registeredGroups);
-      const { messages, newTimestamp } = getNewMessages(jids, lastTimestamp);
+  // Skip bot messages to avoid self-triggering
+  if (msg.is_bot_message) return;
 
-      if (messages.length > 0) {
-        logger.info({ count: messages.length }, 'New messages');
+  bufferMessage(chatJid, msg);
 
-        // Advance the "seen" cursor for all messages immediately
-        lastTimestamp = newTimestamp;
-        saveState();
+  const chat = chats[chatJid];
+  const channel = findChannel(channels, chatJid);
 
-        // Deduplicate by chat
-        const messagesByChat = new Map<string, NewMessage[]>();
-        for (const msg of messages) {
-          const existing = messagesByChat.get(msg.chat_jid);
-          if (existing) {
-            existing.push(msg);
-          } else {
-            messagesByChat.set(msg.chat_jid, [msg]);
-          }
-        }
-
-        for (const [chatJid, chatMessages] of messagesByChat) {
-          const group = registeredGroups[chatJid];
-          if (!group) continue;
-
-          const channel = findChannel(channels, chatJid);
-          if (!channel) {
-            logger.warn({ chatJid }, 'No channel owns JID, skipping messages');
-            continue;
-          }
-
-          // Pull all messages since lastAgentTimestamp for full context
-          const allPending = getMessagesSince(
-            chatJid,
-            lastAgentTimestamp[chatJid] || '',
-          );
-          const messagesToSend =
-            allPending.length > 0 ? allPending : chatMessages;
-          const formatted = formatMessages(messagesToSend);
-
-          // Show typing indicator while waiting for the follow-up to complete
-          channel.setTyping?.(chatJid, true);
-          if (await queue.sendMessage(chatJid, formatted)) {
-            logger.debug(
-              { chatJid, count: messagesToSend.length },
-              'Piped messages to active session',
-            );
-            lastAgentTimestamp[chatJid] =
-              messagesToSend[messagesToSend.length - 1].timestamp;
-            saveState();
-          } else {
-            // No active session — enqueue for a new one
-            queue.enqueueMessageCheck(chatJid);
-          }
-          channel.setTyping?.(chatJid, false);
-        }
-      }
-    } catch (err) {
-      logger.error({ err }, 'Error in message loop');
-    }
-    await Bun.sleep(POLL_INTERVAL);
-  }
-}
-
-/**
- * Startup recovery: check for unprocessed messages in registered chats.
- * Handles crash between advancing lastTimestamp and processing messages.
- */
-function recoverPendingMessages(): void {
-  for (const [chatJid, group] of Object.entries(registeredGroups)) {
-    const sinceTimestamp = lastAgentTimestamp[chatJid] || '';
-    const pending = getMessagesSince(chatJid, sinceTimestamp);
-    if (pending.length > 0) {
-      logger.info(
-        { chat: group.name, pendingCount: pending.length },
-        'Recovery: found unprocessed messages',
-      );
+  // Try to pipe to active session first (follow-up message)
+  const formatted = formatMessages([msg]);
+  channel?.setTyping?.(chatJid, true);
+  queue.sendMessage(chatJid, formatted).then((piped) => {
+    if (piped) {
+      // Message was piped to active session — drain it from buffer
+      drainMessages(chatJid);
+      logger.debug({ chatJid, chat: chat.name }, 'Piped message to active session');
+    } else {
+      // No active session — enqueue for a new one
       queue.enqueueMessageCheck(chatJid);
     }
-  }
+    channel?.setTyping?.(chatJid, false);
+  }).catch((err) => {
+    logger.error({ chatJid, err }, 'Error piping message');
+    queue.enqueueMessageCheck(chatJid);
+    channel?.setTyping?.(chatJid, false);
+  });
 }
 
+// --- Main ---
+
 async function main(): Promise<void> {
-  initDatabase();
-  logger.info('Database initialized');
-  loadState();
+  ensureDataDirs();
+  logger.info('Data directories initialized');
+
+  chats = loadAllChats();
+  const state = loadState();
+  logger.info(
+    { chatCount: Object.keys(chats).length },
+    'State loaded',
+  );
 
   // Boot OpenCode server
   await bootOpenCode();
 
   // Wire up queue with OpenCode SDK functions
+  queue.setProcessMessagesFn(processChatMessages);
   queue.setSendFollowUpFn(sendFollowUp);
   queue.setAbortSessionFn(abortSession);
 
@@ -343,10 +299,8 @@ async function main(): Promise<void> {
 
   // Channel callbacks (shared by all channels)
   const channelOpts = {
-    onMessage: (_chatJid: string, msg: NewMessage) => storeMessage(msg),
-    onChatMetadata: (chatJid: string, timestamp: string, name?: string, channel?: string, isGroup?: boolean) =>
-      storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
-    registeredGroups: () => registeredGroups,
+    onMessage: onInboundMessage,
+    chats: () => chats,
   };
 
   // Create and connect channels — set CHANNEL=mock for e2e test mode
@@ -357,15 +311,15 @@ async function main(): Promise<void> {
     channels.push(mock);
     await mock.connect();
   } else {
-    whatsapp = new WhatsAppChannel(channelOpts);
-    channels.push(whatsapp);
-    await whatsapp.connect();
+    const wa = new WhatsAppChannel(channelOpts);
+    channels.push(wa);
+    await wa.connect();
   }
 
-  // Start subsystems (independently of connection handler)
+  // Start subsystems
   startSchedulerLoop({
-    registeredGroups: () => registeredGroups,
-    getSessions: () => sessions,
+    chats: () => chats,
+    getSessions,
     queue,
     sendMessage: async (jid, rawText) => {
       const channel = findChannel(channels, jid);
@@ -383,11 +337,10 @@ async function main(): Promise<void> {
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       return channel.sendMessage(jid, text);
     },
-    registeredGroups: () => registeredGroups,
+    chats: () => chats,
   });
-  queue.setProcessMessagesFn(processGroupMessages);
-  recoverPendingMessages();
-  startMessageLoop();
+
+  logger.info('PocketBrain running');
 }
 
 // Guard: only run when executed directly, not when imported by tests

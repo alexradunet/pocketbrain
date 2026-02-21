@@ -1,4 +1,4 @@
-﻿import fs from 'fs';
+import fs from 'fs';
 import path from 'path';
 
 import makeWASocket, {
@@ -9,25 +9,18 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 
-import { ASSISTANT_HAS_OWN_NUMBER, STORE_DIR } from '../config.js';
+import { ASSISTANT_HAS_OWN_NUMBER, DATA_DIR } from '../config.js';
 
 // Name used to prefix outgoing messages on shared phone numbers
 const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Andy';
-import {
-  getLastGroupSync,
-  setLastGroupSync,
-  updateChatName,
-} from '../db.js';
 import { logger } from '../logger.js';
-import { Channel, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
+import { Channel, ChatConfig, NewMessage, OnInboundMessage } from '../types.js';
 
-const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const MAX_OUTGOING_QUEUE_SIZE = 100;
 
 export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
-  onChatMetadata: OnChatMetadata;
-  registeredGroups: () => Record<string, RegisteredGroup>;
+  chats: () => Record<string, ChatConfig>;
 }
 
 export class WhatsAppChannel implements Channel {
@@ -38,7 +31,6 @@ export class WhatsAppChannel implements Channel {
   private lidToPhoneMap: Record<string, string> = {};
   private outgoingQueue: Array<{ jid: string; text: string }> = [];
   private flushing = false;
-  private groupSyncTimerStarted = false;
 
   private reconnecting = false;
   private opts: WhatsAppChannelOpts;
@@ -54,7 +46,7 @@ export class WhatsAppChannel implements Channel {
   }
 
   private async connectInternal(onFirstOpen?: () => void): Promise<void> {
-    const authDir = path.join(STORE_DIR, 'auth');
+    const authDir = path.join(DATA_DIR, 'auth');
     fs.mkdirSync(authDir, { recursive: true });
 
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -93,12 +85,10 @@ export class WhatsAppChannel implements Channel {
           this.reconnecting = true;
           logger.info('Reconnecting...');
           this.connectInternal().catch((err) => {
-            // Do NOT reset reconnecting here — keep it true so the 5s window is protected
-            // from concurrent reconnect attempts triggered by further close events.
             logger.error({ err }, 'Failed to reconnect, retrying in 5s');
             setTimeout(() => {
               this.connectInternal().catch((err2) => {
-                this.reconnecting = false; // Only reset after retry also fails
+                this.reconnecting = false;
                 logger.error({ err: err2 }, 'Reconnection retry failed');
               });
             }, 5000);
@@ -130,20 +120,6 @@ export class WhatsAppChannel implements Channel {
           logger.error({ err }, 'Failed to flush outgoing queue'),
         );
 
-        // Sync group metadata on startup (respects 24h cache)
-        this.syncGroupMetadata().catch((err) =>
-          logger.error({ err }, 'Initial group sync failed'),
-        );
-        // Set up daily sync timer (only once)
-        if (!this.groupSyncTimerStarted) {
-          this.groupSyncTimerStarted = true;
-          setInterval(() => {
-            this.syncGroupMetadata().catch((err) =>
-              logger.error({ err }, 'Periodic group sync failed'),
-            );
-          }, GROUP_SYNC_INTERVAL_MS);
-        }
-
         // Signal first connection to caller
         if (onFirstOpen) {
           onFirstOpen();
@@ -167,13 +143,9 @@ export class WhatsAppChannel implements Channel {
           Number(msg.messageTimestamp) * 1000,
         ).toISOString();
 
-        // Always notify about chat metadata for group discovery
-        const isGroup = chatJid.endsWith('@g.us');
-        this.opts.onChatMetadata(chatJid, timestamp, undefined, 'whatsapp', isGroup);
-
-        // Only deliver full message for registered groups
-        const groups = this.opts.registeredGroups();
-        if (groups[chatJid]) {
+        // Only deliver full message for registered chats
+        const chats = this.opts.chats();
+        if (chats[chatJid]) {
           const content =
             msg.message?.conversation ||
             msg.message?.extendedTextMessage?.text ||
@@ -254,42 +226,6 @@ export class WhatsAppChannel implements Channel {
     }
   }
 
-  /**
-   * Sync group metadata from WhatsApp.
-   * Fetches all participating groups and stores their names in the database.
-   * Called on startup, daily, and on-demand via IPC.
-   */
-  async syncGroupMetadata(force = false): Promise<void> {
-    if (!force) {
-      const lastSync = getLastGroupSync();
-      if (lastSync) {
-        const lastSyncTime = new Date(lastSync).getTime();
-        if (Date.now() - lastSyncTime < GROUP_SYNC_INTERVAL_MS) {
-          logger.debug({ lastSync }, 'Skipping group sync - synced recently');
-          return;
-        }
-      }
-    }
-
-    try {
-      logger.info('Syncing group metadata from WhatsApp...');
-      const groups = await this.sock.groupFetchAllParticipating();
-
-      let count = 0;
-      for (const [jid, metadata] of Object.entries(groups)) {
-        if (metadata.subject) {
-          updateChatName(jid, metadata.subject);
-          count++;
-        }
-      }
-
-      setLastGroupSync();
-      logger.info({ count }, 'Group metadata synced');
-    } catch (err) {
-      logger.error({ err }, 'Failed to sync group metadata');
-    }
-  }
-
   private async translateJid(jid: string): Promise<string> {
     if (!jid.endsWith('@lid')) return jid;
     const lidUser = jid.split('@')[0].split(':')[0];
@@ -347,4 +283,3 @@ export class WhatsAppChannel implements Channel {
     }
   }
 }
-
