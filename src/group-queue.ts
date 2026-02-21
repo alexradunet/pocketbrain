@@ -279,7 +279,7 @@ export class GroupQueue {
     }
   }
 
-  async shutdown(_gracePeriodMs: number): Promise<void> {
+  async shutdown(gracePeriodMs: number): Promise<void> {
     this.shuttingDown = true;
 
     const activeSessions: string[] = [];
@@ -293,5 +293,17 @@ export class GroupQueue {
       { activeCount: this.activeCount, activeSessions },
       'GroupQueue shutting down',
     );
+
+    if (this.activeCount === 0) return;
+
+    // Wait for active sessions to finish, up to gracePeriodMs
+    const deadline = Date.now() + gracePeriodMs;
+    while (this.activeCount > 0 && Date.now() < deadline) {
+      await Bun.sleep(100);
+    }
+
+    if (this.activeCount > 0) {
+      logger.warn({ activeCount: this.activeCount }, 'Shutdown grace period expired with active sessions');
+    }
   }
 }

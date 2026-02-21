@@ -38,6 +38,6 @@ services:
       sh -lc "apt-get update &&
       apt-get install -y --no-install-recommends git diffutils >/dev/null &&
       bun install --frozen-lockfile &&
-      bun test src skills-engine/__tests__"
+      bun test src"
     profiles:
       - test

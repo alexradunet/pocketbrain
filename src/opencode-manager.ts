@@ -79,14 +79,18 @@ export async function boot(): Promise<void> {
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
   const skillsDst = path.join(process.cwd(), '.opencode', 'skills');
   if (fs.existsSync(skillsSrc)) {
-    for (const skillDir of fs.readdirSync(skillsSrc)) {
-      const srcDir = path.join(skillsSrc, skillDir);
-      if (!fs.statSync(srcDir).isDirectory()) continue;
-      const dstDir = path.join(skillsDst, skillDir);
-      fs.mkdirSync(dstDir, { recursive: true });
-      for (const file of fs.readdirSync(srcDir)) {
-        fs.copyFileSync(path.join(srcDir, file), path.join(dstDir, file));
+    try {
+      for (const skillDir of fs.readdirSync(skillsSrc)) {
+        const srcDir = path.join(skillsSrc, skillDir);
+        if (!fs.statSync(srcDir).isDirectory()) continue;
+        const dstDir = path.join(skillsDst, skillDir);
+        fs.mkdirSync(dstDir, { recursive: true });
+        for (const file of fs.readdirSync(srcDir)) {
+          fs.copyFileSync(path.join(srcDir, file), path.join(dstDir, file));
+        }
       }
+    } catch (err) {
+      logger.warn({ err }, 'Skills sync failed — continuing without skills');
     }
   }
 
@@ -176,19 +180,28 @@ export async function startSession(
   fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
 
-  // Create or resume session
+  // Create or resume session (with timeout to avoid hanging on a stalled server)
+  const SESSION_INIT_TIMEOUT_MS = 15000;
   let sessionId: string;
   try {
     if (input.sessionId) {
       logger.debug({ sessionId: input.sessionId }, 'Resuming session');
-      await client.session.get({ path: { id: input.sessionId } });
+      await Promise.race([
+        client.session.get({ path: { id: input.sessionId } }),
+        Bun.sleep(SESSION_INIT_TIMEOUT_MS).then(() => {
+          throw new Error('session.get timed out');
+        }),
+      ]);
       sessionId = input.sessionId;
     } else {
       logger.debug({ group: group.name }, 'Creating new session');
-      const resp = await client.session.create({
-        body: { title: `PocketBrain: ${group.name}` },
-      });
-      sessionId = resp.data!.id;
+      const resp = await Promise.race([
+        client.session.create({ body: { title: `PocketBrain: ${group.name}` } }),
+        Bun.sleep(SESSION_INIT_TIMEOUT_MS).then(() => {
+          throw new Error('session.create timed out');
+        }),
+      ]);
+      sessionId = (resp as Awaited<ReturnType<typeof client.session.create>>).data!.id;
       logger.info({ sessionId, group: group.name }, 'New session created');
     }
   } catch (err) {
