@@ -131,18 +131,21 @@ export class GroupQueue {
 
   /**
    * Send a follow-up message to the active session via the OpenCode SDK.
-   * Returns true if the message was sent, false if no active session.
+   * Returns true if the message was accepted, false if no active session or
+   * the session rejected it (e.g. busy). Callers must NOT advance their
+   * message cursor when this returns false.
    */
-  sendMessage(groupJid: string, text: string): boolean {
+  async sendMessage(groupJid: string, text: string): Promise<boolean> {
     const state = this.getGroup(groupJid);
     if (!state.active || !state.groupFolder) return false;
     if (!this.sendFollowUpFn) return false;
 
-    // Fire and forget — the follow-up runs async and calls onOutput
-    this.sendFollowUpFn(state.groupFolder, text).catch((err) => {
+    try {
+      return await this.sendFollowUpFn(state.groupFolder, text);
+    } catch (err) {
       logger.error({ groupJid, err }, 'Follow-up send error');
-    });
-    return true;
+      return false;
+    }
   }
 
   /**

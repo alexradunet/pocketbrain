@@ -199,7 +199,6 @@ describe('getNewMessages', () => {
     const { messages, newTimestamp } = getNewMessages(
       ['group1@g.us', 'group2@g.us'],
       '2024-01-01T00:00:00.000Z',
-      'Andy',
     );
     // Excludes bot message, returns 3 user messages
     expect(messages).toHaveLength(3);
@@ -210,7 +209,6 @@ describe('getNewMessages', () => {
     const { messages } = getNewMessages(
       ['group1@g.us', 'group2@g.us'],
       '2024-01-01T00:00:02.000Z',
-      'Andy',
     );
     // Only g1 msg2 (after ts, not bot)
     expect(messages).toHaveLength(1);

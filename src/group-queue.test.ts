@@ -203,6 +203,32 @@ describe('GroupQueue', () => {
     expect(callCount).toBe(countAfterMaxRetries);
   });
 
+  // --- sendMessage returns false when follow-up is rejected (C1 bug) ---
+
+  it('sendMessage returns false when sendFollowUp returns false (session busy)', async () => {
+    let releaseProcess: () => void;
+    const processMessages = vi.fn(async () => {
+      await new Promise<void>((r) => { releaseProcess = r; });
+      return true;
+    });
+    queue.setProcessMessagesFn(processMessages);
+
+    const sendFollowUp = vi.fn(async (_folder: string, _text: string) => false);
+    queue.setSendFollowUpFn(sendFollowUp);
+
+    // Start a session (makes state.active = true)
+    queue.enqueueMessageCheck('group1@g.us');
+    queue.registerSession('group1@g.us', 'folder1');
+    await advanceTimersByTimeAsync(10);
+
+    // sendFollowUp returns false (session busy) — sendMessage must propagate that
+    const result = await queue.sendMessage('group1@g.us', 'hello');
+    expect(result).toBe(false);
+
+    releaseProcess!();
+    await advanceTimersByTimeAsync(10);
+  });
+
   // --- Waiting groups get drained when slots free up ---
 
   it('drains waiting groups when active slots free up', async () => {

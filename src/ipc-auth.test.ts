@@ -591,6 +591,116 @@ describe('register_group success', () => {
 
     expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
   });
+
+  it('sanitizes path traversal in folder field', async () => {
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'evil@g.us',
+        name: 'Evil',
+        folder: '../../etc',
+        trigger: '@Andy',
+      },
+      'main',
+      true,
+      deps,
+    );
+
+    const group = getRegisteredGroup('evil@g.us');
+    expect(group).toBeDefined();
+    expect(group!.folder).toBe('etc');
+    expect(group!.folder).not.toContain('..');
+  });
+
+  it('sanitizes absolute path in folder field', async () => {
+    await processTaskIpc(
+      {
+        type: 'register_group',
+        jid: 'evil2@g.us',
+        name: 'Evil2',
+        folder: '/etc/passwd',
+        trigger: '@Andy',
+      },
+      'main',
+      true,
+      deps,
+    );
+
+    const group = getRegisteredGroup('evil2@g.us');
+    expect(group).toBeDefined();
+    expect(group!.folder).toBe('passwd');
+    expect(group!.folder).not.toContain('/');
+  });
+});
+
+// --- resume_task recomputes next_run ---
+
+describe('resume_task recomputes next_run', () => {
+  it('recomputes next_run for paused cron task', async () => {
+    createTask({
+      id: 'cron-task',
+      group_folder: 'main',
+      chat_jid: 'main@g.us',
+      prompt: 'test',
+      schedule_type: 'cron',
+      schedule_value: '* * * * *',
+      context_mode: 'isolated',
+      next_run: '2020-01-01T00:00:00.000Z',
+      status: 'paused',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    await processTaskIpc({ type: 'resume_task', taskId: 'cron-task' }, 'main', true, deps);
+
+    const task = getTaskById('cron-task');
+    expect(task!.status).toBe('active');
+    // next_run must be in the future (not the stale 2020 value)
+    expect(new Date(task!.next_run!).getTime()).toBeGreaterThan(Date.now() - 5000);
+  });
+
+  it('recomputes next_run for paused interval task', async () => {
+    createTask({
+      id: 'interval-task',
+      group_folder: 'main',
+      chat_jid: 'main@g.us',
+      prompt: 'test',
+      schedule_type: 'interval',
+      schedule_value: '3600000',
+      context_mode: 'isolated',
+      next_run: '2020-01-01T00:00:00.000Z',
+      status: 'paused',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    const before = Date.now();
+    await processTaskIpc({ type: 'resume_task', taskId: 'interval-task' }, 'main', true, deps);
+
+    const task = getTaskById('interval-task');
+    expect(task!.status).toBe('active');
+    const nextRunMs = new Date(task!.next_run!).getTime();
+    expect(nextRunMs).toBeGreaterThanOrEqual(before + 3600000 - 1000);
+  });
+
+  it('leaves next_run unchanged for paused once task', async () => {
+    createTask({
+      id: 'once-task',
+      group_folder: 'main',
+      chat_jid: 'main@g.us',
+      prompt: 'test',
+      schedule_type: 'once',
+      schedule_value: '2025-06-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: '2025-06-01T00:00:00.000Z',
+      status: 'paused',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    await processTaskIpc({ type: 'resume_task', taskId: 'once-task' }, 'main', true, deps);
+
+    const task = getTaskById('once-task');
+    expect(task!.status).toBe('active');
+    expect(task!.next_run).toBe('2025-06-01T00:00:00.000Z');
+  });
 });
 
 

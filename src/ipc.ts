@@ -290,7 +290,23 @@ export async function processTaskIpc(
       if (data.taskId) {
         const task = getTaskById(data.taskId);
         if (task && (isMain || task.group_folder === sourceGroup)) {
-          updateTask(data.taskId, { status: 'active' });
+          // Recompute next_run from now so stale past timestamps don't fire immediately
+          let resumeNextRun: string | undefined;
+          if (task.schedule_type === 'cron') {
+            try {
+              const interval = CronExpressionParser.parse(task.schedule_value, { tz: TIMEZONE });
+              resumeNextRun = interval.next().toISOString();
+            } catch {
+              // Invalid cron — leave next_run as-is
+            }
+          } else if (task.schedule_type === 'interval') {
+            const ms = parseInt(task.schedule_value, 10);
+            if (!isNaN(ms) && ms > 0) {
+              resumeNextRun = new Date(Date.now() + ms).toISOString();
+            }
+          }
+          // 'once' tasks keep their original next_run
+          updateTask(data.taskId, { status: 'active', ...(resumeNextRun ? { next_run: resumeNextRun } : {}) });
           logger.info(
             { taskId: data.taskId, sourceGroup },
             'Task resumed via IPC',
@@ -358,7 +374,7 @@ export async function processTaskIpc(
       if (data.jid && data.name && data.folder && data.trigger) {
         deps.registerGroup(data.jid, {
           name: data.name,
-          folder: data.folder,
+          folder: path.basename(data.folder),
           trigger: data.trigger,
           added_at: new Date().toISOString(),
           requiresTrigger: data.requiresTrigger,
