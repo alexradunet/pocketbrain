@@ -13,7 +13,11 @@
     "docker:build": "docker compose build pocketbrain",
     "docker:up": "docker compose up -d pocketbrain",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f pocketbrain"
+    "docker:logs": "docker compose logs -f pocketbrain",
+    "e2e": "docker compose -f docker-compose.e2e.yml up --build --exit-code-from e2e-runner --abort-on-container-exit",
+    "e2e:down": "docker compose -f docker-compose.e2e.yml down -v",
+    "e2e:local": "docker compose -f docker-compose.e2e.yml -f docker-compose.e2e.local.yml up --build --exit-code-from e2e-runner --abort-on-container-exit",
+    "e2e:local:down": "docker compose -f docker-compose.e2e.yml -f docker-compose.e2e.local.yml down -v"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
@@ -28,6 +32,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@ai-sdk/openai-compatible": "^0.2.0",
     "@types/bun": "latest",
     "@types/qrcode-terminal": "^0.12.2",
     "prettier": "^3.8.1",

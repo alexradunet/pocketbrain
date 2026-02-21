@@ -105,6 +105,30 @@ The codebase is small enough that OpenCode can safely modify it.
 
 Development and testing workflows are Docker-only (`bun run dev`, `bun run build`, `bun run test` all run through Docker Compose).
 
+## E2E Testing
+
+PocketBrain ships with a full end-to-end test suite that replaces WhatsApp with an HTTP-based mock channel (`CHANNEL=mock`), so tests run without a real phone or WhatsApp session.
+
+```bash
+# Cloud LLM (requires OPENCODE_API_KEY + ANTHROPIC_API_KEY for the judge)
+bun run e2e
+
+# Local LLM via Ollama — no cloud key needed for the agent
+# Downloads qwen2.5:3b (~1.9 GB) on first run; cached afterwards
+bun run e2e:local
+
+# Smaller model (0.98 GB, faster, weaker quality)
+OLLAMA_MODEL=qwen2.5:1.5b bun run e2e:local
+
+# Teardown volumes (fresh state)
+bun run e2e:down
+bun run e2e:local:down
+```
+
+Two test suites:
+- `src/e2e/agent.test.ts` — AI quality tests (requires a capable model + ANTHROPIC_API_KEY for the LLM judge)
+- `src/e2e/infra.test.ts` — Infrastructure tests (routing, session continuity, outbox delivery — no API key needed, works with any LLM)
+
 ## Architecture
 
 ```
@@ -131,10 +155,12 @@ Key files:
 - `src/index.ts` - Orchestrator: state, message loop, agent invocation
 - `src/opencode-manager.ts` - OpenCode SDK session management
 - `src/channels/whatsapp.ts` - WhatsApp connection, auth, send/receive
+- `src/channels/mock.ts` - HTTP-based test double (replaces WhatsApp in e2e)
 - `src/mcp-tools.ts` - MCP tools (send_message, schedule_task, etc.)
 - `src/group-queue.ts` - Per-group queue with global concurrency limit
 - `src/task-scheduler.ts` - Runs scheduled tasks
 - `src/db.ts` - SQLite operations (messages, groups, sessions, state)
+- `src/e2e/` - End-to-end test suite (harness + agent quality + infra tests)
 - `Dockerfile` - Debian 13 + Bun + Tailscale
 - `docker-compose.yml` - Container config with workspace volume
 

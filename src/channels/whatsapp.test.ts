@@ -319,6 +319,70 @@ describe('WhatsAppChannel', () => {
       // The channel sets a 5s retry — just verify it doesn't crash
       await new Promise((r) => setTimeout(r, 100));
     });
+
+    it('blocks new reconnect during 5s retry window after first reconnect fails', async () => {
+      const opts = createTestOpts();
+      const channel = new WhatsAppChannel(opts);
+
+      // Connect with real timers (connectChannel uses setTimeout(r,0) internally)
+      await connectChannel(channel);
+
+      // Switch to fake timers only for reconnection behavior
+      vi.useFakeTimers();
+
+      let reconnectCount = 0;
+      // Replace connectInternal so every reconnect attempt immediately fails
+      (channel as any).connectInternal = async () => {
+        reconnectCount++;
+        throw new Error('Connection refused');
+      };
+
+      // First disconnect: starts reconnect → fails → reconnecting stays true, 5s timer pending
+      triggerDisconnect(428);
+      await advanceTimersByTimeAsync(10);
+
+      // Second disconnect fires during the 5s window — must be blocked (reconnecting=true)
+      triggerDisconnect(428);
+      await advanceTimersByTimeAsync(10);
+
+      // Only 1 attempt; second disconnect was blocked because reconnecting stayed true
+      expect(reconnectCount).toBe(1);
+
+      vi.useRealTimers();
+    });
+
+    it('fires the 5s retry even when a concurrent disconnect was blocked', async () => {
+      const opts = createTestOpts();
+      const channel = new WhatsAppChannel(opts);
+
+      // Connect with real timers
+      await connectChannel(channel);
+
+      // Switch to fake timers for reconnection behavior
+      vi.useFakeTimers();
+
+      let reconnectCount = 0;
+      (channel as any).connectInternal = async () => {
+        reconnectCount++;
+        throw new Error('Connection refused');
+      };
+
+      // First disconnect → first attempt fails, reconnecting stays true, 5s timer starts
+      triggerDisconnect(428);
+      await advanceTimersByTimeAsync(10);
+      expect(reconnectCount).toBe(1);
+
+      // Second disconnect is blocked during the 5s window
+      triggerDisconnect(428);
+      await advanceTimersByTimeAsync(10);
+      expect(reconnectCount).toBe(1); // still 1
+
+      // Advance past 5s — the retry fires
+      await advanceTimersByTimeAsync(5100);
+      expect(reconnectCount).toBe(2); // retry ran
+
+      vi.useRealTimers();
+    });
   });
 
   // --- Message handling ---

@@ -8,6 +8,7 @@ import { NewMessage, RegisteredGroup, ScheduledTask, TaskRunLog } from './types.
 let db: Database;
 
 function createSchema(database: Database): void {
+  database.exec('PRAGMA foreign_keys = ON;');
   database.exec(`
     CREATE TABLE IF NOT EXISTS chats (
       jid TEXT PRIMARY KEY,
@@ -227,9 +228,13 @@ export function getNewMessages(
     ORDER BY timestamp
   `;
 
-  const rows = db
-    .prepare(sql)
-    .all(lastTimestamp, ...jids) as NewMessage[];
+  const rows = (db.prepare(sql).all(lastTimestamp, ...jids) as any[]).map(
+    (row) => ({
+      ...row,
+      is_from_me: Boolean(row.is_from_me),
+      is_bot_message: Boolean(row.is_bot_message),
+    }),
+  ) as NewMessage[];
 
   let newTimestamp = lastTimestamp;
   for (const row of rows) {
@@ -251,9 +256,11 @@ export function getMessagesSince(
       AND is_bot_message = 0
     ORDER BY timestamp
   `;
-  return db
-    .prepare(sql)
-    .all(chatJid, sinceTimestamp) as NewMessage[];
+  return (db.prepare(sql).all(chatJid, sinceTimestamp) as any[]).map((row) => ({
+    ...row,
+    is_from_me: Boolean(row.is_from_me),
+    is_bot_message: Boolean(row.is_bot_message),
+  })) as NewMessage[];
 }
 
 export function createTask(

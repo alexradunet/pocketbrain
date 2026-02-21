@@ -275,6 +275,13 @@ export async function processTaskIpc(
             );
             break;
           }
+          if (scheduled.getTime() <= Date.now()) {
+            logger.warn(
+              { scheduleValue: data.schedule_value },
+              'Once task timestamp is in the past, rejecting',
+            );
+            break;
+          }
           nextRun = scheduled.toISOString();
         }
 
@@ -329,7 +336,7 @@ export async function processTaskIpc(
           if (task.schedule_type === 'cron') {
             try {
               const interval = CronExpressionParser.parse(task.schedule_value, { tz: TIMEZONE });
-              resumeNextRun = interval.next().toISOString();
+              resumeNextRun = interval.next().toISOString() ?? undefined;
             } catch {
               // Invalid cron — leave next_run as-is
             }

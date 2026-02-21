@@ -83,3 +83,76 @@ Everything observable:
 | `src/formatting.test.ts` | Message formatting |
 | `src/routing.test.ts` | Channel routing logic |
 
+## Documentation — Keep the Guides Current
+
+The `docs/` directory contains a five-file guide suite that serves as both
+architecture reference and a learning resource for building personal AI agents.
+**Every code change that affects behaviour, interfaces, or design must update
+the relevant guide(s) before the work is considered done.**
+
+### Guide files and their scope
+
+| File | Update when… |
+|------|-------------|
+| `docs/GUIDE.md` | The emoji legend, file map, or architecture diagram changes |
+| `docs/GUIDE_JUNIOR.md` | User-facing concepts change (trigger word, groups, sessions, tools, data paths) |
+| `docs/GUIDE_INTERMEDIATE.md` | Component responsibilities, SQLite schema, config vars, code references, or message flow change |
+| `docs/GUIDE_ARCHITECT.md` | A design decision is added/changed, a tradeoff changes, or an extension point is added |
+| `docs/GUIDE_BUILDER.md` | A reusable pattern changes (IPC, MCP tools, sessions, scheduling, concurrency, security) |
+
+### Style rules — match the existing guides exactly
+
+1. **Use the emoji system as concept anchors.** Every guide uses the same
+   emoji legend defined in `docs/GUIDE.md`. Do not invent new emoji for
+   existing concepts. Do not drop emoji from existing sections.
+
+   | Emoji | Concept |
+   |-------|---------|
+   | 💬 | WhatsApp message / chat |
+   | 🧠 | AI agent / OpenCode |
+   | 🗄️ | SQLite / database |
+   | 📁 | Files / IPC |
+   | ⏰ | Scheduler / cron |
+   | 🐳 | Docker container |
+   | 🌐 | Web / network |
+   | 🎯 | Trigger word |
+   | 👥 | WhatsApp group |
+   | 👑 | Main group (admin) |
+   | 🔌 | MCP tools |
+   | 🧩 | Skills / extensions |
+   | 🔄 | Session / state |
+   | 🔀 | Queue / concurrency |
+   | 🔑 | Config / env vars |
+   | 📝 | AGENTS.md / memory |
+   | 🛡️ | Security / authorization |
+   | 📡 | SSE streaming |
+   | 🔁 | Retry / backoff |
+   | 🚀 | Startup / boot |
+   | ⚡ | Performance |
+   | 💡 | Key insight / design decision |
+   | ⚠️ | Tradeoff / warning |
+
+2. **Code references use `file:line` format.**
+   `src/opencode-manager.ts:409` not just "in opencode-manager".
+   Update line numbers when code moves.
+
+3. **Tables over prose for structured data.**
+   Config vars, schema columns, auth rules, timing values → tables.
+
+4. **Three-part structure in `GUIDE_BUILDER.md`.**
+   Every pattern section must have: 🎓 The Concept, 📐 The Pattern
+   (generic code), 🔍 PocketBrain Implementation, ✅ The Lesson.
+
+5. **`⚠️` for every tradeoff.** When a design decision has a downside,
+   call it out with `> ⚠️ **Tradeoff accepted:**`.
+
+6. **`💡` for every non-obvious insight.** When explaining *why* something
+   is done a certain way, lead with `> 💡`.
+
+### What does NOT need a doc update
+
+- Log message wording changes
+- Test-only changes with no behaviour difference
+- Dependency version bumps with no API surface change
+- Refactors that preserve all existing behaviour exactly
+

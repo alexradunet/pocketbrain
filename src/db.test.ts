@@ -5,12 +5,21 @@ import {
   createTask,
   deleteTask,
   getAllChats,
+  getAllRegisteredGroups,
+  getDueTasks,
+  getLastGroupSync,
   getMessagesSince,
   getNewMessages,
+  getRegisteredGroup,
+  getRouterState,
   getTaskById,
+  setLastGroupSync,
+  setRegisteredGroup,
+  setRouterState,
   storeChatMetadata,
   storeMessage,
   updateTask,
+  updateTaskAfterRun,
 } from './db.js';
 
 beforeEach(() => {
@@ -226,11 +235,11 @@ describe('getNewMessages', () => {
       ['group1@g.us'],
       '2024-01-01T00:00:00.000Z',
     );
-    // is_bot_message rows are filtered out; user messages must have the fields
+    // is_bot_message rows are filtered out; user messages must have boolean fields (not SQLite integers)
     expect(messages.length).toBeGreaterThan(0);
     for (const m of messages) {
-      expect(m.is_from_me).toBeDefined();
-      expect(m.is_bot_message).toBeDefined();
+      expect(typeof m.is_from_me).toBe('boolean');
+      expect(typeof m.is_bot_message).toBe('boolean');
     }
   });
 });
@@ -309,6 +318,22 @@ describe('task CRUD', () => {
     expect(getTaskById('task-2')!.status).toBe('paused');
   });
 
+  it('enforces FK: storeMessage without parent chat throws', () => {
+    // FK enforcement (PRAGMA foreign_keys = ON) must be active.
+    // Storing a message with a chat_jid that has no row in chats should throw.
+    expect(() => {
+      storeMessage({
+        id: 'orphan-msg',
+        chat_jid: 'ghost@g.us',
+        sender: 'x@s.whatsapp.net',
+        sender_name: 'X',
+        content: 'hello',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        is_from_me: false,
+      });
+    }).toThrow();
+  });
+
   it('deletes a task and its run logs', () => {
     createTask({
       id: 'task-3',
@@ -328,4 +353,234 @@ describe('task CRUD', () => {
   });
 });
 
+// --- getLastGroupSync / setLastGroupSync ---
 
+describe('getLastGroupSync / setLastGroupSync', () => {
+  it('returns null when not set', () => {
+    expect(getLastGroupSync()).toBeNull();
+  });
+
+  it('returns a timestamp after setLastGroupSync is called', () => {
+    const before = Date.now();
+    setLastGroupSync();
+    const result = getLastGroupSync();
+    expect(result).not.toBeNull();
+    // The stored timestamp should be a valid ISO string at or after 'before'
+    expect(new Date(result!).getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('overwrites previous sync time on repeated calls', () => {
+    setLastGroupSync();
+    const first = getLastGroupSync();
+    setLastGroupSync();
+    const second = getLastGroupSync();
+    // Both are valid; second is >= first
+    expect(new Date(second!).getTime()).toBeGreaterThanOrEqual(new Date(first!).getTime());
+  });
+});
+
+// --- getDueTasks ---
+
+describe('getDueTasks', () => {
+  it('returns active tasks whose next_run is in the past', () => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    createTask({
+      id: 'due-task',
+      group_folder: 'main',
+      chat_jid: 'group@g.us',
+      prompt: 'due now',
+      schedule_type: 'once',
+      schedule_value: '2020-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: '2020-01-01T00:00:00.000Z', // past
+      status: 'active',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    const due = getDueTasks();
+    expect(due).toHaveLength(1);
+    expect(due[0].id).toBe('due-task');
+  });
+
+  it('does not return paused tasks', () => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    createTask({
+      id: 'paused-task',
+      group_folder: 'main',
+      chat_jid: 'group@g.us',
+      prompt: 'paused',
+      schedule_type: 'once',
+      schedule_value: '2020-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: '2020-01-01T00:00:00.000Z', // past
+      status: 'paused',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    expect(getDueTasks()).toHaveLength(0);
+  });
+
+  it('does not return future-scheduled tasks', () => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    createTask({
+      id: 'future-task',
+      group_folder: 'main',
+      chat_jid: 'group@g.us',
+      prompt: 'future',
+      schedule_type: 'once',
+      schedule_value: '2099-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: '2099-01-01T00:00:00.000Z', // far future
+      status: 'active',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    expect(getDueTasks()).toHaveLength(0);
+  });
+});
+
+// --- updateTaskAfterRun ---
+
+describe('updateTaskAfterRun', () => {
+  it('updates last_run and last_result, advances next_run for interval tasks', () => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    createTask({
+      id: 'interval-run',
+      group_folder: 'main',
+      chat_jid: 'group@g.us',
+      prompt: 'recurring',
+      schedule_type: 'interval',
+      schedule_value: '3600000',
+      context_mode: 'isolated',
+      next_run: '2020-01-01T00:00:00.000Z',
+      status: 'active',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    const nextRunAfter = new Date(Date.now() + 3600000).toISOString();
+    const before = Date.now();
+    updateTaskAfterRun('interval-run', nextRunAfter, 'ok');
+
+    const task = getTaskById('interval-run');
+    expect(task).toBeDefined();
+    expect(task!.last_result).toBe('ok');
+    expect(new Date(task!.last_run!).getTime()).toBeGreaterThanOrEqual(before);
+    expect(task!.next_run).toBe(nextRunAfter);
+    // Status should still be active (nextRun is non-null)
+    expect(task!.status).toBe('active');
+  });
+
+  it('sets status to completed when nextRun is null', () => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    createTask({
+      id: 'once-run',
+      group_folder: 'main',
+      chat_jid: 'group@g.us',
+      prompt: 'one shot',
+      schedule_type: 'once',
+      schedule_value: '2020-01-01T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: '2020-01-01T00:00:00.000Z',
+      status: 'active',
+      created_at: '2020-01-01T00:00:00.000Z',
+    });
+
+    updateTaskAfterRun('once-run', null, 'done');
+
+    const task = getTaskById('once-run');
+    expect(task!.status).toBe('completed');
+    expect(task!.last_result).toBe('done');
+    expect(task!.next_run).toBeNull();
+  });
+});
+
+// --- getRouterState / setRouterState ---
+
+describe('getRouterState / setRouterState', () => {
+  it('returns undefined for a key that has not been set', () => {
+    expect(getRouterState('nonexistent-key')).toBeUndefined();
+  });
+
+  it('returns the value that was set', () => {
+    setRouterState('my-key', 'my-value');
+    expect(getRouterState('my-key')).toBe('my-value');
+  });
+
+  it('overwrites the previous value on a second set', () => {
+    setRouterState('overwrite-key', 'first');
+    setRouterState('overwrite-key', 'second');
+    expect(getRouterState('overwrite-key')).toBe('second');
+  });
+
+  it('stores independent values for different keys', () => {
+    setRouterState('key-a', 'value-a');
+    setRouterState('key-b', 'value-b');
+    expect(getRouterState('key-a')).toBe('value-a');
+    expect(getRouterState('key-b')).toBe('value-b');
+  });
+});
+
+// --- requiresTrigger mapping in getRegisteredGroup / getAllRegisteredGroups ---
+
+describe('requiresTrigger mapping in getRegisteredGroup / getAllRegisteredGroups', () => {
+  it('stored as undefined (default) → requiresTrigger is true (default coercion)', () => {
+    // setRegisteredGroup stores undefined requiresTrigger as 1 (true) per db.ts line 481
+    setRegisteredGroup('g1@g.us', {
+      name: 'G1',
+      folder: 'g1',
+      trigger: 'always',
+      added_at: '2024-01-01T00:00:00.000Z',
+      requiresTrigger: undefined,
+    });
+
+    const group = getRegisteredGroup('g1@g.us');
+    expect(group).toBeDefined();
+    // undefined requiresTrigger is stored as 1, so read back as true
+    expect(group!.requiresTrigger).toBe(true);
+  });
+
+  it('stored with requiresTrigger=true → requiresTrigger is true', () => {
+    setRegisteredGroup('g2@g.us', {
+      name: 'G2',
+      folder: 'g2',
+      trigger: '@bot',
+      added_at: '2024-01-01T00:00:00.000Z',
+      requiresTrigger: true,
+    });
+
+    const group = getRegisteredGroup('g2@g.us');
+    expect(group!.requiresTrigger).toBe(true);
+  });
+
+  it('stored with requiresTrigger=false → requiresTrigger is false', () => {
+    setRegisteredGroup('g3@g.us', {
+      name: 'G3',
+      folder: 'g3',
+      trigger: 'always',
+      added_at: '2024-01-01T00:00:00.000Z',
+      requiresTrigger: false,
+    });
+
+    const group = getRegisteredGroup('g3@g.us');
+    expect(group!.requiresTrigger).toBe(false);
+  });
+
+  it('getAllRegisteredGroups maps requiresTrigger correctly for multiple groups', () => {
+    setRegisteredGroup('h1@g.us', {
+      name: 'H1', folder: 'h1', trigger: 'always',
+      added_at: '2024-01-01T00:00:00.000Z', requiresTrigger: true,
+    });
+    setRegisteredGroup('h2@g.us', {
+      name: 'H2', folder: 'h2', trigger: '@bot',
+      added_at: '2024-01-01T00:00:00.000Z', requiresTrigger: false,
+    });
+
+    const all = getAllRegisteredGroups();
+    expect(all['h1@g.us'].requiresTrigger).toBe(true);
+    expect(all['h2@g.us'].requiresTrigger).toBe(false);
+  });
+
+  it('getRegisteredGroup returns undefined for unknown jid', () => {
+    expect(getRegisteredGroup('missing@g.us')).toBeUndefined();
+  });
+});

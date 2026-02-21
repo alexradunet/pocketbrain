@@ -433,10 +433,18 @@ async function main(): Promise<void> {
     registeredGroups: () => registeredGroups,
   };
 
-  // Create and connect channels
-  whatsapp = new WhatsAppChannel(channelOpts);
-  channels.push(whatsapp);
-  await whatsapp.connect();
+  // Create and connect channels — set CHANNEL=mock for e2e test mode
+  const channelMode = process.env.CHANNEL || 'whatsapp';
+  if (channelMode === 'mock') {
+    const { MockChannel } = await import('./channels/mock.js');
+    const mock = new MockChannel(channelOpts);
+    channels.push(mock);
+    await mock.connect();
+  } else {
+    whatsapp = new WhatsAppChannel(channelOpts);
+    channels.push(whatsapp);
+    await whatsapp.connect();
+  }
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({

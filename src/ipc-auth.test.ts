@@ -73,7 +73,7 @@ describe('schedule_task authorization', () => {
         type: 'schedule_task',
         prompt: 'do something',
         schedule_type: 'once',
-        schedule_value: '2025-06-01T00:00:00.000Z',
+        schedule_value: '2030-06-01T00:00:00.000Z',
         targetJid: 'other@g.us',
       },
       'main',
@@ -93,7 +93,7 @@ describe('schedule_task authorization', () => {
         type: 'schedule_task',
         prompt: 'self task',
         schedule_type: 'once',
-        schedule_value: '2025-06-01T00:00:00.000Z',
+        schedule_value: '2030-06-01T00:00:00.000Z',
         targetJid: 'other@g.us',
       },
       'other-group',
@@ -112,7 +112,7 @@ describe('schedule_task authorization', () => {
         type: 'schedule_task',
         prompt: 'unauthorized',
         schedule_type: 'once',
-        schedule_value: '2025-06-01T00:00:00.000Z',
+        schedule_value: '2030-06-01T00:00:00.000Z',
         targetJid: 'main@g.us',
       },
       'other-group',
@@ -130,7 +130,7 @@ describe('schedule_task authorization', () => {
         type: 'schedule_task',
         prompt: 'no target',
         schedule_type: 'once',
-        schedule_value: '2025-06-01T00:00:00.000Z',
+        schedule_value: '2030-06-01T00:00:00.000Z',
         targetJid: 'unknown@g.us',
       },
       'main',
@@ -153,9 +153,9 @@ describe('pause_task authorization', () => {
       chat_jid: 'main@g.us',
       prompt: 'main task',
       schedule_type: 'once',
-      schedule_value: '2025-06-01T00:00:00.000Z',
+      schedule_value: '2030-06-01T00:00:00.000Z',
       context_mode: 'isolated',
-      next_run: '2025-06-01T00:00:00.000Z',
+      next_run: '2030-06-01T00:00:00.000Z',
       status: 'active',
       created_at: '2024-01-01T00:00:00.000Z',
     });
@@ -165,9 +165,9 @@ describe('pause_task authorization', () => {
       chat_jid: 'other@g.us',
       prompt: 'other task',
       schedule_type: 'once',
-      schedule_value: '2025-06-01T00:00:00.000Z',
+      schedule_value: '2030-06-01T00:00:00.000Z',
       context_mode: 'isolated',
-      next_run: '2025-06-01T00:00:00.000Z',
+      next_run: '2030-06-01T00:00:00.000Z',
       status: 'active',
       created_at: '2024-01-01T00:00:00.000Z',
     });
@@ -199,9 +199,9 @@ describe('resume_task authorization', () => {
       chat_jid: 'other@g.us',
       prompt: 'paused task',
       schedule_type: 'once',
-      schedule_value: '2025-06-01T00:00:00.000Z',
+      schedule_value: '2030-06-01T00:00:00.000Z',
       context_mode: 'isolated',
-      next_run: '2025-06-01T00:00:00.000Z',
+      next_run: '2030-06-01T00:00:00.000Z',
       status: 'paused',
       created_at: '2024-01-01T00:00:00.000Z',
     });
@@ -233,7 +233,7 @@ describe('cancel_task authorization', () => {
       chat_jid: 'other@g.us',
       prompt: 'cancel me',
       schedule_type: 'once',
-      schedule_value: '2025-06-01T00:00:00.000Z',
+      schedule_value: '2030-06-01T00:00:00.000Z',
       context_mode: 'isolated',
       next_run: null,
       status: 'active',
@@ -251,7 +251,7 @@ describe('cancel_task authorization', () => {
       chat_jid: 'other@g.us',
       prompt: 'my task',
       schedule_type: 'once',
-      schedule_value: '2025-06-01T00:00:00.000Z',
+      schedule_value: '2030-06-01T00:00:00.000Z',
       context_mode: 'isolated',
       next_run: null,
       status: 'active',
@@ -269,7 +269,7 @@ describe('cancel_task authorization', () => {
       chat_jid: 'main@g.us',
       prompt: 'not yours',
       schedule_type: 'once',
-      schedule_value: '2025-06-01T00:00:00.000Z',
+      schedule_value: '2030-06-01T00:00:00.000Z',
       context_mode: 'isolated',
       next_run: null,
       status: 'active',
@@ -310,6 +310,27 @@ describe('refresh_groups authorization', () => {
     // This should be silently blocked (no crash, no effect)
     await processTaskIpc({ type: 'refresh_groups' }, 'other-group', false, deps);
     // If we got here without error, the auth gate worked
+  });
+
+  it('main group triggers syncGroupMetadata and writeGroupsSnapshot', async () => {
+    let syncCalled = false;
+    let snapshotCalled = false;
+
+    const testDeps: IpcDeps = {
+      ...deps,
+      syncGroupMetadata: async () => {
+        syncCalled = true;
+      },
+      writeGroupsSnapshot: () => {
+        snapshotCalled = true;
+      },
+      getAvailableGroups: () => [],
+    };
+
+    await processTaskIpc({ type: 'refresh_groups' }, 'main', true, testDeps);
+
+    expect(syncCalled).toBe(true);
+    expect(snapshotCalled).toBe(true);
   });
 });
 
@@ -454,6 +475,24 @@ describe('schedule_task schedule types', () => {
     expect(getAllTasks()).toHaveLength(0);
   });
 
+  it('rejects once task with timestamp in the past', async () => {
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'past task',
+        schedule_type: 'once',
+        schedule_value: '2020-01-01T00:00:00.000Z',
+        targetJid: 'other@g.us',
+      },
+      'main',
+      true,
+      deps,
+    );
+
+    // Past timestamps should be rejected — they would fire immediately on next poll
+    expect(getAllTasks()).toHaveLength(0);
+  });
+
   it('rejects invalid once timestamp', async () => {
     await processTaskIpc(
       {
@@ -481,7 +520,7 @@ describe('schedule_task context_mode', () => {
         type: 'schedule_task',
         prompt: 'group context',
         schedule_type: 'once',
-        schedule_value: '2025-06-01T00:00:00.000Z',
+        schedule_value: '2030-06-01T00:00:00.000Z',
         context_mode: 'group',
         targetJid: 'other@g.us',
       },
@@ -500,7 +539,7 @@ describe('schedule_task context_mode', () => {
         type: 'schedule_task',
         prompt: 'isolated context',
         schedule_type: 'once',
-        schedule_value: '2025-06-01T00:00:00.000Z',
+        schedule_value: '2030-06-01T00:00:00.000Z',
         context_mode: 'isolated',
         targetJid: 'other@g.us',
       },
@@ -519,7 +558,7 @@ describe('schedule_task context_mode', () => {
         type: 'schedule_task',
         prompt: 'bad context',
         schedule_type: 'once',
-        schedule_value: '2025-06-01T00:00:00.000Z',
+        schedule_value: '2030-06-01T00:00:00.000Z',
         context_mode: 'bogus' as any,
         targetJid: 'other@g.us',
       },
@@ -538,7 +577,7 @@ describe('schedule_task context_mode', () => {
         type: 'schedule_task',
         prompt: 'no context mode',
         schedule_type: 'once',
-        schedule_value: '2025-06-01T00:00:00.000Z',
+        schedule_value: '2030-06-01T00:00:00.000Z',
         targetJid: 'other@g.us',
       },
       'main',
@@ -688,9 +727,9 @@ describe('resume_task recomputes next_run', () => {
       chat_jid: 'main@g.us',
       prompt: 'test',
       schedule_type: 'once',
-      schedule_value: '2025-06-01T00:00:00.000Z',
+      schedule_value: '2030-06-01T00:00:00.000Z',
       context_mode: 'isolated',
-      next_run: '2025-06-01T00:00:00.000Z',
+      next_run: '2030-06-01T00:00:00.000Z',
       status: 'paused',
       created_at: '2020-01-01T00:00:00.000Z',
     });
@@ -699,7 +738,21 @@ describe('resume_task recomputes next_run', () => {
 
     const task = getTaskById('once-task');
     expect(task!.status).toBe('active');
-    expect(task!.next_run).toBe('2025-06-01T00:00:00.000Z');
+    expect(task!.next_run).toBe('2030-06-01T00:00:00.000Z');
+  });
+});
+
+// --- unknown IPC task type ---
+
+describe('unknown IPC task type', () => {
+  it('does not throw and does not create any tasks when type is unrecognized', async () => {
+    await expect(
+      processTaskIpc({ type: 'unknown_future_type' }, 'main', true, deps),
+    ).resolves.toBeUndefined();
+
+    // No side effects — no tasks were created
+    const { getAllTasks } = await import('./db.js');
+    expect(getAllTasks()).toHaveLength(0);
   });
 });
 

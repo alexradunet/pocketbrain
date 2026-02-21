@@ -54,6 +54,11 @@ let opencodeInstance: OpencodeClient | null = null;
 const activeSessions = new Map<string, ActiveSession>();
 const PROMPT_STREAM_TIMEOUT_MS = 120000;
 
+/** @internal - for tests only. Injects a mock opencode instance. */
+export function _setTestOpencodeInstance(mock: unknown): void {
+  opencodeInstance = mock as OpencodeClient;
+}
+
 // --- Server lifecycle ---
 
 export async function boot(): Promise<void> {
@@ -133,6 +138,20 @@ export async function boot(): Promise<void> {
   if (process.env.OPENCODE_MODEL) {
     config.model = process.env.OPENCODE_MODEL;
   }
+  // Inject Ollama provider when model uses the ollama/ prefix.
+  // baseURL defaults to localhost for local dev; override via OPENCODE_BASE_URL
+  // in Docker Compose (e.g. http://ollama:11434/v1).
+  if (process.env.OPENCODE_MODEL?.startsWith('ollama/')) {
+    const baseURL = process.env.OPENCODE_BASE_URL || 'http://localhost:11434/v1';
+    config.providers = {
+      ollama: {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'Ollama',
+        options: { baseURL },
+      },
+    };
+    logger.info({ baseURL }, 'Ollama provider configured');
+  }
 
   logger.info('Starting OpenCode server...');
   opencodeInstance = await createOpencode({
@@ -183,16 +202,30 @@ export async function startSession(
   // Create or resume session (with timeout to avoid hanging on a stalled server)
   const SESSION_INIT_TIMEOUT_MS = 15000;
   let sessionId: string;
+  let isNewSession = !input.sessionId;
   try {
     if (input.sessionId) {
       logger.debug({ sessionId: input.sessionId }, 'Resuming session');
-      await Promise.race([
-        client.session.get({ path: { id: input.sessionId } }),
-        Bun.sleep(SESSION_INIT_TIMEOUT_MS).then(() => {
-          throw new Error('session.get timed out');
-        }),
+      const resumed = await Promise.race([
+        client.session.get({ path: { id: input.sessionId } }).then(() => true, () => false),
+        Bun.sleep(SESSION_INIT_TIMEOUT_MS).then(() => false),
       ]);
-      sessionId = input.sessionId;
+      if (resumed) {
+        sessionId = input.sessionId;
+      } else {
+        logger.warn({ sessionId: input.sessionId }, 'Stale session ID, creating new session');
+        isNewSession = true;
+        const resp = await Promise.race([
+          client.session.create({ body: { title: `PocketBrain: ${group.name}` } }),
+          Bun.sleep(SESSION_INIT_TIMEOUT_MS).then(() => {
+            throw new Error('session.create timed out');
+          }),
+        ]);
+        const newId = resp.data?.id;
+        if (!newId) throw new Error('session.create returned no session ID');
+        sessionId = newId;
+        logger.info({ sessionId, group: group.name }, 'New session created (recovered stale session)');
+      }
     } else {
       logger.debug({ group: group.name }, 'Creating new session');
       const resp = await Promise.race([
@@ -201,7 +234,9 @@ export async function startSession(
           throw new Error('session.create timed out');
         }),
       ]);
-      sessionId = (resp as Awaited<ReturnType<typeof client.session.create>>).data!.id;
+      const newId = resp.data?.id;
+      if (!newId) throw new Error('session.create returned no session ID');
+      sessionId = newId;
       logger.info({ sessionId, group: group.name }, 'New session created');
     }
   } catch (err) {
@@ -233,8 +268,8 @@ export async function startSession(
   if (input.isScheduledTask) {
     prompt = `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or group.]\n\n${prompt}`;
   }
-  // Prepend group context for new sessions
-  if (!input.sessionId) {
+  // Prepend group context for new sessions (including recovered stale sessions)
+  if (isNewSession) {
     prompt = buildGroupContext(group, input) + '\n\n' + prompt;
   }
 
@@ -318,7 +353,7 @@ export function abortSession(groupFolder: string): void {
   if (session.busy && opencodeInstance) {
     opencodeInstance.client.session
       .abort({ path: { id: session.sessionId } })
-      .catch(() => {});
+      .catch((err) => logger.debug({ err, sessionId: session.sessionId }, 'Session abort failed (non-fatal)'));
   }
 
   session.resolveEnd();
