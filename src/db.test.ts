@@ -520,67 +520,23 @@ describe('getRouterState / setRouterState', () => {
   });
 });
 
-// --- requiresTrigger mapping in getRegisteredGroup / getAllRegisteredGroups ---
+// --- getRegisteredGroup ---
 
-describe('requiresTrigger mapping in getRegisteredGroup / getAllRegisteredGroups', () => {
-  it('stored as undefined (default) → requiresTrigger is true (default coercion)', () => {
-    // setRegisteredGroup stores undefined requiresTrigger as 1 (true) per db.ts line 481
+describe('getRegisteredGroup', () => {
+  it('returns undefined for unknown jid', () => {
+    expect(getRegisteredGroup('missing@g.us')).toBeUndefined();
+  });
+
+  it('round-trips a registered group', () => {
     setRegisteredGroup('g1@g.us', {
       name: 'G1',
       folder: 'g1',
-      trigger: 'always',
       added_at: '2024-01-01T00:00:00.000Z',
-      requiresTrigger: undefined,
     });
 
     const group = getRegisteredGroup('g1@g.us');
     expect(group).toBeDefined();
-    // undefined requiresTrigger is stored as 1, so read back as true
-    expect(group!.requiresTrigger).toBe(true);
-  });
-
-  it('stored with requiresTrigger=true → requiresTrigger is true', () => {
-    setRegisteredGroup('g2@g.us', {
-      name: 'G2',
-      folder: 'g2',
-      trigger: '@bot',
-      added_at: '2024-01-01T00:00:00.000Z',
-      requiresTrigger: true,
-    });
-
-    const group = getRegisteredGroup('g2@g.us');
-    expect(group!.requiresTrigger).toBe(true);
-  });
-
-  it('stored with requiresTrigger=false → requiresTrigger is false', () => {
-    setRegisteredGroup('g3@g.us', {
-      name: 'G3',
-      folder: 'g3',
-      trigger: 'always',
-      added_at: '2024-01-01T00:00:00.000Z',
-      requiresTrigger: false,
-    });
-
-    const group = getRegisteredGroup('g3@g.us');
-    expect(group!.requiresTrigger).toBe(false);
-  });
-
-  it('getAllRegisteredGroups maps requiresTrigger correctly for multiple groups', () => {
-    setRegisteredGroup('h1@g.us', {
-      name: 'H1', folder: 'h1', trigger: 'always',
-      added_at: '2024-01-01T00:00:00.000Z', requiresTrigger: true,
-    });
-    setRegisteredGroup('h2@g.us', {
-      name: 'H2', folder: 'h2', trigger: '@bot',
-      added_at: '2024-01-01T00:00:00.000Z', requiresTrigger: false,
-    });
-
-    const all = getAllRegisteredGroups();
-    expect(all['h1@g.us'].requiresTrigger).toBe(true);
-    expect(all['h2@g.us'].requiresTrigger).toBe(false);
-  });
-
-  it('getRegisteredGroup returns undefined for unknown jid', () => {
-    expect(getRegisteredGroup('missing@g.us')).toBeUndefined();
+    expect(group!.name).toBe('G1');
+    expect(group!.folder).toBe('g1');
   });
 });

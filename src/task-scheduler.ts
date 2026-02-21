@@ -5,7 +5,6 @@ import path from 'path';
 import {
   GROUPS_DIR,
   IDLE_TIMEOUT,
-  MAIN_GROUP_FOLDER,
   SCHEDULER_POLL_INTERVAL,
   TIMEZONE,
 } from './config.js';
@@ -67,12 +66,10 @@ export async function runTask(
     return;
   }
 
-  // Update tasks snapshot for agent to read (filtered by group)
-  const isMain = task.group_folder === MAIN_GROUP_FOLDER;
+  // Update tasks snapshot for agent to read
   const tasks = getAllTasks();
   writeTasksSnapshot(
     task.group_folder,
-    isMain,
     tasks.map((t) => ({
       id: t.id,
       groupFolder: t.group_folder,
@@ -114,7 +111,6 @@ export async function runTask(
         sessionId,
         groupFolder: task.group_folder,
         chatJid: task.chat_jid,
-        isMain,
         isScheduledTask: true,
       },
       async (streamedOutput: AgentOutput) => {

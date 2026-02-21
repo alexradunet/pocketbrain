@@ -14,7 +14,6 @@ import type { RegisteredGroup } from './types.js';
 const MOCK_GROUP: RegisteredGroup = {
   name: 'Test Group',
   folder: 'test-group',
-  trigger: '@bot',
   added_at: '2024-01-01T00:00:00.000Z',
 };
 
@@ -22,7 +21,6 @@ const BASE_INPUT = {
   prompt: 'hello',
   groupFolder: 'test-group',
   chatJid: 'test@g.us',
-  isMain: false,
 };
 
 /** Build a minimal mock opencode instance. Pass overrides for specific session methods. */
@@ -698,16 +696,6 @@ describe('buildContextPrefix', () => {
   it('contains the groupFolder', () => {
     const prefix = _buildContextPrefix(MOCK_GROUP, { ...BASE_INPUT, groupFolder: 'my-folder' });
     expect(prefix).toContain('my-folder');
-  });
-
-  it('contains the isMain flag as false', () => {
-    const prefix = _buildContextPrefix(MOCK_GROUP, { ...BASE_INPUT, isMain: false });
-    expect(prefix).toContain('isMain: false');
-  });
-
-  it('contains the isMain flag as true', () => {
-    const prefix = _buildContextPrefix(MOCK_GROUP, { ...BASE_INPUT, isMain: true });
-    expect(prefix).toContain('isMain: true');
   });
 
   it('returns a non-empty string', () => {

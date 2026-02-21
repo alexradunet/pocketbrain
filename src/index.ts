@@ -1,28 +1,18 @@
-import fs from 'fs';
-import path from 'path';
-
 import {
-  ASSISTANT_NAME,
-  DATA_DIR,
   IDLE_TIMEOUT,
-  MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
-  TRIGGER_PATTERN,
 } from './config.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import {
   AgentOutput,
-  AvailableGroup,
   abortSession,
   boot as bootOpenCode,
   sendFollowUp,
   shutdown as shutdownOpenCode,
   startSession,
-  writeGroupsSnapshot,
   writeTasksSnapshot,
 } from './opencode-manager.js';
 import {
-  getAllChats,
   getAllRegisteredGroups,
   getAllSessions,
   getAllTasks,
@@ -30,7 +20,6 @@ import {
   getNewMessages,
   getRouterState,
   initDatabase,
-  setRegisteredGroup,
   setRouterState,
   setSession,
   storeChatMetadata,
@@ -66,7 +55,7 @@ function loadState(): void {
   sessions = getAllSessions();
   registeredGroups = getAllRegisteredGroups();
   logger.info(
-    { groupCount: Object.keys(registeredGroups).length },
+    { chatCount: Object.keys(registeredGroups).length },
     'State loaded',
   );
 }
@@ -79,46 +68,9 @@ function saveState(): void {
   );
 }
 
-function registerGroup(jid: string, group: RegisteredGroup): void {
-  registeredGroups[jid] = group;
-  setRegisteredGroup(jid, group);
-
-  // Create group folder
-  const groupDir = path.join(DATA_DIR, '..', 'groups', group.folder);
-  fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
-
-  logger.info(
-    { jid, name: group.name, folder: group.folder },
-    'Group registered',
-  );
-}
-
 /**
- * Get available groups list for the agent.
- * Returns groups ordered by most recent activity.
- */
-export function getAvailableGroups(): AvailableGroup[] {
-  const chats = getAllChats();
-  const registeredJids = new Set(Object.keys(registeredGroups));
-
-  return chats
-    .filter((c) => c.jid !== '__group_sync__' && c.is_group)
-    .map((c) => ({
-      jid: c.jid,
-      name: c.name,
-      lastActivity: c.last_message_time,
-      isRegistered: registeredJids.has(c.jid),
-    }));
-}
-
-/** @internal - exported for testing */
-export function _setRegisteredGroups(groups: Record<string, RegisteredGroup>): void {
-  registeredGroups = groups;
-}
-
-/**
- * Process all pending messages for a group.
- * Called by the GroupQueue when it's this group's turn.
+ * Process all pending messages for a registered chat.
+ * Called by the GroupQueue when it's this chat's turn.
  */
 async function processGroupMessages(chatJid: string): Promise<boolean> {
   const group = registeredGroups[chatJid];
@@ -130,20 +82,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     return true;
   }
 
-  const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
-
   const sinceTimestamp = lastAgentTimestamp[chatJid] || '';
   const missedMessages = getMessagesSince(chatJid, sinceTimestamp);
 
   if (missedMessages.length === 0) return true;
-
-  // For non-main groups, check if trigger is required and present
-  if (!isMainGroup && group.requiresTrigger !== false) {
-    const hasTrigger = missedMessages.some((m) =>
-      TRIGGER_PATTERN.test(m.content.trim()),
-    );
-    if (!hasTrigger) return true;
-  }
 
   const prompt = formatMessages(missedMessages);
 
@@ -155,7 +97,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   saveState();
 
   logger.info(
-    { group: group.name, messageCount: missedMessages.length },
+    { chat: group.name, messageCount: missedMessages.length },
     'Processing messages',
   );
 
@@ -165,7 +107,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const resetIdleTimer = () => {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
-      logger.debug({ group: group.name }, 'Idle timeout, aborting session');
+      logger.debug({ chat: group.name }, 'Idle timeout, aborting session');
       queue.closeStdin(chatJid);
     }, IDLE_TIMEOUT);
   };
@@ -180,7 +122,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const raw = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
       // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
+      logger.info({ chat: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
         await channel.sendMessage(chatJid, text);
         outputSentToUser = true;
@@ -201,13 +143,13 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     // If we already sent output to the user, don't roll back the cursor —
     // the user got their response and re-processing would send duplicates.
     if (outputSentToUser) {
-      logger.warn({ group: group.name }, 'Agent error after output was sent, skipping cursor rollback to prevent duplicates');
+      logger.warn({ chat: group.name }, 'Agent error after output was sent, skipping cursor rollback to prevent duplicates');
       return true;
     }
     // Roll back cursor so retries can re-process these messages
     lastAgentTimestamp[chatJid] = previousCursor;
     saveState();
-    logger.warn({ group: group.name }, 'Agent error, rolled back message cursor for retry');
+    logger.warn({ chat: group.name }, 'Agent error, rolled back message cursor for retry');
     return false;
   }
 
@@ -220,14 +162,12 @@ async function runAgent(
   chatJid: string,
   onOutput?: (output: AgentOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
-  const isMain = group.folder === MAIN_GROUP_FOLDER;
   const sessionId = sessions[group.folder];
 
-  // Update tasks snapshot for agent to read (filtered by group)
+  // Update tasks snapshot for agent to read
   const tasks = getAllTasks();
   writeTasksSnapshot(
     group.folder,
-    isMain,
     tasks.map((t) => ({
       id: t.id,
       groupFolder: t.group_folder,
@@ -237,15 +177,6 @@ async function runAgent(
       status: t.status,
       next_run: t.next_run,
     })),
-  );
-
-  // Update available groups snapshot (main group only can see all groups)
-  const availableGroups = getAvailableGroups();
-  writeGroupsSnapshot(
-    group.folder,
-    isMain,
-    availableGroups,
-    new Set(Object.keys(registeredGroups)),
   );
 
   // Wrap onOutput to track session ID from results
@@ -270,7 +201,6 @@ async function runAgent(
         sessionId,
         groupFolder: group.folder,
         chatJid,
-        isMain,
       },
       wrappedOnOutput ?? (async () => {}),
     );
@@ -282,7 +212,7 @@ async function runAgent(
 
     if (output.status === 'error') {
       logger.error(
-        { group: group.name, error: output.error },
+        { chat: group.name, error: output.error },
         'Agent error',
       );
       return 'error';
@@ -290,7 +220,7 @@ async function runAgent(
 
     return 'success';
   } catch (err) {
-    logger.error({ group: group.name, err }, 'Agent error');
+    logger.error({ chat: group.name, err }, 'Agent error');
     return 'error';
   }
 }
@@ -302,7 +232,7 @@ async function startMessageLoop(): Promise<void> {
   }
   messageLoopRunning = true;
 
-  logger.info(`PocketBrain running (trigger: @${ASSISTANT_NAME})`);
+  logger.info('PocketBrain running');
 
   while (true) {
     try {
@@ -316,18 +246,18 @@ async function startMessageLoop(): Promise<void> {
         lastTimestamp = newTimestamp;
         saveState();
 
-        // Deduplicate by group
-        const messagesByGroup = new Map<string, NewMessage[]>();
+        // Deduplicate by chat
+        const messagesByChat = new Map<string, NewMessage[]>();
         for (const msg of messages) {
-          const existing = messagesByGroup.get(msg.chat_jid);
+          const existing = messagesByChat.get(msg.chat_jid);
           if (existing) {
             existing.push(msg);
           } else {
-            messagesByGroup.set(msg.chat_jid, [msg]);
+            messagesByChat.set(msg.chat_jid, [msg]);
           }
         }
 
-        for (const [chatJid, groupMessages] of messagesByGroup) {
+        for (const [chatJid, chatMessages] of messagesByChat) {
           const group = registeredGroups[chatJid];
           if (!group) continue;
 
@@ -337,27 +267,13 @@ async function startMessageLoop(): Promise<void> {
             continue;
           }
 
-          const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
-          const needsTrigger = !isMainGroup && group.requiresTrigger !== false;
-
-          // For non-main groups, only act on trigger messages.
-          // Non-trigger messages accumulate in DB and get pulled as
-          // context when a trigger eventually arrives.
-          if (needsTrigger) {
-            const hasTrigger = groupMessages.some((m) =>
-              TRIGGER_PATTERN.test(m.content.trim()),
-            );
-            if (!hasTrigger) continue;
-          }
-
-          // Pull all messages since lastAgentTimestamp so non-trigger
-          // context that accumulated between triggers is included.
+          // Pull all messages since lastAgentTimestamp for full context
           const allPending = getMessagesSince(
             chatJid,
             lastAgentTimestamp[chatJid] || '',
           );
           const messagesToSend =
-            allPending.length > 0 ? allPending : groupMessages;
+            allPending.length > 0 ? allPending : chatMessages;
           const formatted = formatMessages(messagesToSend);
 
           // Show typing indicator while waiting for the follow-up to complete
@@ -385,7 +301,7 @@ async function startMessageLoop(): Promise<void> {
 }
 
 /**
- * Startup recovery: check for unprocessed messages in registered groups.
+ * Startup recovery: check for unprocessed messages in registered chats.
  * Handles crash between advancing lastTimestamp and processing messages.
  */
 function recoverPendingMessages(): void {
@@ -394,7 +310,7 @@ function recoverPendingMessages(): void {
     const pending = getMessagesSince(chatJid, sinceTimestamp);
     if (pending.length > 0) {
       logger.info(
-        { group: group.name, pendingCount: pending.length },
+        { chat: group.name, pendingCount: pending.length },
         'Recovery: found unprocessed messages',
       );
       queue.enqueueMessageCheck(chatJid);
@@ -468,10 +384,6 @@ async function main(): Promise<void> {
       return channel.sendMessage(jid, text);
     },
     registeredGroups: () => registeredGroups,
-    registerGroup,
-    syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
-    getAvailableGroups,
-    writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();

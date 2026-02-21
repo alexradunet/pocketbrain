@@ -449,23 +449,14 @@ export function getRegisteredGroup(
   const row = db
     .prepare('SELECT * FROM registered_groups WHERE jid = ?')
     .get(jid) as
-    | {
-        jid: string;
-        name: string;
-        folder: string;
-        trigger_pattern: string;
-        added_at: string;
-        requires_trigger: number | null;
-      }
+    | { jid: string; name: string; folder: string; added_at: string }
     | undefined;
   if (!row) return undefined;
   return {
     jid: row.jid,
     name: row.name,
     folder: row.folder,
-    trigger: row.trigger_pattern,
     added_at: row.added_at,
-    requiresTrigger: row.requires_trigger === null ? undefined : row.requires_trigger === 1,
   };
 }
 
@@ -475,36 +466,20 @@ export function setRegisteredGroup(
 ): void {
   db.prepare(
     `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(
-    jid,
-    group.name,
-    group.folder,
-    group.trigger,
-    group.added_at,
-    group.requiresTrigger === undefined ? 1 : group.requiresTrigger ? 1 : 0,
-  );
+     VALUES (?, ?, ?, '', ?, 0)`,
+  ).run(jid, group.name, group.folder, group.added_at);
 }
 
 export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
   const rows = db
-    .prepare('SELECT * FROM registered_groups')
-    .all() as Array<{
-    jid: string;
-    name: string;
-    folder: string;
-    trigger_pattern: string;
-    added_at: string;
-    requires_trigger: number | null;
-  }>;
+    .prepare('SELECT jid, name, folder, added_at FROM registered_groups')
+    .all() as Array<{ jid: string; name: string; folder: string; added_at: string }>;
   const result: Record<string, RegisteredGroup> = {};
   for (const row of rows) {
     result[row.jid] = {
       name: row.name,
       folder: row.folder,
-      trigger: row.trigger_pattern,
       added_at: row.added_at,
-      requiresTrigger: row.requires_trigger === null ? undefined : row.requires_trigger === 1,
     };
   }
   return result;

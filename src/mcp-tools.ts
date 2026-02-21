@@ -1,16 +1,13 @@
 /**
  * Stdio MCP Server for PocketBrain
  * Runs as a child process of the OpenCode server.
- * Tools accept chatJid/groupFolder/isMain as parameters (no env var context).
+ * Tools accept chatJid/groupFolder as parameters (no env var context).
  * IPC directory comes from POCKETBRAIN_IPC_DIR environment variable.
  *
  * Server-side identity validation:
  * - MCP_GROUP_FOLDER: authoritative group folder set by parent process at spawn time.
  *   When set, the agent-provided groupFolder is IGNORED — the env var value is used instead.
- * - MCP_MAIN_GROUP_FOLDER: the canonical main group folder name, set by parent process.
- *   When set, isMain is derived from comparing MCP_GROUP_FOLDER to MCP_MAIN_GROUP_FOLDER;
- *   the agent-provided isMain is IGNORED.
- * If neither env var is set (backwards compat), the agent-provided values are used as-is
+ * If not set (backwards compat), the agent-provided value is used as-is
  * (the IPC watcher still enforces server-side authorization on the receiving end).
  */
 
@@ -27,9 +24,6 @@ const IPC_DIR = process.env.POCKETBRAIN_IPC_DIR || path.join(process.cwd(), 'dat
 const ENV_GROUP_FOLDER: string | undefined = process.env.MCP_GROUP_FOLDER
   ? path.basename(process.env.MCP_GROUP_FOLDER)
   : undefined;
-const ENV_MAIN_GROUP_FOLDER: string | undefined = process.env.MCP_MAIN_GROUP_FOLDER
-  ? path.basename(process.env.MCP_MAIN_GROUP_FOLDER)
-  : undefined;
 
 /**
  * Resolve the authoritative groupFolder for a tool call.
@@ -41,18 +35,6 @@ function resolveGroupFolder(agentFolder: string): string {
     return ENV_GROUP_FOLDER;
   }
   return safeFolder(agentFolder);
-}
-
-/**
- * Resolve the authoritative isMain for a tool call.
- * If both MCP_GROUP_FOLDER and MCP_MAIN_GROUP_FOLDER are set, derive from env vars.
- * Falls back to agent-provided value for backwards compat.
- */
-function resolveIsMain(agentIsMain: boolean): boolean {
-  if (ENV_GROUP_FOLDER !== undefined && ENV_MAIN_GROUP_FOLDER !== undefined) {
-    return ENV_GROUP_FOLDER === ENV_MAIN_GROUP_FOLDER;
-  }
-  return agentIsMain;
 }
 
 /** Sanitize groupFolder to prevent path traversal */
@@ -85,7 +67,7 @@ const server = new McpServer({
 
 server.tool(
   'send_message',
-  "Send a message to the user or group immediately while you're still running. Use this for progress updates or to send multiple messages. You can call this multiple times. Note: when running as a scheduled task, your final output is NOT sent to the user — use this tool if you need to communicate with the user or group.",
+  "Send a message to the user immediately while you're still running. Use this for progress updates or to send multiple messages. You can call this multiple times. Note: when running as a scheduled task, your final output is NOT sent to the user — use this tool if you need to communicate with the user.",
   {
     text: z.string().describe('The message text to send'),
     chatJid: z.string().describe('The chat JID to send to (from your pocketbrain_context)'),
@@ -115,7 +97,7 @@ server.tool(
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools.
 
 CONTEXT MODE - Choose based on task type:
-\u2022 "group": Task runs in the group's conversation context, with access to chat history. Use for tasks that need context about ongoing discussions, user preferences, or recent interactions.
+\u2022 "group": Task runs in the conversation context, with access to chat history. Use for tasks that need context about ongoing discussions, user preferences, or recent interactions.
 \u2022 "isolated": Task runs in a fresh session with no conversation history. Use for independent tasks that don't need prior context. When using isolated mode, include all necessary context in the prompt itself.
 
 If unsure which mode to use, you can ask the user. Examples:
@@ -124,7 +106,7 @@ If unsure which mode to use, you can ask the user. Examples:
 - "Follow up on my request" \u2192 group (needs to know what was requested)
 - "Generate a daily report" \u2192 isolated (just needs instructions in prompt)
 
-MESSAGING BEHAVIOR - The task agent's output is sent to the user or group. It can also use send_message for immediate delivery, or wrap output in <internal> tags to suppress it. Include guidance in the prompt about whether the agent should:
+MESSAGING BEHAVIOR - The task agent's output is sent to the user. It can also use send_message for immediate delivery, or wrap output in <internal> tags to suppress it. Include guidance in the prompt about whether the agent should:
 \u2022 Always send a message (e.g., reminders, daily briefings)
 \u2022 Only send a message when there's something to report (e.g., "notify me if...")
 \u2022 Never send a message (background maintenance tasks)
@@ -140,8 +122,6 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
     context_mode: z.enum(['group', 'isolated']).default('group').describe('group=runs with chat history and memory, isolated=fresh session (include context in prompt)'),
     chatJid: z.string().describe('The chat JID (from your pocketbrain_context)'),
     groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
-    isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
-    target_group_jid: z.string().optional().describe('(Main group only) JID of the group to schedule the task for. Defaults to the current group.'),
   },
   async (args) => {
     // Validate schedule_value before writing IPC
@@ -172,11 +152,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
       }
     }
 
-    // Non-main groups can only schedule for themselves
     const groupFolder = resolveGroupFolder(args.groupFolder);
-    const isMain = resolveIsMain(args.isMain);
-    const targetJid = isMain && args.target_group_jid ? args.target_group_jid : args.chatJid;
-
     const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'schedule_task',
@@ -184,7 +160,7 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
       schedule_type: args.schedule_type,
       schedule_value: args.schedule_value,
       context_mode: args.context_mode || 'group',
-      targetJid,
+      targetJid: args.chatJid,
       createdBy: groupFolder,
       timestamp: new Date().toISOString(),
     };
@@ -199,14 +175,12 @@ SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
 
 server.tool(
   'list_tasks',
-  "List all scheduled tasks. From main: shows all tasks. From other groups: shows only that group's tasks.",
+  "List all scheduled tasks for the current chat.",
   {
     groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
-    isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
     const groupFolder = resolveGroupFolder(args.groupFolder);
-    const isMain = resolveIsMain(args.isMain);
     const tasksFile = path.join(IPC_DIR, groupFolder, 'current_tasks.json');
 
     try {
@@ -214,11 +188,7 @@ server.tool(
         return { content: [{ type: 'text' as const, text: 'No scheduled tasks found.' }] };
       }
 
-      const allTasks = JSON.parse(fs.readFileSync(tasksFile, 'utf-8'));
-
-      const tasks = isMain
-        ? allTasks
-        : allTasks.filter((t: { groupFolder: string }) => t.groupFolder === groupFolder);
+      const tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf-8'));
 
       if (tasks.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No scheduled tasks found.' }] };
@@ -246,17 +216,14 @@ server.tool(
   {
     task_id: z.string().describe('The task ID to pause'),
     groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
-    isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
     const groupFolder = resolveGroupFolder(args.groupFolder);
-    const isMain = resolveIsMain(args.isMain);
     const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'pause_task',
       taskId: args.task_id,
       groupFolder,
-      isMain,
       timestamp: new Date().toISOString(),
     };
 
@@ -272,17 +239,14 @@ server.tool(
   {
     task_id: z.string().describe('The task ID to resume'),
     groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
-    isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
     const groupFolder = resolveGroupFolder(args.groupFolder);
-    const isMain = resolveIsMain(args.isMain);
     const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'resume_task',
       taskId: args.task_id,
       groupFolder,
-      isMain,
       timestamp: new Date().toISOString(),
     };
 
@@ -298,64 +262,20 @@ server.tool(
   {
     task_id: z.string().describe('The task ID to cancel'),
     groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
-    isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
   },
   async (args) => {
     const groupFolder = resolveGroupFolder(args.groupFolder);
-    const isMain = resolveIsMain(args.isMain);
     const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
     const data = {
       type: 'cancel_task',
       taskId: args.task_id,
       groupFolder,
-      isMain,
       timestamp: new Date().toISOString(),
     };
 
     writeIpcFile(tasksDir, data);
 
     return { content: [{ type: 'text' as const, text: `Task ${args.task_id} cancellation requested.` }] };
-  },
-);
-
-server.tool(
-  'register_group',
-  `Register a new WhatsApp group so the agent can respond to messages there. Main group only.
-
-Use available_groups.json to find the JID for a group. The folder name should be lowercase with hyphens (e.g., "family-chat").`,
-  {
-    jid: z.string().describe('The WhatsApp JID (e.g., "120363336345536173@g.us")'),
-    name: z.string().describe('Display name for the group'),
-    folder: z.string().describe('Folder name for group files (lowercase, hyphens, e.g., "family-chat")'),
-    trigger: z.string().describe('Trigger word (e.g., "@Andy")'),
-    groupFolder: z.string().describe('The group folder name (from your pocketbrain_context)'),
-    isMain: z.boolean().describe('Whether this is the main group (from your pocketbrain_context)'),
-  },
-  async (args) => {
-    const groupFolder = resolveGroupFolder(args.groupFolder);
-    const isMain = resolveIsMain(args.isMain);
-    if (!isMain) {
-      return {
-        content: [{ type: 'text' as const, text: 'Only the main group can register new groups.' }],
-        isError: true,
-      };
-    }
-
-    const tasksDir = path.join(IPC_DIR, groupFolder, 'tasks');
-    const data = {
-      type: 'register_group',
-      jid: args.jid,
-      name: args.name,
-      folder: args.folder,
-      trigger: args.trigger,
-      timestamp: new Date().toISOString(),
-    };
-
-    writeIpcFile(tasksDir, data);
-
-    return {
-      content: [{ type: 'text' as const, text: `Group "${args.name}" registered. It will start receiving messages immediately.` }],
-    };
   },
 );
 

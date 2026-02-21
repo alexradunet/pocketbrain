@@ -48,7 +48,6 @@ function makeGroup(folder: string): RegisteredGroup {
   return {
     name: `Group ${folder}`,
     folder,
-    trigger: 'always',
     added_at: NOW_ISO,
   };
 }

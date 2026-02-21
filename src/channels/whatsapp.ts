@@ -9,7 +9,10 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 
-import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, STORE_DIR } from '../config.js';
+import { ASSISTANT_HAS_OWN_NUMBER, STORE_DIR } from '../config.js';
+
+// Name used to prefix outgoing messages on shared phone numbers
+const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Andy';
 import {
   getLastGroupSync,
   setLastGroupSync,

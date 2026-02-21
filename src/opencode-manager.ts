@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { createOpencode } from '@opencode-ai/sdk';
 
-import { DATA_DIR, GROUPS_DIR, MAIN_GROUP_FOLDER } from './config.js';
+import { DATA_DIR, GROUPS_DIR } from './config.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
@@ -19,7 +19,6 @@ export interface AgentInput {
   sessionId?: string;
   groupFolder: string;
   chatJid: string;
-  isMain: boolean;
   isScheduledTask?: boolean;
 }
 
@@ -28,13 +27,6 @@ export interface AgentOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
-}
-
-export interface AvailableGroup {
-  jid: string;
-  name: string;
-  lastActivity: string;
-  isRegistered: boolean;
 }
 
 // --- Internal state ---
@@ -579,12 +571,10 @@ function buildContextPrefix(group: RegisteredGroup, input: AgentInput): string {
   return `<pocketbrain_context>
 chatJid: ${input.chatJid}
 groupFolder: ${input.groupFolder}
-isMain: ${input.isMain}
 
-When using PocketBrain MCP tools (send_message, schedule_task, list_tasks, pause_task, resume_task, cancel_task, register_group), you MUST pass these values as parameters:
+When using PocketBrain MCP tools (send_message, schedule_task, list_tasks, pause_task, resume_task, cancel_task), you MUST pass these values as parameters:
 - chatJid: "${input.chatJid}"
 - groupFolder: "${input.groupFolder}"
-- isMain: ${input.isMain}
 </pocketbrain_context>`;
 }
 
@@ -604,7 +594,6 @@ function buildGroupContext(group: RegisteredGroup, input: AgentInput): string {
 
 export function writeTasksSnapshot(
   groupFolder: string,
-  isMain: boolean,
   tasks: Array<{
     id: string;
     groupFolder: string;
@@ -618,39 +607,10 @@ export function writeTasksSnapshot(
   const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });
 
-  // Main sees all tasks, others only see their own
-  const filteredTasks = isMain
-    ? tasks
-    : tasks.filter((t) => t.groupFolder === groupFolder);
+  const filteredTasks = tasks.filter((t) => t.groupFolder === groupFolder);
 
   const tasksFile = path.join(groupIpcDir, 'current_tasks.json');
   fs.writeFileSync(tasksFile, JSON.stringify(filteredTasks, null, 2));
-}
-
-export function writeGroupsSnapshot(
-  groupFolder: string,
-  isMain: boolean,
-  groups: AvailableGroup[],
-  registeredJids: Set<string>,
-): void {
-  const groupIpcDir = path.join(DATA_DIR, 'ipc', groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
-
-  // Main sees all groups; others see nothing
-  const visibleGroups = isMain ? groups : [];
-
-  const groupsFile = path.join(groupIpcDir, 'available_groups.json');
-  fs.writeFileSync(
-    groupsFile,
-    JSON.stringify(
-      {
-        groups: visibleGroups,
-        lastSync: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-  );
 }
 
 
