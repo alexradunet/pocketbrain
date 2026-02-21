@@ -751,7 +751,6 @@ describe('unknown IPC task type', () => {
     ).resolves.toBeUndefined();
 
     // No side effects — no tasks were created
-    const { getAllTasks } = await import('./db.js');
     expect(getAllTasks()).toHaveLength(0);
   });
 });

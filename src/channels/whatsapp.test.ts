@@ -175,14 +175,43 @@ describe('WhatsAppChannel', () => {
     });
 
     it('sets up LID to phone mapping on open', async () => {
-      const opts = createTestOpts();
+      // Use a registeredGroups that contains the phone JID so onMessage fires
+      const opts = createTestOpts({
+        registeredGroups: vi.fn(() => ({
+          '1234567890@s.whatsapp.net': {
+            name: 'Self Chat',
+            folder: 'self-chat',
+            trigger: '@Andy',
+            added_at: '2024-01-01T00:00:00.000Z',
+          },
+        })),
+      });
       const channel = new WhatsAppChannel(opts);
 
       await connectChannel(channel);
 
-      // The channel should have mapped the LID from sock.user
-      // We can verify by sending a message from a LID JID
-      // and checking the translated JID in the callback
+      // sock.user.lid = '9876543210:1@lid' → sock.user.id = '1234567890:1@s.whatsapp.net'
+      // The LID mapping is built on open; sending from LID must translate to phone JID
+      await triggerMessages([
+        {
+          key: {
+            id: 'msg-lid-init',
+            remoteJid: '9876543210@lid',
+            fromMe: false,
+          },
+          message: { conversation: 'From LID after open' },
+          pushName: 'Self',
+          messageTimestamp: Math.floor(Date.now() / 1000),
+        },
+      ]);
+
+      expect(opts.onChatMetadata).toHaveBeenCalledWith(
+        '1234567890@s.whatsapp.net',
+        expect.any(String),
+        undefined,
+        'whatsapp',
+        false,
+      );
     });
 
     it('flushes outgoing queue on reconnect', async () => {
@@ -226,26 +255,29 @@ describe('WhatsAppChannel', () => {
   describe('authentication', () => {
     it('exits process when QR code is emitted (no auth state)', async () => {
       vi.useFakeTimers();
-      const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      try {
+        const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
-      const opts = createTestOpts();
-      const channel = new WhatsAppChannel(opts);
+        const opts = createTestOpts();
+        const channel = new WhatsAppChannel(opts);
 
-      // Start connect but don't await (it won't resolve - process exits)
-      channel.connect().catch(() => {});
+        // Start connect but don't await (it won't resolve - process exits)
+        channel.connect().catch(() => {});
 
-      // Flush microtasks so connectInternal registers handlers
-      await advanceTimersByTimeAsync(0);
+        // Flush microtasks so connectInternal registers handlers
+        await advanceTimersByTimeAsync(0);
 
-      // Emit QR code event
-      fakeSocket._ev.emit('connection.update', { qr: 'some-qr-data' });
+        // Emit QR code event
+        fakeSocket._ev.emit('connection.update', { qr: 'some-qr-data' });
 
-      // Advance timer past the 1000ms setTimeout before exit
-      await advanceTimersByTimeAsync(1500);
+        // Advance timer past the 1000ms setTimeout before exit
+        await advanceTimersByTimeAsync(1500);
 
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
-      vi.useRealTimers();
+        expect(mockExit).toHaveBeenCalledWith(1);
+        mockExit.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -329,26 +361,27 @@ describe('WhatsAppChannel', () => {
 
       // Switch to fake timers only for reconnection behavior
       vi.useFakeTimers();
+      try {
+        let reconnectCount = 0;
+        // Replace connectInternal so every reconnect attempt immediately fails
+        (channel as any).connectInternal = async () => {
+          reconnectCount++;
+          throw new Error('Connection refused');
+        };
 
-      let reconnectCount = 0;
-      // Replace connectInternal so every reconnect attempt immediately fails
-      (channel as any).connectInternal = async () => {
-        reconnectCount++;
-        throw new Error('Connection refused');
-      };
+        // First disconnect: starts reconnect → fails → reconnecting stays true, 5s timer pending
+        triggerDisconnect(428);
+        await advanceTimersByTimeAsync(10);
 
-      // First disconnect: starts reconnect → fails → reconnecting stays true, 5s timer pending
-      triggerDisconnect(428);
-      await advanceTimersByTimeAsync(10);
+        // Second disconnect fires during the 5s window — must be blocked (reconnecting=true)
+        triggerDisconnect(428);
+        await advanceTimersByTimeAsync(10);
 
-      // Second disconnect fires during the 5s window — must be blocked (reconnecting=true)
-      triggerDisconnect(428);
-      await advanceTimersByTimeAsync(10);
-
-      // Only 1 attempt; second disconnect was blocked because reconnecting stayed true
-      expect(reconnectCount).toBe(1);
-
-      vi.useRealTimers();
+        // Only 1 attempt; second disconnect was blocked because reconnecting stayed true
+        expect(reconnectCount).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('fires the 5s retry even when a concurrent disconnect was blocked', async () => {
@@ -360,28 +393,29 @@ describe('WhatsAppChannel', () => {
 
       // Switch to fake timers for reconnection behavior
       vi.useFakeTimers();
+      try {
+        let reconnectCount = 0;
+        (channel as any).connectInternal = async () => {
+          reconnectCount++;
+          throw new Error('Connection refused');
+        };
 
-      let reconnectCount = 0;
-      (channel as any).connectInternal = async () => {
-        reconnectCount++;
-        throw new Error('Connection refused');
-      };
+        // First disconnect → first attempt fails, reconnecting stays true, 5s timer starts
+        triggerDisconnect(428);
+        await advanceTimersByTimeAsync(10);
+        expect(reconnectCount).toBe(1);
 
-      // First disconnect → first attempt fails, reconnecting stays true, 5s timer starts
-      triggerDisconnect(428);
-      await advanceTimersByTimeAsync(10);
-      expect(reconnectCount).toBe(1);
+        // Second disconnect is blocked during the 5s window
+        triggerDisconnect(428);
+        await advanceTimersByTimeAsync(10);
+        expect(reconnectCount).toBe(1); // still 1
 
-      // Second disconnect is blocked during the 5s window
-      triggerDisconnect(428);
-      await advanceTimersByTimeAsync(10);
-      expect(reconnectCount).toBe(1); // still 1
-
-      // Advance past 5s — the retry fires
-      await advanceTimersByTimeAsync(5100);
-      expect(reconnectCount).toBe(2); // retry ran
-
-      vi.useRealTimers();
+        // Advance past 5s — the retry fires
+        await advanceTimersByTimeAsync(5100);
+        expect(reconnectCount).toBe(2); // retry ran
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

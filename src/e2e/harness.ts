@@ -107,7 +107,7 @@ export async function llmAssert(response: string, criterion: string): Promise<bo
     content: Array<{ type: string; text: string }>;
   };
   const text = data.content.find((c) => c.type === 'text')?.text?.trim().toUpperCase() ?? '';
-  return text.startsWith('YES');
+  return text.replace(/[^A-Z]/gi, '').toUpperCase() === 'YES';
 }
 
 /**

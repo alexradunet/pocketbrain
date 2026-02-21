@@ -14,6 +14,16 @@ vi.mock('./config.js', () => ({
   MAX_CONCURRENT_SESSIONS: 2,
 }));
 
+// Mock logger
+vi.mock('./logger.js', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 describe('GroupQueue', () => {
   let queue: GroupQueue;
 
@@ -253,6 +263,32 @@ describe('GroupQueue', () => {
     expect(taskFn).toHaveBeenCalledTimes(1);
   });
 
+  // --- closeStdin aborts active session ---
+
+  it('closeStdin calls abortSessionFn when group has active session', async () => {
+    let releaseProcess: () => void;
+    const processMessages = vi.fn(async () => {
+      await new Promise<void>((r) => { releaseProcess = r; });
+      return true;
+    });
+    queue.setProcessMessagesFn(processMessages);
+
+    const abortSessionFn = vi.fn();
+    queue.setAbortSessionFn(abortSessionFn);
+
+    // Start a session and register the group folder
+    queue.enqueueMessageCheck('group1@g.us');
+    queue.registerSession('group1@g.us', 'folder1');
+    await advanceTimersByTimeAsync(10);
+
+    // closeStdin should invoke abortSessionFn with the group folder
+    queue.closeStdin('group1@g.us');
+    expect(abortSessionFn).toHaveBeenCalledWith('folder1');
+
+    releaseProcess!();
+    await advanceTimersByTimeAsync(10);
+  });
+
   // --- Waiting groups get drained when slots free up ---
 
   it('drains waiting groups when active slots free up', async () => {
@@ -283,6 +319,38 @@ describe('GroupQueue', () => {
     await advanceTimersByTimeAsync(10);
 
     expect(processed).toContain('group3@g.us');
+  });
+
+  // --- Shutdown with zero grace period warns about active sessions ---
+
+  it('shutdown with 0ms grace period logs warning when sessions still active', async () => {
+    const { logger } = await import('./logger.js');
+
+    let releaseProcess: () => void;
+    const processMessages = vi.fn(async () => {
+      await new Promise<void>((r) => { releaseProcess = r; });
+      return true;
+    });
+    queue.setProcessMessagesFn(processMessages);
+
+    // Start a long-running session
+    queue.enqueueMessageCheck('group1@g.us');
+    queue.registerSession('group1@g.us', 'folder1');
+    await advanceTimersByTimeAsync(10);
+
+    // shutdown(0) — grace period is 0ms, should not wait
+    // With fake timers active, Bun.sleep is never reached because
+    // deadline = Date.now() + 0 means while condition is false immediately
+    await queue.shutdown(0);
+
+    // The warning must have been logged since activeCount > 0
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ activeCount: 1 }),
+      'Shutdown grace period expired with active sessions',
+    );
+
+    releaseProcess!();
+    await advanceTimersByTimeAsync(10);
   });
 });
 

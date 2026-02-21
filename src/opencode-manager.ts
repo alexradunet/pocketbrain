@@ -59,6 +59,16 @@ export function _setTestOpencodeInstance(mock: unknown): void {
   opencodeInstance = mock as OpencodeClient;
 }
 
+/** @internal - for tests only. Clears the activeSessions map. */
+export function _clearActiveSessions(): void {
+  activeSessions.clear();
+}
+
+/** @internal - for tests only. Exposes buildContextPrefix. */
+export function _buildContextPrefix(group: RegisteredGroup, input: AgentInput): string {
+  return buildContextPrefix(group, input);
+}
+
 // --- Server lifecycle ---
 
 export async function boot(): Promise<void> {

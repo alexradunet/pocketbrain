@@ -33,7 +33,7 @@ export interface SchedulerDependencies {
   sendMessage: (jid: string, text: string) => Promise<void>;
 }
 
-async function runTask(
+export async function runTask(
   task: ScheduledTask,
   deps: SchedulerDependencies,
 ): Promise<void> {
@@ -183,6 +183,11 @@ async function runTask(
 }
 
 let schedulerRunning = false;
+
+/** @internal - for tests only. Resets the scheduler running state. */
+export function _resetSchedulerState(): void {
+  schedulerRunning = false;
+}
 
 export function startSchedulerLoop(deps: SchedulerDependencies): void {
   if (schedulerRunning) {
