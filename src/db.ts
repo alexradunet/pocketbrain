@@ -30,6 +30,7 @@ function createSchema(database: Database): void {
       FOREIGN KEY (chat_jid) REFERENCES chats(jid)
     );
     CREATE INDEX IF NOT EXISTS idx_timestamp ON messages(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_messages_chat_ts ON messages(chat_jid, timestamp);
 
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,
@@ -85,6 +86,8 @@ export function initDatabase(): void {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
   db = new Database(dbPath);
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA busy_timeout = 5000');
   createSchema(db);
 }
 
@@ -347,9 +350,10 @@ export function updateTask(
 }
 
 export function deleteTask(id: string): void {
-  // Delete child records first (FK constraint)
-  db.prepare('DELETE FROM task_run_logs WHERE task_id = ?').run(id);
-  db.prepare('DELETE FROM scheduled_tasks WHERE id = ?').run(id);
+  db.transaction(() => {
+    db.prepare('DELETE FROM task_run_logs WHERE task_id = ?').run(id);
+    db.prepare('DELETE FROM scheduled_tasks WHERE id = ?').run(id);
+  })();
 }
 
 export function getDueTasks(): ScheduledTask[] {

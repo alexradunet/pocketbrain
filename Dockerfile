@@ -1,8 +1,8 @@
 # ---- Build stage ----
 FROM oven/bun:1 AS builder
 WORKDIR /app
-COPY package.json ./
-RUN bun install
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 COPY src/ ./src/
 COPY tsconfig.json ./
 RUN bun build --compile --target=bun-linux-x64 src/index.ts --outfile dist/pocketbrain && \
