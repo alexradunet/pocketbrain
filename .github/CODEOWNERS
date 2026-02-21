@@ -1,0 +1,11 @@
+﻿# Core code - maintainer only
+/src/ @gavrielc
+/container/ @gavrielc
+/groups/ @gavrielc
+/launchd/ @gavrielc
+/package.json @gavrielc
+/bun.lock @gavrielc
+
+# Skills - open to contributors
+/.opencode/skills/
+

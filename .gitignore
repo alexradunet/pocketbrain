@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.omc/
+.claude/
+
+# Build output
+dist/
+
+# Local data & auth
+store/
+data/
+logs/
+
+# Groups - only track base structure and specific AGENTS.md files
+groups/*
+!groups/main/
+!groups/global/
+groups/main/*
+groups/global/*
+!groups/main/AGENTS.md
+!groups/global/AGENTS.md
+
+# Secrets
+*.keys.json
+.env
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Skills system (local per-installation state)
+.pocketbrain/
+
+agents-sdk-docs
+
