@@ -36,6 +36,7 @@ export class WhatsAppChannel implements Channel {
   private flushing = false;
   private groupSyncTimerStarted = false;
 
+  private reconnecting = false;
   private opts: WhatsAppChannelOpts;
 
   constructor(opts: WhatsAppChannelOpts) {
@@ -81,8 +82,14 @@ export class WhatsAppChannel implements Channel {
         logger.info({ reason, shouldReconnect, queuedMessages: this.outgoingQueue.length }, 'Connection closed');
 
         if (shouldReconnect) {
+          if (this.reconnecting) {
+            logger.info('Reconnection already in progress, skipping duplicate');
+            return;
+          }
+          this.reconnecting = true;
           logger.info('Reconnecting...');
           this.connectInternal().catch((err) => {
+            this.reconnecting = false;
             logger.error({ err }, 'Failed to reconnect, retrying in 5s');
             setTimeout(() => {
               this.connectInternal().catch((err2) => {
@@ -96,6 +103,7 @@ export class WhatsAppChannel implements Channel {
         }
       } else if (connection === 'open') {
         this.connected = true;
+        this.reconnecting = false;
         logger.info('Connected to WhatsApp');
 
         // Announce availability so WhatsApp relays subsequent presence updates (typing indicators)
@@ -309,10 +317,16 @@ export class WhatsAppChannel implements Channel {
     try {
       logger.info({ count: this.outgoingQueue.length }, 'Flushing outgoing message queue');
       while (this.outgoingQueue.length > 0) {
-        const item = this.outgoingQueue.shift()!;
-        // Send directly â€” queued items are already prefixed by sendMessage
-        await this.sock.sendMessage(item.jid, { text: item.text });
-        logger.info({ jid: item.jid, length: item.text.length }, 'Queued message sent');
+        const item = this.outgoingQueue[0]; // peek — do NOT shift yet
+        try {
+          // Send directly — queued items are already prefixed by sendMessage
+          await this.sock.sendMessage(item.jid, { text: item.text });
+          this.outgoingQueue.shift(); // only remove after confirmed send
+          logger.info({ jid: item.jid, length: item.text.length }, 'Queued message sent');
+        } catch (err) {
+          logger.warn({ jid: item.jid, err }, 'Failed to flush queued message, keeping for retry on reconnect');
+          break; // stop flushing; message stays in queue for next reconnect
+        }
       }
     } finally {
       this.flushing = false;

@@ -305,6 +305,10 @@ Use available_groups.json to find the JID for a group. The folder name should be
   },
 );
 
+// Graceful shutdown: exit cleanly on signals to avoid leaving .json.tmp orphans
+process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT', () => process.exit(0));
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

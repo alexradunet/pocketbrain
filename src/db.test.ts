@@ -220,6 +220,19 @@ describe('getNewMessages', () => {
     expect(messages).toHaveLength(0);
     expect(newTimestamp).toBe('');
   });
+
+  it('returned messages include is_from_me and is_bot_message fields', () => {
+    const { messages } = getNewMessages(
+      ['group1@g.us'],
+      '2024-01-01T00:00:00.000Z',
+    );
+    // is_bot_message rows are filtered out; user messages must have the fields
+    expect(messages.length).toBeGreaterThan(0);
+    for (const m of messages) {
+      expect(m.is_from_me).toBeDefined();
+      expect(m.is_bot_message).toBeDefined();
+    }
+  });
 });
 
 // --- storeChatMetadata ---
@@ -311,7 +324,7 @@ describe('task CRUD', () => {
     });
 
     deleteTask('task-3');
-    expect(getTaskById('task-3')).toBeNull();
+    expect(getTaskById('task-3')).toBeUndefined();
   });
 });
 

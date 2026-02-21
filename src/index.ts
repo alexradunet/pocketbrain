@@ -360,6 +360,8 @@ async function startMessageLoop(): Promise<void> {
             allPending.length > 0 ? allPending : groupMessages;
           const formatted = formatMessages(messagesToSend);
 
+          // Show typing indicator while waiting for the follow-up to complete
+          channel.setTyping?.(chatJid, true);
           if (await queue.sendMessage(chatJid, formatted)) {
             logger.debug(
               { chatJid, count: messagesToSend.length },
@@ -368,12 +370,11 @@ async function startMessageLoop(): Promise<void> {
             lastAgentTimestamp[chatJid] =
               messagesToSend[messagesToSend.length - 1].timestamp;
             saveState();
-            // Show typing indicator while the session processes the piped message
-            channel.setTyping?.(chatJid, true);
           } else {
             // No active session — enqueue for a new one
             queue.enqueueMessageCheck(chatJid);
           }
+          channel.setTyping?.(chatJid, false);
         }
       }
     } catch (err) {

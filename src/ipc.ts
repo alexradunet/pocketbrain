@@ -40,6 +40,40 @@ export function startIpcWatcher(deps: IpcDeps): void {
   const ipcBaseDir = path.join(DATA_DIR, 'ipc');
   fs.mkdirSync(ipcBaseDir, { recursive: true });
 
+  // On startup: clean up stale error files (>7 days) and orphaned .json.tmp files
+  try {
+    const errorDir = path.join(ipcBaseDir, 'errors');
+    if (fs.existsSync(errorDir)) {
+      const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      for (const f of fs.readdirSync(errorDir)) {
+        const fp = path.join(errorDir, f);
+        try {
+          if (fs.statSync(fp).mtimeMs < cutoffMs) {
+            fs.unlinkSync(fp);
+            logger.debug({ file: f }, 'Cleaned up stale IPC error file');
+          }
+        } catch { /* ignore per-file errors */ }
+      }
+    }
+    // Clean up orphaned temp files from interrupted atomic writes
+    for (const entry of fs.readdirSync(ipcBaseDir)) {
+      if (entry === 'errors') continue;
+      const entryPath = path.join(ipcBaseDir, entry);
+      if (!fs.statSync(entryPath).isDirectory()) continue;
+      for (const sub of ['messages', 'tasks']) {
+        const subDir = path.join(entryPath, sub);
+        if (!fs.existsSync(subDir)) continue;
+        for (const f of fs.readdirSync(subDir)) {
+          if (f.endsWith('.json.tmp')) {
+            try { fs.unlinkSync(path.join(subDir, f)); } catch { /* ignore */ }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, 'IPC startup cleanup failed (non-fatal)');
+  }
+
   const processIpcFiles = async () => {
     // Scan all group IPC directories (identity determined by directory)
     let groupFolders: string[];

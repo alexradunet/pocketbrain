@@ -131,6 +131,12 @@ describe('TRIGGER_PATTERN', () => {
     // The actual usage trims before testing: TRIGGER_PATTERN.test(m.content.trim())
     expect(TRIGGER_PATTERN.test('@Andy hey'.trim())).toBe(true);
   });
+
+  it('matches with leading whitespace without requiring caller to trim', () => {
+    // Pattern should be self-contained — callers should not need to trim first
+    expect(TRIGGER_PATTERN.test('  @Andy hello')).toBe(true);
+    expect(TRIGGER_PATTERN.test('\t@Andy')).toBe(true);
+  });
 });
 
 // --- Outbound formatting (internal tag stripping + prefix) ---

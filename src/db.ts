@@ -219,7 +219,8 @@ export function getNewMessages(
 
   const placeholders = jids.map(() => '?').join(',');
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    SELECT id, chat_jid, sender, sender_name, content, timestamp,
+           is_from_me, is_bot_message
     FROM messages
     WHERE timestamp > ? AND chat_jid IN (${placeholders})
       AND is_bot_message = 0
@@ -243,7 +244,8 @@ export function getMessagesSince(
   sinceTimestamp: string,
 ): NewMessage[] {
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    SELECT id, chat_jid, sender, sender_name, content, timestamp,
+           is_from_me, is_bot_message
     FROM messages
     WHERE chat_jid = ? AND timestamp > ?
       AND is_bot_message = 0
@@ -277,7 +279,7 @@ export function createTask(
 }
 
 export function getTaskById(id: string): ScheduledTask | undefined {
-  return db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(id) as
+  return (db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(id) ?? undefined) as
     | ScheduledTask
     | undefined;
 }

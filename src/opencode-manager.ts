@@ -435,11 +435,14 @@ async function runPrompt(
   ]);
 
   // Ensure we always have a canonical final snapshot, even if events were partial
-  // or the stream disconnected.
-  const messageResp = await client.session.message({
-    path: { id: sessionId, messageID: messageId },
-  });
-  const info = messageResp.data?.info;
+  // or the stream disconnected. Cap with a timeout to avoid hanging indefinitely.
+  const MESSAGE_FETCH_TIMEOUT_MS = 30000;
+  const messageRespData = await Promise.race([
+    client.session.message({ path: { id: sessionId, messageID: messageId } })
+      .then((r) => r.data),
+    Bun.sleep(MESSAGE_FETCH_TIMEOUT_MS).then(() => null),
+  ]);
+  const info = messageRespData?.info;
   if (info && 'error' in info && info.error) {
     return {
       status: 'error',
@@ -449,7 +452,7 @@ async function runPrompt(
     };
   }
 
-  const canonicalText = extractTextFromParts(messageResp.data?.parts ?? []);
+  const canonicalText = extractTextFromParts(messageRespData?.parts ?? []);
   const streamedText = joinTextParts(textParts, textPartOrder);
   const fullText = canonicalText || streamedText;
 

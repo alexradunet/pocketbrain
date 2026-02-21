@@ -168,7 +168,9 @@ async function runTask(
     nextRun = interval.next().toISOString();
   } else if (task.schedule_type === 'interval') {
     const ms = parseInt(task.schedule_value, 10);
-    nextRun = new Date(Date.now() + ms).toISOString();
+    // Anchor to the scheduled run time to prevent drift accumulating over executions
+    const anchor = task.next_run ? new Date(task.next_run).getTime() : Date.now();
+    nextRun = new Date(anchor + ms).toISOString();
   }
   // 'once' tasks have no next run
 

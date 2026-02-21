@@ -229,6 +229,30 @@ describe('GroupQueue', () => {
     await advanceTimersByTimeAsync(10);
   });
 
+  // --- runningTaskId prevents double-execution ---
+
+  it('does not run the same task twice if already running (runningTaskId guard)', async () => {
+    let releaseTask!: () => void;
+    const taskFn = vi.fn(async () => {
+      await new Promise<void>((r) => { releaseTask = r; });
+    });
+
+    // Start the task running
+    queue.enqueueTask('group1@g.us', 'task-abc', taskFn);
+    await advanceTimersByTimeAsync(10);
+
+    // While task is active, try to enqueue it again with the same ID
+    queue.enqueueTask('group1@g.us', 'task-abc', taskFn);
+    await advanceTimersByTimeAsync(10);
+
+    // Release the running task
+    releaseTask();
+    await advanceTimersByTimeAsync(10);
+
+    // Should only have executed once
+    expect(taskFn).toHaveBeenCalledTimes(1);
+  });
+
   // --- Waiting groups get drained when slots free up ---
 
   it('drains waiting groups when active slots free up', async () => {
