@@ -51,7 +51,6 @@ PocketBrain is **one Bun process** with several internal subsystems:
 │  • schedule_task   → writes 📁 tasks/*.json                      │
 │  • list_tasks      → reads  📁 current_tasks.json                │
 │  • pause/resume/cancel_task                                      │
-│  • register_group  → writes 📁 tasks/*.json  (👑 main only)      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -100,7 +99,6 @@ Polls every **2 seconds** (`POLL_INTERVAL = 2000`). For each registered
 // index.ts:310
 const { messages, newTimestamp } = getNewMessages(jids, lastTimestamp);
 // Groups new messages by chat JID
-// 🎯 Checks if trigger (@Andy) is present for non-main groups
 // → Active session? pipes as follow-up
 // → No session? enqueues new one via 🔀 GroupQueue
 ```
@@ -202,10 +200,9 @@ CREATE TABLE sessions (
   group_folder TEXT PRIMARY KEY, session_id TEXT
 );
 
--- 👥 Groups that PocketBrain responds to
+-- 👥 Chats that PocketBrain responds to
 CREATE TABLE registered_groups (
-  jid TEXT PRIMARY KEY, name TEXT, folder TEXT UNIQUE,
-  trigger_pattern TEXT, requires_trigger INTEGER
+  jid TEXT PRIMARY KEY, name TEXT, folder TEXT UNIQUE, added_at TEXT
 );
 
 -- 🔄 Key-value store for runtime state (last_timestamp, etc.)
@@ -223,7 +220,7 @@ PocketBrain tracks **two cursors** per group:
 
 💡 The gap between the two is **unprocessed context** — all messages since
 the last agent run are included next time, so no message is ever missed
-even between 🎯 trigger invocations.
+even if the agent was busy with another session.
 
 ---
 
@@ -233,7 +230,6 @@ All config in `src/config.ts`, driven by environment variables:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ASSISTANT_NAME` | `Andy` | 🎯 Trigger word (`@Andy`) |
 | `ASSISTANT_HAS_OWN_NUMBER` | `false` | Bot has its own phone number |
 | `IDLE_TIMEOUT` | `1800000` | ⏳ Session idle timeout (30 min) |
 | `MAX_CONCURRENT_SESSIONS` | `5` | 🔀 Global concurrency limit |
@@ -272,18 +268,17 @@ it summarizes), PocketBrain re-injects a `<pocketbrain_context>` XML block
 with **every** follow-up prompt:
 
 ```typescript
-// opencode-manager.ts:518
+// opencode-manager.ts
 function buildContextPrefix(group, input): string {
   return `<pocketbrain_context>
 chatJid: ${input.chatJid}
 groupFolder: ${input.groupFolder}
-isMain: ${input.isMain}
 ...
 </pocketbrain_context>`;
 }
 ```
 
-💡 This ensures the 🔌 MCP tools always have the correct 👥 group identity
+💡 This ensures the 🔌 MCP tools always have the correct 👥 chat identity
 to authorize operations against, even after context compaction.
 
 ---
@@ -291,24 +286,18 @@ to authorize operations against, even after context compaction.
 ## 🛡️ IPC Authorization Model
 
 The 📁 IPC watcher enforces security from **directory path identity** — not
-from what the agent *claims* in the file content:
+from what the agent *claims* in the file content. The source chat is
+determined by the directory the IPC file was written to, not by any field
+inside the file.
 
-```typescript
-// ipc.ts:93
-for (const sourceGroup of groupFolders) {
-  const isMain = sourceGroup === MAIN_GROUP_FOLDER; // 🛡️ OS-enforced identity
-```
-
-| 🔌 Operation | 👑 Main | 👥 Non-Main |
-|-----------|------|----------|
-| Send 💬 to own group | ✅ | ✅ |
-| Send 💬 to other groups | ✅ | ❌ blocked |
-| ⏰ Schedule task for self | ✅ | ✅ |
-| ⏰ Schedule task for others | ✅ | ❌ blocked |
-| Cancel task in own group | ✅ | ✅ |
-| Cancel task in other group | ✅ | ❌ blocked |
-| Register new 👥 group | ✅ | ❌ blocked |
-| Refresh group metadata | ✅ | ❌ blocked |
+| 🔌 Operation | Result |
+|-----------|--------|
+| Send 💬 to own chat | ✅ |
+| Send 💬 to other chats | ❌ blocked |
+| ⏰ Schedule task for self | ✅ |
+| ⏰ Schedule task for others | ❌ blocked |
+| Cancel task in own chat | ✅ |
+| Cancel task in other chat | ❌ blocked |
 
 ---
 
@@ -375,7 +364,7 @@ bun run docker:test
 |-----------|----------------|
 | `src/db.test.ts` | 🗄️ SQLite schema, CRUD, timestamps |
 | `src/group-queue.test.ts` | 🔀 Concurrency, retry backoff, drain logic |
-| `src/ipc-auth.test.ts` | 🛡️ IPC authorization rules (👑 main vs non-main) |
+| `src/ipc-auth.test.ts` | 🛡️ IPC authorization rules (cross-chat blocking) |
 | `src/formatting.test.ts` | 💬 XML escaping, message formatting |
 | `src/routing.test.ts` | 🔀 Channel routing by JID |
 

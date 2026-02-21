@@ -4,8 +4,7 @@
 
 | Entity | Trust Level | Rationale |
 |--------|-------------|-----------|
-| Main group | Trusted | Private self-chat, admin control |
-| Non-main groups | Untrusted | Other users may be malicious |
+| Registered chats | User-trusted | Only explicitly registered 1-on-1 chats are processed |
 | Container agents | Sandboxed | Isolated execution environment |
 | WhatsApp messages | User input | Potential prompt injection |
 
@@ -38,27 +37,28 @@ private_key, .secret
 **Protections:**
 - Symlink resolution before validation (prevents traversal attacks)
 - Container path validation (rejects `..` and absolute paths)
-- `nonMainReadOnly` option forces read-only for non-main groups
 
 ### 3. Session Isolation
 
-Each group has isolated OpenCode sessions at `data/sessions/{group}/.opencode/`:
-- Groups cannot see other groups' conversation history
+Each registered chat has isolated OpenCode sessions at `data/sessions/{chat}/.opencode/`:
+- Chats cannot see other chats' conversation history
 - Session data includes full message history and file contents read
-- Prevents cross-group information disclosure
+- Prevents cross-chat information disclosure
 
 ### 4. IPC Authorization
 
-Messages and task operations are verified against group identity:
+Messages and task operations are verified against chat identity:
 
-| Operation | Main Group | Non-Main Group |
-|-----------|------------|----------------|
-| Send message to own chat | ✓ | ✓ |
-| Send message to other chats | ✓ | ✗ |
-| Schedule task for self | ✓ | ✓ |
-| Schedule task for others | ✓ | ✗ |
-| View all tasks | ✓ | Own only |
-| Manage other groups | ✓ | ✗ |
+| Operation | Result |
+|-----------|--------|
+| Send message to own chat | ✓ |
+| Send message to other chats | ✗ blocked |
+| Schedule task for self | ✓ |
+| Schedule task for others | ✗ blocked |
+| View/manage own tasks | ✓ |
+| View/manage other chats' tasks | ✗ blocked |
+
+The IPC watcher determines chat identity from the **directory** the file was written to — not from what the file content claims. This prevents privilege escalation.
 
 ### 5. Credential Handling
 
@@ -78,17 +78,6 @@ const allowedVars = ['OPENCODE_OAUTH_TOKEN', 'OPENCODE_API_KEY'];
 
 > **Note:** opencode credentials are mounted so that OpenCode CLI can authenticate when the agent runs. However, this means the agent itself can discover these credentials via Bash or file operations. Ideally, OpenCode CLI would authenticate without exposing credentials to the agent's execution environment, but I couldn't figure this out. **PRs welcome** if you have ideas for credential isolation.
 
-## Privilege Comparison
-
-| Capability | Main Group | Non-Main Group |
-|------------|------------|----------------|
-| Project root access | `/workspace/project` (rw) | None |
-| Group folder | `/workspace/group` (rw) | `/workspace/group` (rw) |
-| Global memory | Implicit via project | `/workspace/global` (ro) |
-| Additional mounts | Configurable | Read-only unless allowed |
-| Network access | Unrestricted | Unrestricted |
-| MCP tools | All | All |
-
 ## Security Architecture Diagram
 
 ```
@@ -97,7 +86,7 @@ const allowedVars = ['OPENCODE_OAUTH_TOKEN', 'OPENCODE_API_KEY'];
 │  WhatsApp Messages (potentially malicious)                        │
 └────────────────────────────────┬─────────────────────────────────┘
                                  │
-                                 ▼ Trigger check, input escaping
+                                 ▼ Input escaping, registered-only filter
 ┌──────────────────────────────────────────────────────────────────┐
 │                     HOST PROCESS (TRUSTED)                        │
 │  • Message routing                                                │
@@ -117,5 +106,3 @@ const allowedVars = ['OPENCODE_OAUTH_TOKEN', 'OPENCODE_API_KEY'];
 │  • Cannot modify security config                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
-
-

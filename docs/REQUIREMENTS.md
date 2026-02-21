@@ -28,7 +28,7 @@ This isn't a framework or a platform. It's working software for my specific need
 
 ### Customization = Code Changes
 
-No configuration sprawl. If you want different behavior, modify the code. The codebase is small enough that this is safe and practical. Very minimal things like the trigger word are in config. Everything else - just change the code to do what you want.
+No configuration sprawl. If you want different behavior, modify the code. The codebase is small enough that this is safe and practical. Very minimal things like timeouts and environment-specific settings are in config. Everything else - just change the code to do what you want.
 
 ### AI-Native Development
 
@@ -88,15 +88,15 @@ A personal OpenCode assistant accessible via WhatsApp, with minimal custom code.
 
 ### Message Routing
 - A router listens to WhatsApp and routes messages based on configuration
-- Only messages from registered groups are processed
-- Trigger: `@Andy` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
-- Unregistered groups are ignored completely
+- Only messages from registered chats are processed
+- Every message from a registered chat is processed — no trigger word required
+- Unregistered chats are ignored completely
 
 ### Memory System
-- **Per-group memory**: Each group has a folder with its own `AGENTS.md`
-- **Global memory**: Root `AGENTS.md` is read by all groups, but only writable from "main" (self-chat)
-- **Files**: Groups can create/read files in their folder and reference them
-- Agent runs in the group's folder, automatically inherits both AGENTS.md files
+- **Per-chat memory**: Each chat has a folder with its own `AGENTS.md`
+- **Global memory**: `groups/global/AGENTS.md` is read by all sessions
+- **Files**: Chats can create/read files in their folder and reference them
+- Agent runs in the chat's folder, automatically inherits both AGENTS.md files
 
 ### Session Management
 - Each group maintains a conversation session (via OpenCode SDK)
@@ -113,24 +113,15 @@ A personal OpenCode assistant accessible via WhatsApp, with minimal custom code.
 - Users can ask OpenCode to schedule recurring or one-time tasks from any group
 - Tasks run as full agents in the context of the group that created them
 - Tasks have access to all tools including Bash (safe in container)
-- Tasks can optionally send messages to their group via `send_message` tool, or complete silently
+- Tasks can optionally send messages to their chat via `send_message` tool, or complete silently
 - Task runs are logged to the database with duration and result
 - Schedule types: cron expressions, intervals (ms), or one-time (ISO timestamp)
-- From main: can schedule tasks for any group, view/manage all tasks
-- From other groups: can only manage that group's tasks
+- Each chat can only manage its own tasks
 
-### Group Management
-- New groups are added explicitly via the main channel
-- Groups are registered in SQLite (via the main channel or IPC `register_group` command)
-- Each group gets a dedicated folder under `groups/`
-- Groups can have additional directories mounted via `containerConfig`
-
-### Main Channel Privileges
-- Main channel is the admin/control group (typically self-chat)
-- Can write to global memory (`groups/AGENTS.md`)
-- Can schedule tasks for any group
-- Can view and manage tasks from all groups
-- Can configure additional directory mounts for any group
+### Chat Registration
+- Chats are registered in SQLite to enable PocketBrain to respond to them
+- Each registered chat gets a dedicated folder under `groups/`
+- Registration is done directly in the database or via the setup process
 
 ---
 
@@ -143,7 +134,7 @@ A personal OpenCode assistant accessible via WhatsApp, with minimal custom code.
 
 ### Scheduler
 - Built-in scheduler runs on the host, spawns containers for task execution
-- Custom `pocketbrain` MCP server (inside container) provides scheduling tools
+- Custom `pocketbrain` MCP server provides scheduling tools
 - Tools: `schedule_task`, `list_tasks`, `pause_task`, `resume_task`, `cancel_task`, `send_message`
 - Tasks stored in SQLite with run history
 - Scheduler loop checks for due tasks every minute
@@ -183,10 +174,9 @@ A personal OpenCode assistant accessible via WhatsApp, with minimal custom code.
 
 These are the creator's settings, stored here for reference:
 
-- **Trigger**: `@Andy` (case insensitive)
-- **Response prefix**: `Andy:`
+- **Assistant name**: `Andy` (used as response prefix on shared phone numbers)
 - **Persona**: Default OpenCode (no custom personality)
-- **Main channel**: Self-chat (messaging yourself in WhatsApp)
+- **Primary chat**: Self-chat (messaging yourself in WhatsApp as a 1-on-1 DM)
 
 ---
 

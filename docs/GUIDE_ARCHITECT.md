@@ -110,7 +110,6 @@ function buildContextPrefix(group, input): string {
   return `<pocketbrain_context>
 chatJid: ${input.chatJid}
 groupFolder: ${input.groupFolder}
-isMain: ${input.isMain}
 ...
 </pocketbrain_context>`;
 }
@@ -174,9 +173,9 @@ are dropped with a warning (they'll retry on the next incoming message).
 
 | Threat | Mitigation |
 |--------|-----------|
-| Malicious user in a 👥 group | Non-main groups cannot control other groups; 🎯 trigger required |
 | Prompt injection via 💬 messages | XML-escaped message content; agent output filtered |
 | Agent exceeds its authority | 📁 IPC authorization from directory identity, not agent claims |
+| Cross-chat interference | Each chat can only manage its own tasks and messages |
 | 🐳 Container escape | Not in scope (Docker security boundary) |
 | Host credential leak | WhatsApp auth never mounted in agent context |
 
@@ -201,19 +200,16 @@ enforces the boundary.
 ```
 🧠 Agent (inside OpenCode)
   │
-  │ writes JSON to data/ipc/{sourceGroup}/tasks/
+  │ writes JSON to data/ipc/{sourceChat}/tasks/
   │
 📁 IPC Watcher
   │
-  ├─ Identity: sourceGroup = directory name (🛡️ OS-enforced, not agent-claimed)
-  │
-  ├─ isMain = (sourceGroup === MAIN_GROUP_FOLDER)
+  ├─ Identity: sourceChat = directory name (🛡️ OS-enforced, not agent-claimed)
   │
   └─ Authorization table:
-      schedule_task:  targetFolder === sourceGroup OR isMain
-      cancel_task:    task.group_folder === sourceGroup OR isMain
-      register_group: isMain only 👑
-      refresh_groups: isMain only 👑
+      schedule_task:  targetFolder === sourceChat (own chat only)
+      cancel_task:    task.group_folder === sourceChat (own tasks only)
+      send_message:   targetChat.folder === sourceChat (own chat only)
 ```
 
 **Path traversal defense** in the 🔌 MCP server:
@@ -247,8 +243,8 @@ are seen. Prevents re-processing in the poll loop.
 
 **`lastAgentTimestamp[groupJid]`** (per-group): Advances only after the 🧠
 agent successfully processes a batch. The "pending context"
-(`msg4, msg5, msg6` in the example) accumulates between 🎯 trigger invocations
-and is included in full when the next trigger arrives.
+(`msg4, msg5, msg6` in the example) accumulates between agent invocations
+and is included in full on the next agent run.
 
 **🔁 The cursor rollback pattern:**
 - Agent fails **before** any output → `lastAgentTimestamp` rolls back → 🔁 retry
@@ -358,8 +354,9 @@ need the host process.
 
 ### 📁 Adding New IPC Operations
 
-Add a new `case` in `src/ipc.ts:processTaskIpc()`. Always check `isMain`
-and `sourceGroup` against 🛡️ authorization requirements.
+Add a new `case` in `src/ipc.ts:processTaskIpc()`. Always verify `sourceGroup`
+matches the target against 🛡️ authorization requirements — never trust
+agent-supplied identity claims.
 
 ### 🧠 Changing the AI Model
 
@@ -379,7 +376,7 @@ through `createOpencode()` config. OpenCode SDK is model-agnostic.
 | Per-invocation containers | 🐳 Container IS the sandbox; re-spawning adds latency |
 | Multi-user auth | Built for one user; YAGNI |
 | Monitoring dashboard | Ask the 🧠 AI ("what's in the logs?") |
-| Admin UI | 👑 Main WhatsApp group IS the admin UI |
+| Admin UI | WhatsApp chat IS the interface — no separate admin panel needed |
 
 ---
 

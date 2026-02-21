@@ -8,7 +8,7 @@
 ## 💬 What is PocketBrain?
 
 PocketBrain is a personal AI assistant that you talk to via WhatsApp.
-You send a message like `@Andy summarize my week`, and an AI agent replies —
+You send a message like `summarize my week`, and an AI agent replies —
 with full ability to run commands, browse the web, read/write files, and
 schedule future tasks.
 
@@ -42,9 +42,7 @@ These emojis are used **consistently** across all three guides as visual anchors
 | ⏰ | Scheduler / cron / timed tasks |
 | 🐳 | Docker container / runtime environment |
 | 🌐 | Web access / network / internet |
-| 🎯 | Trigger word detection (`@Andy`) |
-| 👥 | WhatsApp group / chat group |
-| 👑 | Main group (admin / self-chat) |
+| 👥 | Registered chat / conversation |
 | 🔌 | MCP tools (send_message, schedule_task…) |
 | 🧩 | Skills / extensions / code transformations |
 | 🔄 | Session / state / conversation continuity |

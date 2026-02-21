@@ -24,55 +24,40 @@ outside the 🐳 container.
 
 ## 🗺️ The Journey of a Single Message
 
-Here's what happens when you send `@Andy what's the weather in Berlin?` in WhatsApp:
+Here's what happens when you send `what's the weather in Berlin?` in WhatsApp:
 
 ```
 1. 💬 Your phone ──► WhatsApp servers ──► Baileys library
                                                 │
 2.                                   🔄 PocketBrain receives it
                                                 │
-3.                                   👥 Is it a registered group? ─── No ──► ignore
+3.                                   👥 Is it a registered chat? ── No ──► ignore
                                                 │ Yes
-4.                                   🎯 Does it have "@Andy"? ────── No ──► store, wait
-                                                │ Yes
-5.                                   🗄️ Save message to SQLite database
+4.                                   🗄️ Save message to SQLite database
                                                 │
-6.                                   🧠 Send to AI agent (OpenCode SDK)
+5.                                   🧠 Send to AI agent (OpenCode SDK)
                                                 │
-7.                                   🌐 Agent thinks, browses web, etc.
+6.                                   🌐 Agent thinks, browses web, etc.
                                                 │
-8.                                   📝 Agent writes response
+7.                                   📝 Agent writes response
                                                 │
-9.                                   💬 PocketBrain sends reply via WhatsApp
+8.                                   💬 PocketBrain sends reply via WhatsApp
                                                 │
-10.                                  📱 You see the response on your phone
+9.                                   📱 You see the response on your phone
 ```
 
 ---
 
 ## 📖 Key Concepts (Plain English)
 
-### 👥 Registered Groups
-PocketBrain only responds to specific WhatsApp groups/chats that you've
-"registered" with it. Think of it like a VIP list. Unregistered groups are
-completely ignored — even if you send `@Andy` there, nothing happens.
-
-### 👑 The Main Group
-One special registered group is called "main." This is typically your own
-self-chat (messaging yourself in WhatsApp). The main group is like the
-admin panel:
-
-- It can register new 👥 groups
-- It can see and manage all ⏰ scheduled tasks
-- It can send 💬 messages to any other group
-
-### 🎯 Trigger Word
-In non-main groups, the 🧠 AI only wakes up when someone says `@Andy` (or
-whatever name you configured). In the 👑 main group, every message gets a
-response.
+### 👥 Registered Chats
+PocketBrain only responds to specific WhatsApp chats that you've
+"registered" with it. Think of it like a VIP list. Unregistered chats are
+completely ignored. Every message from a registered chat gets a response —
+no special trigger word needed.
 
 ### 🔄 Sessions
-The AI remembers your conversation. Each 👥 group has its own "session" that
+The AI remembers your conversation. Each 👥 registered chat has its own "session" that
 persists between messages. This is how it can say "remember earlier when
 you mentioned…" — it's reading from the ongoing conversation context stored
 in its 🧠 memory.
@@ -80,7 +65,7 @@ in its 🧠 memory.
 ### ⏰ Scheduled Tasks
 You can ask the AI to schedule recurring jobs:
 ```
-@Andy every morning at 8am, check Hacker News for AI news and message me a summary
+every morning at 8am, check Hacker News for AI news and message me a summary
 ```
 The agent sets up a task in the 🗄️ database. Every minute, PocketBrain checks
 if any tasks are due, and runs the 🧠 AI again with that prompt.
@@ -99,7 +84,6 @@ The 🧠 AI agent has access to these capabilities:
 | 📁 **Read/Edit/Write** | Files in the container filesystem |
 | 💬 **send_message** | Send a WhatsApp message immediately (progress updates!) |
 | ⏰ **schedule_task** | Create a new scheduled task |
-| 👥 **register_group** | Add a new group to respond to (👑 main only) |
 
 ---
 
@@ -111,21 +95,18 @@ your host machine):
 ```
 workspace/
 ├── 🗄️ store/
-│   ├── messages.db      ← SQLite database (all messages, groups, tasks)
+│   ├── messages.db      ← SQLite database (all messages, chats, tasks)
 │   └── auth/            ← WhatsApp login credentials 🔒
 ├── 📁 data/
 │   └── ipc/             ← 🧠 AI writes JSON files here → host reads them
-│       ├── main/
-│       │   ├── messages/   ← pending 💬 messages to send
-│       │   └── tasks/      ← pending ⏰ task operations
-│       └── [group-name]/
+│       └── [chat-name]/
+│           ├── messages/   ← pending 💬 messages to send
+│           └── tasks/      ← pending ⏰ task operations
 └── 📝 groups/
     ├── global/
-    │   └── AGENTS.md    ← Instructions for ALL groups
-    ├── main/
-    │   └── AGENTS.md    ← Instructions just for 👑 main group
-    └── [group-name]/
-        └── AGENTS.md    ← Instructions for this 👥 group
+    │   └── AGENTS.md    ← Instructions for ALL chats
+    └── [chat-name]/
+        └── AGENTS.md    ← Instructions for this 👥 chat
 ```
 
 ---
@@ -152,13 +133,9 @@ bun run docker:test         # ✅ Run the test suite
 ## 💬 How to Talk to the AI
 
 1. Open WhatsApp
-2. Message yourself (self-chat) — this is your 👑 "main" group
-3. Type: `@Andy hello, what can you do?` 🎯
+2. Find a registered chat (e.g. message yourself — self-chat)
+3. Type any message and send it
 4. Wait a moment — you'll see a typing indicator, then a response 🧠
-
-To add another group:
-1. From your self-chat: `@Andy register the group "Family Chat"` 👥
-2. The AI will look at available groups and register it
 
 ---
 
@@ -166,16 +143,16 @@ To add another group:
 
 PocketBrain doesn't use configuration files for behavior. Instead:
 
-- **Per-group instructions**: Edit `workspace/groups/[group-name]/AGENTS.md` 📝
+- **Per-chat instructions**: Edit `workspace/groups/[chat-name]/AGENTS.md` 📝
 - **Global instructions**: Edit `workspace/groups/global/AGENTS.md` 📝
 - **Code changes**: The codebase is small enough to modify directly 🧩
 
-Example `AGENTS.md` for a group:
+Example `AGENTS.md` for a chat:
 ```markdown
-# 👥 Family Chat Agent
+# Personal Assistant
 
 Always respond in Spanish. Keep answers short. When someone asks about
-the schedule, check the calendar file at /workspace/groups/family/calendar.md.
+the schedule, check the calendar file at /workspace/groups/main/calendar.md.
 ```
 
 ---
@@ -185,10 +162,6 @@ the schedule, check the calendar file at /workspace/groups/family/calendar.md.
 **Q: Why does the 🧠 AI sometimes take a while to respond?**
 The AI runs a full reasoning process: it might search the 🌐 web, run commands,
 read files. Complex requests take longer.
-
-**Q: Can other people in my WhatsApp group use it?**
-Yes! Anyone in a registered 👥 group can use `@Andy`. The AI responds to
-all their messages.
 
 **Q: What happens if the 🐳 container restarts?**
 All state is saved in 🗄️ SQLite and files. The AI picks up where it left off —
